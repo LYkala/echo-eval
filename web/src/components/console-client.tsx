@@ -56,10 +56,12 @@ function blankSteps(): StepRow[] {
 }
 
 export function ConsoleClient() {
+  const [mounted, setMounted] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
   const [env, setEnv] = useState<EnvResult | null>(null);
   const [steps, setSteps] = useState<StepRow[]>(blankSteps);
   const [envChecking, setEnvChecking] = useState(false);
-  const [envProgress, setEnvProgress] = useState("点击「重新检查」开始");
+  const [envProgress, setEnvProgress] = useState("脚本加载后将自动检查");
   const [envError, setEnvError] = useState("");
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [datasetId, setDatasetId] = useState("__builtin_sample__");
@@ -69,38 +71,69 @@ export function ConsoleClient() {
   const [msg, setMsg] = useState("");
   const [active, setActive] = useState<Job | null>(null);
   const runIdRef = useRef(0);
+  const autoStarted = useRef(false);
+
+  const pushLog = useCallback((line: string) => {
+    const stamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    const full = `[${stamp}] ${line}`;
+    console.log(`[echo-eval][ui] ${line}`);
+    setLogs((prev) => [...prev.slice(-80), full]);
+  }, []);
 
   const refreshDatasets = useCallback(async () => {
     try {
+      pushLog("GET /api/datasets …");
       const res = await fetch("/api/datasets", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { items: Dataset[] };
       setDatasets(data.items || []);
+      pushLog(`datasets OK count=${(data.items || []).length}`);
     } catch (e) {
+      pushLog(`datasets FAIL ${String(e)}`);
       setMsg(`加载数据集失败: ${String(e)}`);
     }
-  }, []);
+  }, [pushLog]);
 
   const refreshEnv = useCallback(async () => {
     const runId = ++runIdRef.current;
+    pushLog(`环境检查开始 runId=${runId}`);
     setEnvChecking(true);
     setEnvError("");
     setEnv(null);
     setSteps(blankSteps());
-    setEnvProgress("已开始：准备逐项检查…");
+    setEnvProgress("① 先探测 /api/ping …");
 
     const items: EnvItem[] = [];
     let serial: string | undefined;
-    let stopped = false;
 
     try {
+      try {
+        pushLog("GET /api/ping …");
+        const pingRes = await fetch("/api/ping", { cache: "no-store" });
+        const pingText = await pingRes.text();
+        pushLog(`ping HTTP ${pingRes.status}: ${pingText.slice(0, 180)}`);
+        if (!pingRes.ok) throw new Error(`ping 失败 HTTP ${pingRes.status}`);
+      } catch (e) {
+        const message = `无法连接本机 API: ${String(e)}。请确认 Git Bash 里 npm run dev 仍在运行，并用 http://127.0.0.1:3847 打开（不要用 file://）。`;
+        pushLog(message);
+        setEnvError(message);
+        setEnvProgress("API 不通，已停止");
+        setEnvChecking(false);
+        return;
+      }
+
+      if (runId !== runIdRef.current) return;
+
       for (let i = 0; i < STEP_DEFS.length; i++) {
-        if (runId !== runIdRef.current) return; // superseded
+        if (runId !== runIdRef.current) {
+          pushLog(`runId=${runId} 被更新的检查取代，退出`);
+          return;
+        }
         const def = STEP_DEFS[i];
         setEnvProgress(`(${i + 1}/${STEP_DEFS.length}) 正在检查：${def.label}`);
         setSteps((prev) =>
           prev.map((s) => (s.id === def.id ? { ...s, state: "running", detail: "检查中…" } : s))
         );
+        pushLog(`GET /api/env/step?step=${def.id} …`);
 
         const ac = new AbortController();
         const timer = window.setTimeout(() => ac.abort(), 20000);
@@ -110,11 +143,14 @@ export function ConsoleClient() {
             cache: "no-store",
             signal: ac.signal,
           });
-          const data = (await res.json()) as {
-            item?: EnvItem;
-            serial?: string;
-            error?: string;
-          };
+          const text = await res.text();
+          pushLog(`step=${def.id} HTTP ${res.status}: ${text.slice(0, 220)}`);
+          let data: { item?: EnvItem; serial?: string; error?: string } = {};
+          try {
+            data = JSON.parse(text) as typeof data;
+          } catch {
+            data = { error: `非 JSON 响应: ${text.slice(0, 120)}` };
+          }
           if (!res.ok) {
             item = {
               key: def.id,
@@ -140,13 +176,11 @@ export function ConsoleClient() {
             label: def.label,
             ok: false,
             detail: aborted
-              ? "本步超时（20s）。请检查本机 python / adb 是否卡住。"
+              ? "本步超时（20s）。请看 Git Bash 里 npm run dev 日志是否卡在 python/adb。"
               : `请求失败: ${String(e)}`,
             required: !["audio", "tts", "vl"].includes(def.id),
           };
-          if (aborted || String(e).includes("Failed to fetch")) {
-            stopped = true;
-          }
+          pushLog(`step=${def.id} EXCEPTION ${item.detail}`);
         } finally {
           window.clearTimeout(timer);
         }
@@ -163,11 +197,6 @@ export function ConsoleClient() {
         setEnvProgress(
           `(${i + 1}/${STEP_DEFS.length}) ${def.label}: ${item.ok ? "OK" : "失败"}`
         );
-
-        if (stopped) {
-          setEnvError("后续步骤已跳过：网络或服务异常。请确认 npm run dev 仍在运行。");
-          break;
-        }
       }
 
       if (runId !== runIdRef.current) return;
@@ -181,9 +210,11 @@ export function ConsoleClient() {
       };
       setEnv(result);
       setEnvProgress(result.ok ? "全部完成：环境就绪" : "全部完成：环境未就绪（可用演示任务）");
+      pushLog(`环境检查结束 ok=${result.ok}`);
     } catch (e) {
       if (runId !== runIdRef.current) return;
       const message = String(e);
+      pushLog(`环境检查中断 ${message}`);
       setEnvError(message);
       setEnvProgress("检查中断");
       setEnv({
@@ -197,12 +228,19 @@ export function ConsoleClient() {
     } finally {
       if (runId === runIdRef.current) setEnvChecking(false);
     }
-  }, []);
+  }, [pushLog]);
 
   useEffect(() => {
+    setMounted(true);
+    pushLog("浏览器脚本已加载（hydration OK）");
+  }, [pushLog]);
+
+  useEffect(() => {
+    if (!mounted || autoStarted.current) return;
+    autoStarted.current = true;
     void refreshEnv();
     void refreshDatasets();
-  }, [refreshEnv, refreshDatasets]);
+  }, [mounted, refreshEnv, refreshDatasets]);
 
   useEffect(() => {
     if (!active || !["queued", "running"].includes(active.status)) return;
@@ -266,6 +304,15 @@ export function ConsoleClient() {
     }
   }
 
+  if (!mounted) {
+    return (
+      <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+        正在加载页面脚本…若超过 5 秒仍无变化，请用 Ctrl+F5 强制刷新，并确认地址是
+        <code className="mx-1">http://127.0.0.1:3847</code>
+      </div>
+    );
+  }
+
   const statusBadge = (s: string) => {
     if (s === "passed") return <Badge variant="pass">PASS</Badge>;
     if (s === "failed") return <Badge variant="fail">FAIL</Badge>;
@@ -280,14 +327,34 @@ export function ConsoleClient() {
           <CardHeader>
             <CardTitle className="font-display text-2xl">环境检查</CardTitle>
             <CardDescription>
-              点击后会立刻显示进度；每一步单独请求，避免整页卡住。
+              点击后下方「调试日志」和 Git Bash 的 npm 窗口都会打印进度。请盯着 Bash 里以
+              <code className="mx-1">[echo-eval]</code>
+              开头的行。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
-              <Button type="button" variant="outline" onClick={() => void refreshEnv()} disabled={envChecking}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  pushLog("用户点击「重新检查」");
+                  void refreshEnv();
+                }}
+                disabled={envChecking}
+              >
                 {envChecking ? "检查中…" : "重新检查"}
               </Button>
+              <button
+                type="button"
+                className="h-10 rounded-md border px-3 text-sm"
+                onClick={() => {
+                  pushLog("用户点击「强制检查」(原生按钮)");
+                  void refreshEnv();
+                }}
+              >
+                强制检查
+              </button>
               {envChecking ? (
                 <Badge variant="running">进行中</Badge>
               ) : env ? (
@@ -299,9 +366,6 @@ export function ConsoleClient() {
               ) : (
                 <Badge variant="secondary">等待开始</Badge>
               )}
-              {env?.serial ? (
-                <span className="text-xs text-muted-foreground">serial: {env.serial}</span>
-              ) : null}
             </div>
 
             <div
@@ -311,6 +375,16 @@ export function ConsoleClient() {
               <div className="font-medium">当前进度</div>
               <div className={envChecking ? "animate-pulse-dot mt-1" : "mt-1"}>{envProgress}</div>
               {envError ? <div className="mt-1 text-rose-700">{envError}</div> : null}
+            </div>
+
+            <div>
+              <div className="mb-1 text-sm font-medium">调试日志（页面 + Bash 同步）</div>
+              <pre
+                className="max-h-48 overflow-auto rounded-md border p-2 text-xs leading-5"
+                style={{ background: "#1e1e1e", color: "#d4d4d4" }}
+              >
+                {logs.length ? logs.join("\n") : "（暂无日志）"}
+              </pre>
             </div>
 
             <ul className="space-y-2">

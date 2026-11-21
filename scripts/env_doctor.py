@@ -18,6 +18,11 @@ def main() -> int:
     ap.add_argument("--step", default="", help="只跑单步: config|python|adb|device|ffmpeg|audio|tts|vl")
     args = ap.parse_args()
     connect_timeout = 4.0 if args.quick else 12.0
+    print(
+        f"[echo-eval][env_doctor] start step={args.step or 'all'} quick={args.quick}",
+        file=sys.stderr,
+        flush=True,
+    )
 
     from echo_eval.capture.frames import resolve_ffmpeg
     from echo_eval.config import load_config
@@ -217,8 +222,13 @@ def main() -> int:
         "items": items,
         "step": step or "all",
     }
-    print(json.dumps(out, ensure_ascii=False))
-    return 0 if out["ok"] or step else (0 if step else 1)
+    print(
+        f"[echo-eval][env_doctor] done step={out['step']} ok={out['ok']} items={len(items)}",
+        file=sys.stderr,
+        flush=True,
+    )
+    print(json.dumps(out, ensure_ascii=False), flush=True)
+    return 0
 
 
 if __name__ == "__main__":

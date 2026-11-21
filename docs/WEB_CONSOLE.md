@@ -38,6 +38,20 @@ npm run dev
 环境未就绪时可用 **打开演示任务** 预览界面（不连真机）。  
 若检查一直失败，可在仓库根目录手动跑：`python scripts/env_doctor.py --quick`
 
+### 环境检查无反应时
+
+1. 确认浏览器地址是 `http://127.0.0.1:3847`（不要用 `file://`）  
+2. 看页面里的「调试日志」黑框是否出现 `hydration OK` / `用户点击`  
+3. 看运行 `npm run dev` 的 Git Bash 窗口，搜索 `[echo-eval]`：  
+   - 有 `[ping]` / `[env/step]` → API 通了  
+   - 完全没有 → 浏览器没打到这个 dev server（端口/旧进程）  
+4. 手动测 API：
+
+```bash
+curl http://127.0.0.1:3847/api/ping
+curl "http://127.0.0.1:3847/api/env/step?step=config"
+```
+
 ## 目录
 
 ```

@@ -15,8 +15,12 @@ function pythonBin(): string {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const step = (url.searchParams.get("step") || "") as EnvStepId;
+  const t0 = Date.now();
+  console.log(`[echo-eval][env/step] >>> start step=${step}`);
+
   const known = ENV_STEP_ORDER.find((s) => s.id === step);
   if (!known) {
+    console.log(`[echo-eval][env/step] <<< unknown step=${step}`);
     return NextResponse.json(
       { error: `未知 step，可选: ${ENV_STEP_ORDER.map((s) => s.id).join(",")}` },
       { status: 400 }
@@ -25,25 +29,30 @@ export async function GET(req: Request) {
 
   const root = repoRoot();
   const script = path.join(root, "scripts", "env_doctor.py");
+  console.log(`[echo-eval][env/step] repoRoot=${root}`);
+  console.log(`[echo-eval][env/step] script=${script} exists=${fs.existsSync(script)}`);
+  console.log(`[echo-eval][env/step] python=${pythonBin()} cwd=${process.cwd()}`);
+
   if (!fs.existsSync(script)) {
-    return NextResponse.json(
-      {
-        step,
+    console.log(`[echo-eval][env/step] <<< missing script`);
+    return NextResponse.json({
+      step,
+      label: known.label,
+      item: {
+        key: step,
         label: known.label,
-        item: {
-          key: step,
-          label: known.label,
-          ok: false,
-          detail: `缺少脚本: ${script}`,
-          required: true,
-        },
+        ok: false,
+        detail: `缺少脚本: ${script}`,
+        required: true,
       },
-      { status: 200 }
-    );
+    });
   }
 
   const timeoutMs = step === "device" ? 12000 : 10000;
-  const proc = spawnSync(pythonBin(), [script, "--quick", "--step", step], {
+  const args = [script, "--quick", "--step", step];
+  console.log(`[echo-eval][env/step] spawn: ${pythonBin()} ${args.join(" ")} timeout=${timeoutMs}ms`);
+
+  const proc = spawnSync(pythonBin(), args, {
     encoding: "utf-8",
     cwd: root,
     env: { ...process.env, PYTHONPATH: path.join(root, "src"), PYTHONUNBUFFERED: "1" },
@@ -51,12 +60,19 @@ export async function GET(req: Request) {
     windowsHide: true,
   });
 
+  console.log(
+    `[echo-eval][env/step] spawn done status=${proc.status} signal=${proc.signal} error=${proc.error || ""} elapsed=${Date.now() - t0}ms`
+  );
+  if (proc.stdout) console.log(`[echo-eval][env/step] stdout: ${proc.stdout.trim().slice(0, 500)}`);
+  if (proc.stderr) console.log(`[echo-eval][env/step] stderr: ${proc.stderr.trim().slice(0, 500)}`);
+
   if (proc.error) {
     const err = proc.error as NodeJS.ErrnoException;
     const detail =
       err.code === "ETIMEDOUT"
         ? `检查超时（>${timeoutMs / 1000}s）`
         : `${err.message}. 请确认已安装 Python，且可执行: ${pythonBin()} ${script}`;
+    console.log(`[echo-eval][env/step] <<< spawn error: ${detail}`);
     return NextResponse.json({
       step,
       label: known.label,
@@ -73,6 +89,10 @@ export async function GET(req: Request) {
   const stdout = (proc.stdout || "").trim();
   const stderr = (proc.stderr || "").trim();
   if (!stdout) {
+    const detail =
+      stderr ||
+      `python 无输出 (exit=${proc.status}). 命令: ${pythonBin()} ${script} --quick --step ${step}`;
+    console.log(`[echo-eval][env/step] <<< empty stdout: ${detail}`);
     return NextResponse.json({
       step,
       label: known.label,
@@ -80,7 +100,7 @@ export async function GET(req: Request) {
         key: step,
         label: known.label,
         ok: false,
-        detail: stderr || `python 无输出 (exit=${proc.status}). 命令: ${pythonBin()} ${script} --quick --step ${step}`,
+        detail,
         required: true,
       },
     });
@@ -99,6 +119,9 @@ export async function GET(req: Request) {
       detail: "无检查结果",
       required: true,
     };
+    console.log(
+      `[echo-eval][env/step] <<< ok=${item.ok} key=${item.key} detail=${String(item.detail).slice(0, 120)}`
+    );
     return NextResponse.json({
       step,
       label: known.label,
@@ -106,6 +129,7 @@ export async function GET(req: Request) {
       item,
     });
   } catch (e) {
+    console.log(`[echo-eval][env/step] <<< parse error: ${String(e)}`);
     return NextResponse.json({
       step,
       label: known.label,
