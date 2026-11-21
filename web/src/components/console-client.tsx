@@ -304,15 +304,6 @@ export function ConsoleClient() {
     }
   }
 
-  if (!mounted) {
-    return (
-      <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-        正在加载页面脚本…若超过 5 秒仍无变化，请用 Ctrl+F5 强制刷新，并确认地址是
-        <code className="mx-1">http://127.0.0.1:3847</code>
-      </div>
-    );
-  }
-
   const statusBadge = (s: string) => {
     if (s === "passed") return <Badge variant="pass">PASS</Badge>;
     if (s === "failed") return <Badge variant="fail">FAIL</Badge>;

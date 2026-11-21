@@ -28,6 +28,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <Link className="hover:text-foreground" href="/">
                 工作台
               </Link>
+              <Link className="hover:text-foreground" href="/check">
+                无脚本检查
+              </Link>
               <Link className="hover:text-foreground" href="/runs">
                 历史任务
               </Link>

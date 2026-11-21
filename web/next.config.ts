@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Allow LAN access to the console while developing on PC1.
-  allowedDevOrigins: ["*"],
+  // Avoid exotic dev-origin settings that can break asset loading on some setups.
 };
 
 export default nextConfig;
