@@ -1,0 +1,15 @@
+# 复制为 model.yaml 后填写真实密钥；勿将含 api_key 的 model.yaml 提交到公开仓库。
+# 各服务通过标签引用；vl_eval 同时用于文本评判与截图 VL。
+
+models:
+  default: &vl
+    api_format: "openai"
+    base_url: "https://YOUR_GATEWAY/v1"
+    api_key: "YOUR_API_KEY"
+    model_id: "YOUR_VL_MODEL_ID"
+    temperature: 1
+    timeout: 120
+    max_retries: 3
+
+  vl_eval:
+    <<: *vl

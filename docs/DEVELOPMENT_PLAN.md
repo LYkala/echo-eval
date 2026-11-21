@@ -2,7 +2,8 @@
 
 > 目标：通过无线 ADB 连接语音助手设备，自动播放语音、ADB 录屏，再调用多模态大模型依据「输入指令 + 录屏证据」评判效果；后续可扩展为数据集驱动的 TTS → 播放 → 评测流水线。
 
-> 参考意图：对齐 [WeTestAI1/TestAppGUI `testApp`](https://github.com/WeTestAI1/TestAppGUI/tree/master/testApp) 中「评判效果」部分（多模态证据 + LLM Oracle）。当前环境无法读取该私有仓，下文按同类 GUI/多模态评测常见结构抽象接口；拿到代码后优先对照并替换 `judge/` 模块实现细节。
+> 参考源码：已导入 `vendor/testApp/`。评判对照见 [`docs/TESTAPP_JUDGE_MAPPING.md`](TESTAPP_JUDGE_MAPPING.md)。  
+> 核心对齐文件：`webserverV2/llm_eval.py`（尤其 `evaluate_gui_poll_images`）、`local_adb_runner/case_eval.py`。
 
 ---
 
@@ -28,7 +29,7 @@
 ### 1.3 成功标准（MVP）
 
 1. 一条命令完成：连接 → 播放一段固定 wav → 录屏 N 秒 → 抽帧 → LLM 评判 → 写出 JSON 报告  
-2. 评判结果至少包含：`verdict`（pass/fail/uncertain）、`score`、`reasons[]`、`evidence[]`（时间点/帧引用）  
+2. 评判结果对齐 TestApp：`result_parsed`（逐条 expectation + `final_result`）、`passed`；对外可映射为 pass/fail；`evidence[]` 引用抽帧文件名  
 3. 无大模型 Key 时可用 mock judge 跑通全链路  
 4. 新增一条用例只需改 YAML/JSON，不改 Python 主流程  
 
@@ -67,25 +68,25 @@
 
 ---
 
-## 3. 与参考仓「评判效果」的对齐方式
+## 3. 与 TestAppGUI「评判效果」的对齐方式（已对照源码）
 
-拿到 `TestAppGUI/testApp` 后，只抽取与 **Judgment / Oracle** 相关的部分，建议按下列映射落地，避免整仓耦合：
+详细对照：[`TESTAPP_JUDGE_MAPPING.md`](TESTAPP_JUDGE_MAPPING.md)。
 
-| 参考仓常见概念（预估） | 本项目落点 | 说明 |
-|------------------------|------------|------|
-| 期望描述 / 断言文案 | `cases/*.yaml` 的 `expect` | 自然语言 + 可选硬规则 |
-| 截图/录屏证据 | `capture/` → `artifacts/<run_id>/` | 视频 + 关键帧 |
-| Prompt 模板 | `judge/prompts/` | 系统提示 + few-shot |
-| LLM 调用封装 | `judge/client.py` | 统一 Chat/Vision API |
-| 结果解析 / schema | `judge/schema.py` | JSON Schema 校验 |
-| 汇总报告 | `report/` | 与参考仓字段对齐后可双向转换 |
+| TestAppGUI | echo-eval 落点 | 说明 |
+|------------|----------------|------|
+| `exceptions` | `cases/*.yaml` → `expect` 导出为字符串列表 | 兼容拼写 `expections` |
+| `gui_poll_*` 多帧 | `capture/` 录屏抽帧 | **主评判路径** = `evaluate_gui_poll_images` |
+| `evaluate_reply_and_image` | 可选：助手回复文本 + 末帧 | local_adb 默认模式 |
+| `evaluation.json` | `artifacts/.../judgment.json` | 保留 `result_parsed` / `passed` |
+| `models.vl_eval` | `configs/model.yaml` | OpenAI 兼容；密钥不进仓 |
+| `parse_evaluation_passed` | `judge/schema.py` | 二态 success/failed，从严 |
 
-**接入步骤（拿到代码后立刻做）：**
+**接入步骤（下一步实现）：**
 
-1. 列出 `testApp` 下与 evaluate / judge / score / oracle / prompt 相关文件  
-2. 抽出：输入字段、输出 schema、prompt 模板、调用参数  
-3. 用适配器实现 `JudgeProtocol.evaluate(case, artifacts) -> Judgment`  
-4. 用同一批样例帧做回归，保证本项目 mock→真实切换时字段稳定  
+1. 薄封装移植 `evaluate_gui_poll_images`（先不做 evidence ground/repair）  
+2. 移植 `parse_evaluation_passed` 与 JSON fence 清洗  
+3. screenrecord → 抽帧文件名对齐 evidence 引用规则  
+4. MockJudge 产出同结构 `evaluation.json`，便于无 Key CI  
 
 ---
 
@@ -133,7 +134,7 @@ judge:
 }
 ```
 
-`verdict` 建议三态：`pass` | `fail` | `uncertain`（模型拿不准或证据不足，避免假阳性）。
+与 TestApp 对齐为二态：`success` | `failed`（证据不足判 failed）。对外报告可映射为 `pass` / `fail`。
 
 ---
 
@@ -201,27 +202,29 @@ class Stimulus(Protocol):
 
 ---
 
-### Phase 3 — LLM 评判器（对齐参考仓重点）
+### Phase 3 — LLM 评判器（对齐 TestApp `llm_eval`）
 
 **任务**
 
-1. 定义 `JudgeProtocol` 与 JSON Schema  
-2. Prompt：角色（严格 QA Oracle）+ 用例期望 + 帧图（按时间排序）+ 输出 JSON only  
-3. 实现 `OpenAICompatibleJudge`（支持 OpenAI / 兼容网关 / 国内 VLM）  
-4. 实现 `MockJudge`（按文件名/简单规则，便于 CI）  
-5. 可选轻量预检：OCR（Tesseract/Paddle）命中 `must_see` 时提高置信或短路  
+1. 从 `vendor/testApp/webserverV2/llm_eval.py` 移植：  
+   - `_subsample_image_paths`（最多 16，保首尾）  
+   - `evaluate_gui_poll_images` 的 prompt 与 JSON 解析  
+   - （可选二期）`_ground_evidence_reasons` / `_repair_evidence_image_refs`  
+2. 移植 `case_eval.parse_evaluation_passed`  
+3. 配置加载对齐 `models.vl_eval`（`VL_EVAL_CONFIG`）  
+4. 实现 `MockJudge` 产出同结构 `result_parsed`  
+5. 适配器：YAML `expect` → `exceptions: string[]`  
 
-**Prompt 设计原则（借鉴典型 Test Oracle）**
+**Prompt 原则（与 TestApp 一致）**
 
-- 只依据可见证据判断，禁止臆造未出现内容  
-- 明确 pass/fail/uncertain 标准与期望对齐方式  
-- 要求引用 `t_sec` / 帧文件名作为 evidence  
-- 限制帧数（如最多 8 张）控制成本  
+- 严格 GUI 评判员；证据不足 → failed（无 uncertain）  
+- 逐条 expectation；全部 success 才 `final_result=success`  
+- evidence 必须引用真实帧文件名，禁止串帧  
 
 **验收**
 
-- 对「明显成功」与「明显失败」两段样例录屏，模型 verdict 与人工一致  
-- Schema 校验失败时自动一次 repair prompt  
+- 用固定帧夹具对比：本项目输出与直接调用 vendor `llm_eval` 的 `passed` 一致  
+- 金标成功/失败样例人工一致  
 
 ---
 
@@ -396,11 +399,12 @@ class JudgeProtocol(Protocol):
 
 ## 12. 立即下一步（建议执行顺序）
 
-1. **获取参考仓权限或导出 `testApp` 评判相关文件**（prompt、schema、调用封装），放入 `vendor/testapp_gui_judge/` 或文档对照  
+1. ~~导入 testApp 并完成对照~~ → 见 `docs/TESTAPP_JUDGE_MAPPING.md`  
 2. 落地 Phase 0–1：adb + screenrecord + 抽帧  
-3. 落地 Phase 3 mock judge，用固定帧夹具写 pytest  
-4. 接通真实 VLM，校准 3–5 条人工金标用例  
+3. 薄封装移植 `evaluate_gui_poll_images` + `parse_evaluation_passed`；MockJudge + pytest  
+4. 接通 `vl_eval`，用固定帧对比 vendor 直调与本项目 `passed`  
 5. 再接 Phase 2 语音与 Phase 5 数据集  
+6. **安全**：轮换曾写入 git 历史的 VL API Key（已脱敏工作区文件）  
 
 ---
 

@@ -1,23 +1,23 @@
-# 语音助手无线 ADB 自动化评测
+# echo-eval — 语音助手无线 ADB 自动化评测
 
-通过无线 ADB 连接语音助手设备，自动播放语音、录屏，并用多模态大模型依据「输入 + 录屏证据」评判效果。后续可扩展为数据集文本 → TTS → 播放 → 批量评测。
+通过无线 ADB 连接语音助手设备，自动播放语音、录屏抽帧，并用多模态大模型（对齐 TestAppGUI 评判）依据「输入 + 画面证据」判定效果。后续可扩展为数据集文本 → TTS → 播放 → 批量评测。
 
 ## 文档
 
-完整开发计划见 [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md)。
+| 文档 | 说明 |
+|------|------|
+| [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md) | 分阶段开发计划 |
+| [`docs/TESTAPP_JUDGE_MAPPING.md`](docs/TESTAPP_JUDGE_MAPPING.md) | TestAppGUI 评判模块对照与接入映射 |
 
-计划覆盖：
+## 参考源码
 
-1. 无线 ADB 连接与会话保活  
-2. 语音刺激（本机播放，预留 TTS）  
-3. ADB `screenrecord` + 抽帧  
-4. LLM / VLM Oracle（对齐 TestAppGUI 评判思路）  
-5. 用例编排、报告与数据集扩展  
+`vendor/testApp/` 来自 TestAppGUI 的 `testApp` 目录。评判请只关注：
 
-## 参考
+- `webserverV2/llm_eval.py` — VL / 多帧 / 回复+图 / QA  
+- `webserverV2/local_adb_runner/case_eval.py` — 用例级评判与 `evaluation.json`  
 
-评判模块设计对齐 [WeTestAI1/TestAppGUI `testApp`](https://github.com/WeTestAI1/TestAppGUI/tree/master/testApp) 的效果评判部分。若该仓可导出，请将 prompt / schema / 调用封装放入对照后接入 `judge/`。
+配置模板：`vendor/testApp/configs/model.yaml.example`（复制为 `model.yaml` 并填写密钥，勿提交密钥）。
 
 ## 状态
 
-当前仓库交付物为**开发计划与架构约定**；实现按计划 Phase 0 → Phase 5 推进。
+已完成：开发计划 + TestApp 评判对照。下一步：Phase 0–1 骨架与录屏抽帧，再薄封装移植 `evaluate_gui_poll_images`。

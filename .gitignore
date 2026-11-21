@@ -1,0 +1,12 @@
+artifacts/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.egg-info/
+
+# Secrets — keep example only
+vendor/testApp/configs/model.yaml
+**/configs/model.yaml
+!**/configs/model.yaml.example
