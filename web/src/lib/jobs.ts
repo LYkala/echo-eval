@@ -223,6 +223,8 @@ export function createAndStartJob(opts: {
       ...process.env,
       PYTHONPATH: path.join(root, "src"),
       PYTHONUNBUFFERED: "1",
+      PYTHONIOENCODING: "utf-8",
+      PYTHONUTF8: "1",
     },
     stdio: ["ignore", logFd, logFd],
     windowsHide: true,

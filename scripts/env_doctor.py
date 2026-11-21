@@ -8,6 +8,13 @@ import shutil
 import sys
 from pathlib import Path
 
+# Windows 控制台默认常为 GBK；强制 UTF-8，避免 Node/浏览器乱码
+try:
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+except Exception:
+    pass
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 

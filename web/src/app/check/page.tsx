@@ -46,7 +46,13 @@ function runStep(step: string) {
   const proc = spawnSync(pythonBin(), [script, "--quick", "--step", step], {
     encoding: "utf-8",
     cwd: root,
-    env: { ...process.env, PYTHONPATH: path.join(root, "src"), PYTHONUNBUFFERED: "1" },
+    env: {
+      ...process.env,
+      PYTHONPATH: path.join(root, "src"),
+      PYTHONUNBUFFERED: "1",
+      PYTHONIOENCODING: "utf-8",
+      PYTHONUTF8: "1",
+    },
     timeout: step === "device" ? 12000 : 10000,
     windowsHide: true,
   });

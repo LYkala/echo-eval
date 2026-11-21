@@ -4,6 +4,7 @@ import { spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { repoRoot } from "@/lib/paths";
+import { pythonChildEnv } from "@/lib/python-env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,7 +56,7 @@ export async function GET(req: Request) {
   const proc = spawnSync(pythonBin(), args, {
     encoding: "utf-8",
     cwd: root,
-    env: { ...process.env, PYTHONPATH: path.join(root, "src"), PYTHONUNBUFFERED: "1" },
+    env: pythonChildEnv(),
     timeout: timeoutMs,
     windowsHide: true,
   });

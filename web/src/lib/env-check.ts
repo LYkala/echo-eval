@@ -2,6 +2,7 @@ import { spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { repoRoot } from "./paths";
+import { pythonChildEnv } from "./python-env";
 
 export type EnvCheckItem = {
   key: string;
@@ -64,7 +65,7 @@ function runDoctorStep(step: EnvStepId): { item?: EnvCheckItem; serial?: string;
   const proc = spawnSync(pythonBin(), [script, "--quick", "--step", step], {
     encoding: "utf-8",
     cwd: root,
-    env: { ...process.env, PYTHONPATH: path.join(root, "src"), PYTHONUNBUFFERED: "1" },
+    env: pythonChildEnv(),
     timeout: timeoutMs,
     windowsHide: true,
   });
