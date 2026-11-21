@@ -40,22 +40,26 @@ type StepRow = {
   detail?: string;
 };
 
-const INITIAL_STEPS: StepRow[] = [
-  { id: "config", label: "读取设备配置", state: "pending" },
-  { id: "python", label: "检查 echo-eval 源码", state: "pending" },
-  { id: "adb", label: "检查 ADB", state: "pending" },
-  { id: "device", label: "连接设备（短超时）", state: "pending" },
-  { id: "ffmpeg", label: "检查 FFmpeg", state: "pending" },
-  { id: "audio", label: "检查音频播放", state: "pending" },
-  { id: "tts", label: "检查 TTS", state: "pending" },
-  { id: "vl", label: "检查 VL 配置", state: "pending" },
+const STEP_DEFS: { id: string; label: string }[] = [
+  { id: "config", label: "读取设备配置" },
+  { id: "python", label: "检查 echo-eval 源码" },
+  { id: "adb", label: "检查 ADB" },
+  { id: "device", label: "连接设备（短超时）" },
+  { id: "ffmpeg", label: "检查 FFmpeg" },
+  { id: "audio", label: "检查音频播放" },
+  { id: "tts", label: "检查 TTS" },
+  { id: "vl", label: "检查 VL 配置" },
 ];
+
+function blankSteps(): StepRow[] {
+  return STEP_DEFS.map((s) => ({ id: s.id, label: s.label, state: "pending" }));
+}
 
 export function ConsoleClient() {
   const [env, setEnv] = useState<EnvResult | null>(null);
-  const [steps, setSteps] = useState<StepRow[]>(INITIAL_STEPS);
+  const [steps, setSteps] = useState<StepRow[]>(blankSteps);
   const [envChecking, setEnvChecking] = useState(false);
-  const [envProgress, setEnvProgress] = useState("尚未检查");
+  const [envProgress, setEnvProgress] = useState("点击「重新检查」开始");
   const [envError, setEnvError] = useState("");
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [datasetId, setDatasetId] = useState("__builtin_sample__");
@@ -64,11 +68,12 @@ export function ConsoleClient() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [active, setActive] = useState<Job | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const runIdRef = useRef(0);
 
   const refreshDatasets = useCallback(async () => {
     try {
       const res = await fetch("/api/datasets", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { items: Dataset[] };
       setDatasets(data.items || []);
     } catch (e) {
@@ -77,115 +82,126 @@ export function ConsoleClient() {
   }, []);
 
   const refreshEnv = useCallback(async () => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-
+    const runId = ++runIdRef.current;
     setEnvChecking(true);
     setEnvError("");
-    setEnvProgress("开始环境检查…");
-    setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending", detail: undefined })));
+    setEnv(null);
+    setSteps(blankSteps());
+    setEnvProgress("已开始：准备逐项检查…");
 
-    const timeout = window.setTimeout(() => ac.abort(), 45000);
+    const items: EnvItem[] = [];
+    let serial: string | undefined;
+    let stopped = false;
 
     try {
-      const res = await fetch("/api/env/stream", {
-        cache: "no-store",
-        signal: ac.signal,
-        headers: { Accept: "text/event-stream" },
-      });
-      if (!res.ok || !res.body) {
-        throw new Error(`环境检查接口失败 HTTP ${res.status}`);
-      }
+      for (let i = 0; i < STEP_DEFS.length; i++) {
+        if (runId !== runIdRef.current) return; // superseded
+        const def = STEP_DEFS[i];
+        setEnvProgress(`(${i + 1}/${STEP_DEFS.length}) 正在检查：${def.label}`);
+        setSteps((prev) =>
+          prev.map((s) => (s.id === def.id ? { ...s, state: "running", detail: "检查中…" } : s))
+        );
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split("\n\n");
-        buffer = chunks.pop() || "";
-        for (const chunk of chunks) {
-          const line = chunk
-            .split("\n")
-            .map((l) => l.trim())
-            .find((l) => l.startsWith("data:"));
-          if (!line) continue;
-          const payload = JSON.parse(line.slice(5).trim()) as {
-            type: string;
-            step?: string;
-            label?: string;
-            index?: number;
-            total?: number;
+        const ac = new AbortController();
+        const timer = window.setTimeout(() => ac.abort(), 20000);
+        let item: EnvItem;
+        try {
+          const res = await fetch(`/api/env/step?step=${encodeURIComponent(def.id)}`, {
+            cache: "no-store",
+            signal: ac.signal,
+          });
+          const data = (await res.json()) as {
             item?: EnvItem;
-            result?: EnvResult;
-            message?: string;
+            serial?: string;
+            error?: string;
           };
-
-          if (payload.type === "step_start") {
-            setEnvProgress(`(${payload.index}/${payload.total}) ${payload.label}…`);
-            setSteps((prev) =>
-              prev.map((s) =>
-                s.id === payload.step ? { ...s, state: "running", detail: "检查中…" } : s
-              )
-            );
-          } else if (payload.type === "step_done" && payload.item) {
-            setEnvProgress(
-              `(${payload.index}/${payload.total}) ${payload.label}: ${payload.item.ok ? "OK" : "失败"}`
-            );
-            setSteps((prev) =>
-              prev.map((s) =>
-                s.id === payload.step
-                  ? {
-                      ...s,
-                      state: payload.item!.ok ? "ok" : "fail",
-                      detail: payload.item!.detail,
-                    }
-                  : s
-              )
-            );
-          } else if (payload.type === "done" && payload.result) {
-            setEnv(payload.result);
-            setEnvProgress(
-              payload.result.ok
-                ? "环境检查完成：就绪"
-                : "环境检查完成：未就绪（仍可打开演示任务）"
-            );
-            if (payload.result.error) setEnvError(payload.result.error);
-          } else if (payload.type === "error") {
-            throw new Error(payload.message || "环境检查出错");
+          if (!res.ok) {
+            item = {
+              key: def.id,
+              label: def.label,
+              ok: false,
+              detail: data.error || `HTTP ${res.status}`,
+              required: true,
+            };
+          } else {
+            item = data.item || {
+              key: def.id,
+              label: def.label,
+              ok: false,
+              detail: "无返回",
+              required: true,
+            };
+            if (data.serial) serial = data.serial;
           }
+        } catch (e) {
+          const aborted = (e as { name?: string }).name === "AbortError";
+          item = {
+            key: def.id,
+            label: def.label,
+            ok: false,
+            detail: aborted
+              ? "本步超时（20s）。请检查本机 python / adb 是否卡住。"
+              : `请求失败: ${String(e)}`,
+            required: !["audio", "tts", "vl"].includes(def.id),
+          };
+          if (aborted || String(e).includes("Failed to fetch")) {
+            stopped = true;
+          }
+        } finally {
+          window.clearTimeout(timer);
+        }
+
+        if (runId !== runIdRef.current) return;
+        items.push(item);
+        setSteps((prev) =>
+          prev.map((s) =>
+            s.id === def.id
+              ? { ...s, state: item.ok ? "ok" : "fail", detail: item.detail }
+              : s
+          )
+        );
+        setEnvProgress(
+          `(${i + 1}/${STEP_DEFS.length}) ${def.label}: ${item.ok ? "OK" : "失败"}`
+        );
+
+        if (stopped) {
+          setEnvError("后续步骤已跳过：网络或服务异常。请确认 npm run dev 仍在运行。");
+          break;
         }
       }
+
+      if (runId !== runIdRef.current) return;
+      const requiredFail = items.filter((it) => it.required && !it.ok);
+      const result: EnvResult = {
+        ok: requiredFail.length === 0,
+        demoMode: requiredFail.length > 0,
+        items,
+        serial,
+        checkedAt: new Date().toISOString(),
+      };
+      setEnv(result);
+      setEnvProgress(result.ok ? "全部完成：环境就绪" : "全部完成：环境未就绪（可用演示任务）");
     } catch (e) {
-      const aborted = ac.signal.aborted;
-      const message = aborted
-        ? "环境检查超时或已取消（45s）。请确认 python / adb 可用后重试。"
-        : String(e);
+      if (runId !== runIdRef.current) return;
+      const message = String(e);
       setEnvError(message);
       setEnvProgress("检查中断");
-      setEnv((prev) =>
-        prev || {
-          ok: false,
-          demoMode: true,
-          items: [],
-          checkedAt: new Date().toISOString(),
-          error: message,
-        }
-      );
+      setEnv({
+        ok: false,
+        demoMode: true,
+        items,
+        serial,
+        checkedAt: new Date().toISOString(),
+        error: message,
+      });
     } finally {
-      window.clearTimeout(timeout);
-      setEnvChecking(false);
+      if (runId === runIdRef.current) setEnvChecking(false);
     }
   }, []);
 
   useEffect(() => {
     void refreshEnv();
     void refreshDatasets();
-    return () => abortRef.current?.abort();
   }, [refreshEnv, refreshDatasets]);
 
   useEffect(() => {
@@ -193,8 +209,7 @@ export function ConsoleClient() {
     const t = setInterval(async () => {
       const res = await fetch(`/api/runs/${active.id}`, { cache: "no-store" });
       if (!res.ok) return;
-      const job = (await res.json()) as Job;
-      setActive(job);
+      setActive(await res.json());
     }, 2000);
     return () => clearInterval(t);
   }, [active]);
@@ -258,38 +273,19 @@ export function ConsoleClient() {
     return <Badge variant="secondary">{s}</Badge>;
   };
 
-  const stepTone = (state: StepRow["state"]) => {
-    if (state === "ok") return "text-emerald-700";
-    if (state === "fail") return "text-rose-700";
-    if (state === "running") return "text-amber-800";
-    return "text-muted-foreground";
-  };
-
-  const stepMark = (state: StepRow["state"]) => {
-    if (state === "ok") return "OK";
-    if (state === "fail") return "失败";
-    if (state === "running") return "…";
-    return "等待";
-  };
-
   return (
     <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
       <section className="animate-rise space-y-6" style={{ animationDelay: "60ms" }}>
         <Card>
           <CardHeader>
-            <CardTitle className="font-[family-name:var(--font-display)] text-2xl">环境检查</CardTitle>
+            <CardTitle className="font-display text-2xl">环境检查</CardTitle>
             <CardDescription>
-              分步检查会显示进度。设备连接使用短超时，避免一直卡住。
+              点击后会立刻显示进度；每一步单独请求，避免整页卡住。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void refreshEnv()}
-                disabled={envChecking}
-              >
+              <Button type="button" variant="outline" onClick={() => void refreshEnv()} disabled={envChecking}>
                 {envChecking ? "检查中…" : "重新检查"}
               </Button>
               {envChecking ? (
@@ -301,17 +297,21 @@ export function ConsoleClient() {
                   <Badge variant="fail">未就绪</Badge>
                 )
               ) : (
-                <Badge variant="secondary">未开始</Badge>
+                <Badge variant="secondary">等待开始</Badge>
               )}
               {env?.serial ? (
                 <span className="text-xs text-muted-foreground">serial: {env.serial}</span>
               ) : null}
             </div>
 
-            <p className="text-sm text-muted-foreground">
-              <span className={envChecking ? "animate-pulse-dot" : ""}>{envProgress}</span>
-            </p>
-            {envError ? <p className="text-sm text-rose-700">{envError}</p> : null}
+            <div
+              className="rounded-md border px-3 py-2 text-sm"
+              style={{ background: "hsl(40 18% 94%)", borderColor: "hsl(40 14% 80%)" }}
+            >
+              <div className="font-medium">当前进度</div>
+              <div className={envChecking ? "animate-pulse-dot mt-1" : "mt-1"}>{envProgress}</div>
+              {envError ? <div className="mt-1 text-rose-700">{envError}</div> : null}
+            </div>
 
             <ul className="space-y-2">
               {steps.map((s) => (
@@ -325,7 +325,27 @@ export function ConsoleClient() {
                       <div className="break-all text-xs text-muted-foreground">{s.detail}</div>
                     ) : null}
                   </div>
-                  <span className={`shrink-0 font-medium ${stepTone(s.state)}`}>{stepMark(s.state)}</span>
+                  <span
+                    className="shrink-0 font-medium"
+                    style={{
+                      color:
+                        s.state === "ok"
+                          ? "#047857"
+                          : s.state === "fail"
+                            ? "#be123c"
+                            : s.state === "running"
+                              ? "#92400e"
+                              : "#6b7280",
+                    }}
+                  >
+                    {s.state === "ok"
+                      ? "OK"
+                      : s.state === "fail"
+                        ? "失败"
+                        : s.state === "running"
+                          ? "检查中"
+                          : "等待"}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -334,7 +354,7 @@ export function ConsoleClient() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-[family-name:var(--font-display)] text-2xl">数据集与开测</CardTitle>
+            <CardTitle className="font-display text-2xl">数据集与开测</CardTitle>
             <CardDescription>上传 TestApp 风格 Excel/CSV，选择后端后开始。扬声器请朝向设备麦克风。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -409,7 +429,7 @@ export function ConsoleClient() {
         <Card className="overflow-hidden">
           <CardHeader>
             <div className="flex items-center justify-between gap-2">
-              <CardTitle className="font-[family-name:var(--font-display)] text-2xl">当前任务</CardTitle>
+              <CardTitle className="font-display text-2xl">当前任务</CardTitle>
               {active ? statusBadge(active.status) : <Badge variant="outline">空闲</Badge>}
             </div>
             <CardDescription>

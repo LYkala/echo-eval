@@ -10,7 +10,7 @@ export default function RunsPage() {
   return (
     <div className="animate-rise space-y-6">
       <div>
-        <h1 className="font-[family-name:var(--font-display)] text-3xl font-semibold">历史任务</h1>
+        <h1 className="font-display text-3xl font-semibold">历史任务</h1>
         <p className="mt-1 text-sm text-muted-foreground">本机 artifacts/web/jobs 下的评测记录</p>
       </div>
       <ul className="space-y-3">

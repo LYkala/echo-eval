@@ -1,17 +1,6 @@
 import type { Metadata } from "next";
-import { DM_Sans, Fraunces } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
-
-const sans = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-sans",
-});
-
-const display = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-display",
-});
 
 export const metadata: Metadata = {
   title: "Echo Eval Console",
@@ -21,11 +10,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body className={`${sans.variable} ${display.variable} font-sans`}>
+      <body className="font-sans">
         <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-4 pb-16 pt-6 sm:px-6">
           <header className="animate-rise mb-10 flex flex-wrap items-end justify-between gap-4 border-b border-border/70 pb-5">
             <div>
-              <p className="font-[family-name:var(--font-display)] text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+              <p
+                className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
+                style={{ fontFamily: "Georgia, 'Songti SC', 'Noto Serif SC', serif" }}
+              >
                 Echo Eval
               </p>
               <p className="mt-1 max-w-xl text-sm text-muted-foreground">

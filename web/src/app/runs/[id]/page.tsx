@@ -17,7 +17,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           <Link href="/runs" className="text-sm text-muted-foreground hover:text-foreground">
             ← 历史任务
           </Link>
-          <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold">{job.id}</h1>
+          <h1 className="mt-2 font-display text-3xl font-semibold">{job.id}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {job.datasetName} · backend={job.backend}
             {job.caseId ? ` · case=${job.caseId}` : " · 全表"}

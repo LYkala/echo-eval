@@ -30,7 +30,7 @@ export default async function CaseDetailPage({
           <Link href={`/runs/${id}`} className="text-sm text-muted-foreground hover:text-foreground">
             ← 返回任务
           </Link>
-          <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold">
+          <h1 className="mt-2 font-display text-3xl font-semibold">
             {detail.result.case_id}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">{detail.result.name}</p>
@@ -45,7 +45,7 @@ export default async function CaseDetailPage({
       </div>
 
       <section className="space-y-3">
-        <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold">测试步骤 / 音频</h2>
+        <h2 className="font-display text-xl font-semibold">测试步骤 / 音频</h2>
         <ol className="space-y-2 text-sm">
           {steps.map((s, i) => (
             <li key={i} className="rounded-md border bg-card/70 px-3 py-2">
@@ -58,14 +58,14 @@ export default async function CaseDetailPage({
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold">预期结果</h2>
+        <h2 className="font-display text-xl font-semibold">预期结果</h2>
         <pre className="whitespace-pre-wrap rounded-md border bg-card/70 p-3 text-sm">
           {expected || (detail.caseJson as { exceptions?: string[] } | null)?.exceptions?.join("\n") || "—"}
         </pre>
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold">评判</h2>
+        <h2 className="font-display text-xl font-semibold">评判</h2>
         <ul className="space-y-2">
           {parsed.length ? (
             parsed.map((p, i) => (
@@ -84,7 +84,7 @@ export default async function CaseDetailPage({
 
       {detail.report ? (
         <section className="space-y-3">
-          <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold">报告</h2>
+          <h2 className="font-display text-xl font-semibold">报告</h2>
           <pre className="whitespace-pre-wrap rounded-md border bg-card/70 p-3 text-sm">{detail.report}</pre>
         </section>
       ) : null}
