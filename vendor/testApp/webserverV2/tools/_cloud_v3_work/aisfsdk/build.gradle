@@ -1,0 +1,220 @@
+plugins {
+    id 'com.android.library'
+    id 'jacoco'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'com.huawei.aisfsdk'
+    compileSdk 34
+    buildToolsVersion "35.0.0"
+
+    defaultConfig {
+        minSdk 26
+    }
+
+    buildTypes {
+        debug {
+            testCoverageEnabled true
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    testOptions {
+        unitTests.returnDefaultValues = true
+        unitTests.includeAndroidResources = true
+    }
+
+    // 只打包 aisfsdkv2，排除老版本 aisfsdk 包
+    sourceSets {
+        main {
+            java {
+                exclude 'com/huawei/aisfsdk/**'  // 排除老版本包
+            }
+        }
+    }
+}
+
+dependencies {
+    api 'io.netty:netty-all:4.1.137.Final'
+    api 'org.bouncycastle:bcprov-jdk15to18:1.85'
+    api('org.bouncycastle:bcpkix-jdk15to18:1.85') {
+        exclude group: 'org.bouncycastle', module: 'bcutil-jdk15to18'
+    }
+    compileOnly 'androidx.annotation:annotation:1.7.0'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:4.11.0'
+    testImplementation 'org.mockito:mockito-inline:4.11.0'
+    testImplementation 'org.robolectric:robolectric:4.11.1'
+}
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs << "-parameters"
+}
+
+// JaCoCo 覆盖率报告任务
+tasks.register('jacocoTestReport', JacocoReport) {
+    dependsOn 'testDebugUnitTest'
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    def fileFilter = [
+            '**/R.class', '**/R$*.class', '**/BuildConfig.*', '**/Manifest*.*',
+            '**/*Test*.*', 'android/**/*.*',
+            '**/com/huawei/aisfsdk/**',                          // 老包排除
+            '**/component/androidfunc/accessibility/impl/**',    // Android 系统服务
+            '**/component/androidfunc/accessibility/animation/**',
+            '**/component/androidfunc/screenshot/**',            // Android 截图服务
+            '**/component/androidfunc/permission/**',            // Android 权限
+            '**/component/androidfunc/location/impl/**',         // Android 定位
+            '**/component/androidfunc/app/impl/**',              // Android App 管理
+    ]
+    def debugTree = fileTree(
+            dir: "${buildDir}/intermediates/javac/debug/classes",
+            excludes: fileFilter
+    )
+    sourceDirectories.setFrom(files(["src/main/java"]))
+    classDirectories.setFrom(files([debugTree]))
+    executionData.setFrom(fileTree(dir: buildDir, includes: [
+            "outputs/unit_test_code_coverage/debugUnitTest/*.exec",
+            "jacoco/testDebugUnitTest.exec"
+    ]))
+}
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs << "-parameters"
+}
+
+// 定义任务: 打包release jar
+tasks.register('makeJar', Jar) {
+    from('build/intermediates/javac/release/classes')
+    archiveFileName = 'aisfSdk.jar' // 目标名
+    destinationDirectory = file('output')  // 目标目录
+}
+
+// 定义任务: 打包debug jar
+tasks.register('makeDebugJar', Jar) {
+    from('build/intermediates/javac/debug/classes')
+    archiveFileName = 'aisfSdk-debug.jar'  // 目标名
+    destinationDirectory = file('output')  // 目标目录
+}
+
+// 定义任务: 拷贝aar包到指定目录
+tasks.register('copyAar', Copy) {
+    from(fileTree('build/outputs/aar') {
+        include '*.aar'
+    })
+    into('output')
+}
+
+// 任务执行控制
+tasks.configureEach { task ->
+    if (task.name == 'assembleRelease') {
+        task.finalizedBy('makeJar')
+        task.finalizedBy('copyAar')
+    }
+    if (task.name == 'assembleDebug') {
+        task.finalizedBy('makeDebugJar')
+        task.finalizedBy('copyAar')
+    }
+}
+
+// 定义clean任务: 删除output目录
+tasks.register('cleanOutput') {
+    doLast {
+        def dirToDelete = file('output')
+        if (dirToDelete.exists()) {
+            dirToDelete.deleteDir()
+        }
+    }
+}
+// clean任务之前执行 指定任务
+clean.dependsOn cleanOutput
+
+// Maven Publish 配置
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+
+                groupId = 'com.huawei.aisfsdk'
+                artifactId = 'aisfsdk'
+                version = '2.0.0'
+
+                pom {
+                    name = 'AISF SDK V2'
+                    description = 'Huawei AISF SDK V2 for Android'
+                    url = 'https://www.huawei.com'
+
+                    licenses {
+                        license {
+                            name = 'Apache-2.0'
+                            url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id = 'huawei'
+                            name = 'Huawei Technologies'
+                            email = 'support@huawei.com'
+                        }
+                    }
+                }
+            }
+        }
+
+        repositories {
+            // 本地调试仓库 - 发布到项目 maven 目录
+            maven {
+                name = 'local'
+                url = uri('../maven')
+            }
+
+            // Nexus 仓库配置示例 (取消注释启用)
+            // maven {
+            //     name = 'nexus'
+            //     url = uri('http://nexus.example.com:8081/repository/maven-releases/')
+            //     credentials {
+            //         username = project.findProperty('nexusUsername') ?: System.getenv('NEXUS_USERNAME') ?: ''
+            //         password = project.findProperty('nexusPassword') ?: System.getenv('NEXUS_PASSWORD') ?: ''
+            //     }
+            //     authentication {
+            //         basic(BasicAuthentication)
+            //     }
+            // }
+
+            // Artifactory 仓库配置示例 (取消注释启用)
+            // maven {
+            //     name = 'artifactory'
+            //     url = uri('https://artifactory.example.com/artifactory/libs-release-local/')
+            //     credentials {
+            //         username = project.findProperty('artifactoryUsername') ?: System.getenv('ARTIFACTORY_USERNAME') ?: ''
+            //         password = project.findProperty('artifactoryPassword') ?: System.getenv('ARTIFACTORY_PASSWORD') ?: ''
+            //     }
+            //     authentication {
+            //         basic(BasicAuthentication)
+            //     }
+            // }
+
+            // 快照仓库示例 (SNAPSHOT 版本)
+            // maven {
+            //     name = 'snapshot'
+            //     url = uri('http://nexus.example.com:8081/repository/maven-snapshots/')
+            //     // 或 Artifactory: uri('https://artifactory.example.com/artifactory/libs-snapshot-local/')
+            //     credentials {
+            //         username = project.findProperty('nexusUsername') ?: System.getenv('NEXUS_USERNAME') ?: ''
+            //         password = project.findProperty('nexusPassword') ?: System.getenv('NEXUS_PASSWORD') ?: ''
+            //     }
+            // }
+        }
+    }
+}

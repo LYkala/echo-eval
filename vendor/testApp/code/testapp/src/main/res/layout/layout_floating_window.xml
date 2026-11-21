@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="280dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#E0FFFFFF"
+    android:padding="12dp"
+    android:elevation="8dp">
+
+    <!-- 标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <View
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:background="@color/green"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="8dp"
+            android:text="测试控制窗口"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"/>
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginVertical="8dp"
+        android:background="@color/light_gray"/>
+
+    <!-- 测试信息 -->
+    <TextView
+        android:id="@+id/tvTestId"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="当前测试: -"
+        android:textColor="@color/text_primary"
+        android:textSize="14sp"/>
+
+    <TextView
+        android:id="@+id/tvStepProgress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:text="步骤: 0/0"
+        android:textColor="@color/text_secondary"
+        android:textSize="14sp"/>
+
+    <TextView
+        android:id="@+id/tvCurrentAction"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:text="操作: -"
+        android:textColor="@color/text_secondary"
+        android:textSize="14sp"/>
+
+    <!-- 进度条 -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:progressTint="@color/green"/>
+
+    <!-- 控制按钮 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnPause"
+            android:layout_width="0dp"
+            android:layout_height="35dp"
+            android:layout_weight="1"
+            android:text="@string/pause"
+            android:textSize="12sp"
+            android:padding="0dp"/>
+
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="0dp"
+            android:layout_height="35dp"
+            android:layout_weight="1"
+            android:layout_marginLeft="5dp"
+            android:text="@string/stop_test"
+            android:textSize="12sp"
+            android:padding="0dp"/>
+
+        <Button
+            android:id="@+id/btnMinimize"
+            android:layout_width="0dp"
+            android:layout_height="35dp"
+            android:layout_weight="1"
+            android:layout_marginLeft="5dp"
+            android:text="@string/minimize"
+            android:textSize="12sp"
+            android:padding="0dp"/>
+    </LinearLayout>
+
+</LinearLayout>

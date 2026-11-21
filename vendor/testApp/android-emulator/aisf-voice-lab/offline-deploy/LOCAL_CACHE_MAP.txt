@@ -1,0 +1,18 @@
+# SDK / system image caches (hardlink into sdk/)
+# Do NOT use downloads/emulator-linux_aarch64.zip if tiny/stub
+arm64-v8a-33_r08.zip=sdk/arm64-v8a-33_r08.zip  (source ../downloads/arm64-v8a-33_r08.zip, size=1619645676)
+platform-33-ext3_r03.zip=sdk/platform-33-ext3_r03.zip  (source ../downloads/platform-33-ext3_r03.zip, size=67334237)
+commandlinetools-linux-latest.zip=sdk/commandlinetools-linux-latest.zip  (source ../downloads/commandlinetools-linux-latest.zip, size=153607504)
+OpenJDK17U-jdk_aarch64_linux.tar.gz=sdk/OpenJDK17U-jdk_aarch64_linux.tar.gz  (source ../downloads/OpenJDK17U-jdk_aarch64_linux.tar.gz, size=30556143)
+aarch64-toolchain.tar.bz2=sdk/aarch64-toolchain.tar.bz2  (source ../downloads/aarch64-toolchain.tar.bz2, size=156060191)
+android-sdk-tools-static-aarch64.zip=sdk/android-sdk-tools-static-aarch64.zip  (source ../downloads/android-sdk-tools-static-aarch64.zip, size=14401170)
+emulator-linux_aarch64-built.tar.gz=emulator/emulator-linux_aarch64-built.tar.gz
+emu-runtime-extra.tar.gz=emulator/emu-runtime-extra.tar.gz
+glibc-bundle.tar.gz=emulator/glibc-bundle.tar.gz
+linux-aarch64-deps.tar.gz=emulator/linux-aarch64-deps.tar.gz
+vulkan-pack.tar.gz=emulator/vulkan-pack.tar.gz
+aisf_arm64_signed.apk=apk/aisf_arm64_signed.apk
+pulse-aarch64-libs.tar.gz=runtime/pulse-aarch64-libs.tar.gz
+aisf-runtime-scripts.tgz=runtime/aisf-runtime-scripts.tgz
+mini_adb_auth.py=runtime/mini_adb_auth.py
+libandroid-emu-metrics.so.*=runtime/

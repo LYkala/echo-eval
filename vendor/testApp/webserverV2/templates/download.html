@@ -1,0 +1,1123 @@
+{% extends "base.html" %}
+
+{% block title %}软件下载 - TestApp{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pkg-page { width: 100%; }
+    .pkg-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 12px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+    }
+    .pkg-toolbar h4 {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 600;
+        color: #1a1a2e;
+        letter-spacing: 0;
+    }
+    .pkg-toolbar .sub {
+        margin-top: 2px;
+        color: #909399;
+        font-size: 13px;
+    }
+    .pkg-toolbar .btn {
+        border-radius: 4px;
+        font-weight: 500;
+        padding: 0.35rem 0.75rem;
+        box-shadow: none;
+        transform: none;
+    }
+    .pkg-toolbar .btn:hover { transform: none; }
+
+    .pkg-table {
+        background: #fff;
+        border: 1px solid #ebeef5;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    }
+    .pkg-table .table {
+        --bs-table-bg: #fff;
+        --bs-table-hover-bg: #f5f7fa;
+        margin: 0;
+        border-color: #ebeef5;
+    }
+    .pkg-table thead th {
+        white-space: nowrap;
+        background: #f8f9fb;
+        color: #909399;
+        font-weight: 500;
+        font-size: 0.75rem;
+        letter-spacing: 0.03em;
+        text-transform: none;
+        padding: 10px 14px;
+        border-bottom: 1px solid #ebeef5;
+        vertical-align: middle;
+    }
+    .pkg-table tbody td {
+        vertical-align: middle;
+        padding: 10px 14px;
+        line-height: 1.35;
+        border-color: #ebeef5;
+        color: #303133;
+        font-size: 0.875rem;
+        white-space: nowrap;
+    }
+    .pkg-table tbody tr:last-child td { border-bottom: 0; }
+
+    .pkg-name {
+        font-weight: 400;
+        color: #303133;
+        font-size: 0.9rem;
+    }
+    .pkg-mono {
+        font-family: Consolas, "SF Mono", "Cascadia Mono", Menlo, monospace;
+        font-size: 0.78rem;
+        color: #606266;
+        background: #f5f7fa;
+        border: 1px solid #ebeef5;
+        border-radius: 5px;
+        padding: 2px 7px;
+    }
+    .pkg-file-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        max-width: 100%;
+    }
+    .pkg-badge {
+        display: inline-block;
+        font-size: 0.7rem;
+        font-weight: 500;
+        line-height: 1;
+        padding: 4px 7px;
+        border-radius: 4px;
+        background: #f0f9eb;
+        color: #529b2e;
+        border: 1px solid #d1edc4;
+    }
+    .pkg-badge.seed {
+        background: #ecf5ff;
+        color: #409eff;
+        border-color: #d9ecff;
+    }
+    .pkg-empty { color: #a8abb2; font-size: 0.82rem; }
+    .pkg-size, .pkg-time { color: #909399; font-variant-numeric: tabular-nums; }
+    .pkg-time { font-size: 0.82rem; }
+
+    .pkg-actions {
+        display: inline-flex;
+        flex-wrap: nowrap;
+        gap: 6px;
+        align-items: center;
+    }
+    .pkg-actions .btn:not(.btn-text) {
+        flex: 0 0 auto;
+        min-width: 0;
+        height: 28px;
+        padding: 0 12px;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 26px;
+        border-radius: 4px;
+        white-space: nowrap;
+    }
+    .pkg-actions .btn-text {
+        height: auto;
+        line-height: 1.2;
+        font-size: 13px;
+        padding: 4px 8px !important;
+    }
+    .pkg-actions .btn-primary {
+        color: #fff;
+        border: 1px solid #409eff;
+        background: #409eff !important;
+    }
+    .pkg-actions .btn-primary:hover { background: #79bbff !important; border-color: #79bbff; }
+    .pkg-actions .btn:disabled,
+    .pkg-actions .btn.disabled {
+        opacity: 0.45;
+    }
+
+    .pkg-msg { font-size: 0.78rem; min-height: 0; line-height: 1.25; white-space: normal; }
+    .pkg-msg:not(:empty) { margin-top: 4px; }
+    input.pkg-file { display: none; }
+    .pkg-progress {
+        display: none;
+        margin-top: 6px;
+        max-width: 360px;
+        white-space: normal;
+    }
+    .pkg-progress.show { display: block; }
+    .pkg-progress .progress {
+        height: 6px;
+        border-radius: 4px;
+        background: #ebeef5;
+        overflow: hidden;
+    }
+    .pkg-progress .progress-bar {
+        height: 100%;
+        width: 0%;
+        background: #409eff;
+        transition: width .2s ease;
+    }
+    .pkg-progress.indeterminate .progress-bar {
+        width: 35% !important;
+        animation: pkg-indet 1.1s ease-in-out infinite;
+    }
+    @keyframes pkg-indet {
+        0% { transform: translateX(-120%); }
+        100% { transform: translateX(320%); }
+    }
+    .pkg-progress-label {
+        font-size: 0.72rem;
+        color: #909399;
+        margin-bottom: 3px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    #sharedFilesModal .modal-dialog { max-width: 860px; }
+    #sharedFilesModal .modal-content {
+        border: 1px solid #ebeef5;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
+    }
+    #sharedFilesModal .modal-header {
+        padding: 14px 18px;
+        border-bottom: 1px solid #ebeef5;
+        background: #fff;
+    }
+    #sharedFilesModal .modal-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #303133;
+    }
+    #sharedFilesModal .modal-body { padding: 14px 18px; }
+    #sharedFilesModal .modal-footer {
+        padding: 10px 18px;
+        border-top: 1px solid #ebeef5;
+        background: #f8f9fb;
+    }
+    .shared-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+    .shared-toolbar .sub { color: #909399; font-size: 0.82rem; }
+    .shared-toolbar .btn {
+        border-radius: 7px;
+        font-weight: 500;
+        box-shadow: none !important;
+        transform: none !important;
+        background-image: none !important;
+        padding: 0.3rem 0.7rem;
+    }
+    .shared-toolbar .btn-primary {
+        background: #409eff !important;
+        border-color: #409eff;
+        padding: 0.3rem 0.7rem !important;
+    }
+    .shared-table-wrap {
+        border: 1px solid #ebeef5;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .shared-table-wrap .table {
+        --bs-table-bg: #fff;
+        --bs-table-hover-bg: #f5f7fa;
+        margin: 0;
+        border-color: #ebeef5;
+    }
+    .shared-table-wrap thead th {
+        white-space: nowrap;
+        background: #f8f9fb;
+        color: #909399;
+        font-weight: 500;
+        font-size: 0.75rem;
+        padding: 9px 12px;
+        border-bottom: 1px solid #ebeef5;
+        vertical-align: middle;
+    }
+    .shared-table-wrap tbody td {
+        vertical-align: middle;
+        padding: 9px 12px;
+        border-color: #ebeef5;
+        color: #303133;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+    .shared-table-wrap tbody tr:last-child td { border-bottom: 0; }
+    .shared-name {
+        display: inline-block;
+        max-width: 340px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-family: Consolas, "SF Mono", "Cascadia Mono", Menlo, monospace;
+        font-size: 0.78rem;
+        color: #606266;
+        background: #f5f7fa;
+        border: 1px solid #ebeef5;
+        border-radius: 5px;
+        padding: 2px 7px;
+        vertical-align: middle;
+    }
+    .shared-actions {
+        display: inline-flex;
+        flex-wrap: nowrap;
+        gap: 6px;
+        align-items: center;
+        white-space: nowrap;
+    }
+    .shared-actions .btn {
+        height: 28px;
+        padding: 0 10px !important;
+        font-size: 0.75rem;
+        font-weight: 500;
+        line-height: 26px;
+        border-radius: 4px;
+        white-space: nowrap;
+        box-shadow: none !important;
+        transform: none !important;
+        background-image: none !important;
+    }
+    .shared-actions .btn-primary {
+        background: #409eff !important;
+        border-color: #409eff;
+    }
+    .shared-actions .btn-outline-danger {
+        color: #f56c6c;
+        border-color: #fde2e2;
+        background: #fff;
+    }
+    .shared-actions .btn-outline-danger:hover {
+        color: #fff;
+        background: #f56c6c;
+        border-color: #f56c6c;
+    }
+    #sharedUploadInput,
+    #sharedUploadFolderInput { display: none; }
+    #sharedFilesMsg {
+        min-height: 0;
+        font-size: 0.8rem;
+        margin-bottom: 0;
+    }
+    #sharedFilesMsg:not(:empty) { margin-bottom: 8px; }
+    .shared-type-badge {
+        display: inline-block;
+        font-size: 0.7rem;
+        font-weight: 600;
+        line-height: 1;
+        padding: 4px 7px;
+        border-radius: 4px;
+        background: #f5f7fa;
+        color: #606266;
+        border: 1px solid #ebeef5;
+        white-space: nowrap;
+    }
+    .shared-type-badge.dir {
+        background: #ecf5ff;
+        color: #409eff;
+        border-color: #d9ecff;
+    }
+    .shared-meta { color: #909399; font-variant-numeric: tabular-nums; font-size: 0.82rem; }
+    .shared-progress {
+        display: none;
+        margin: 0 0 10px;
+        padding: 8px 10px;
+        border-radius: 4px;
+        background: #f8f9fb;
+        border: 1px solid #ebeef5;
+    }
+    .shared-progress.show { display: block; }
+    .shared-progress.indeterminate .progress-bar {
+        width: 35% !important;
+        animation: pkg-indet 1.1s ease-in-out infinite;
+    }
+    .shared-progress-label {
+        font-size: 0.72rem;
+        color: #909399;
+        margin-bottom: 3px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    .shared-progress .progress {
+        height: 6px;
+        border-radius: 4px;
+        background: #ebeef5;
+        overflow: hidden;
+    }
+    .shared-progress .progress-bar {
+        height: 100%;
+        width: 0%;
+        background: #409eff;
+        transition: width .15s ease;
+    }
+    #notepadEditor {
+        min-height: 360px;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 0.92rem;
+        line-height: 1.45;
+        resize: vertical;
+    }
+    #notepadStatus { min-height: 1.2em; font-size: 0.85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-3 pkg-page">
+    <div class="pkg-toolbar">
+        <div>
+            <h4>软件下载</h4>
+            <div class="sub">安装包托管：上传更新 · 下载 · 安装到安卓虚拟机</div>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" id="sharedFilesBtn" type="button">文件下载</button>
+            <button class="btn btn-outline-secondary btn-sm" id="notepadBtn" type="button">记事本</button>
+            <button class="btn btn-outline-secondary btn-sm" id="refreshBtn" type="button">刷新</button>
+        </div>
+    </div>
+
+    <div class="table-responsive pkg-table">
+        <table class="table table-hover mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th style="width:12%">名称</th>
+                    <th style="width:20%">包名</th>
+                    <th style="width:24%">当前文件</th>
+                    <th style="width:8%">大小</th>
+                    <th style="width:14%">更新时间</th>
+                    <th style="width:22%">操作</th>
+                </tr>
+            </thead>
+            <tbody id="pkgBody">
+                <tr><td colspan="6" class="text-center text-muted py-4">加载中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div id="globalMsg" class="pkg-msg mt-3"></div>
+</div>
+
+<div class="modal fade" id="sharedFilesModal" tabindex="-1" aria-labelledby="sharedFilesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sharedFilesModalLabel">文件下载</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="shared-toolbar">
+                    <div class="sub">通用文件 / 文件夹：上传 · 下载 · 删除</div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" id="sharedUploadBtn">
+                                上传
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><button type="button" class="dropdown-item" id="sharedPickFiles">选择文件…</button></li>
+                                <li><button type="button" class="dropdown-item" id="sharedPickFolder">选择文件夹…</button></li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="sharedRefreshBtn">刷新列表</button>
+                        <input type="file" id="sharedUploadInput" multiple>
+                        <input type="file" id="sharedUploadFolderInput" webkitdirectory directory multiple>
+                    </div>
+                </div>
+                <div id="sharedFilesMsg"></div>
+                <div class="shared-progress" id="sharedProgress">
+                    <div class="shared-progress-label">
+                        <span id="sharedProgressLabel">准备中…</span>
+                        <span id="sharedProgressPct"></span>
+                    </div>
+                    <div class="progress"><div class="progress-bar" id="sharedProgressBar"></div></div>
+                </div>
+                <div class="table-responsive shared-table-wrap">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th style="width:72px">类型</th>
+                                <th style="width:90px">大小</th>
+                                <th style="width:150px">更新时间</th>
+                                <th style="width:150px">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sharedFilesBody">
+                            <tr><td colspan="5" class="text-center text-muted py-3">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="notepadModal" tabindex="-1" aria-labelledby="notepadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="notepadModalLabel">记事本</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <textarea class="form-control" id="notepadEditor" placeholder="在此记录备注、安装说明、账号等…"></textarea>
+                <div id="notepadStatus" class="mt-2 text-muted"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger" id="notepadClearBtn">清空</button>
+                <button type="button" class="btn btn-outline-secondary me-auto" id="notepadCopyBtn">复制</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="notepadSaveBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function formatSize(bytes) {
+        if (!bytes) return '-';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function formatTime(timestamp) {
+        if (!timestamp) return '-';
+        return new Date(timestamp * 1000).toLocaleString('zh-CN');
+    }
+
+    function setGlobalMsg(text, type) {
+        const el = document.getElementById('globalMsg');
+        el.textContent = text || '';
+        el.className = 'pkg-msg mt-3' + (type ? ` text-${type}` : '');
+    }
+
+    function setRowMsg(pkgId, text, type) {
+        const el = document.getElementById('msg-' + pkgId);
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'pkg-msg' + (type ? ` text-${type}` : '');
+    }
+
+    function setProgress(pkgId, { percent, label, show, indeterminate } = {}) {
+        const wrap = document.getElementById('progress-' + pkgId);
+        const bar = document.getElementById('bar-' + pkgId);
+        const lab = document.getElementById('plabel-' + pkgId);
+        const pctEl = document.getElementById('ppct-' + pkgId);
+        if (!wrap || !bar) return;
+        if (show === false) {
+            wrap.classList.remove('show', 'indeterminate');
+            bar.style.width = '0%';
+            return;
+        }
+        wrap.classList.add('show');
+        wrap.classList.toggle('indeterminate', !!indeterminate);
+        const pct = Math.max(0, Math.min(100, Number(percent) || 0));
+        if (!indeterminate) bar.style.width = pct + '%';
+        if (lab && label != null) lab.textContent = label;
+        if (pctEl) pctEl.textContent = indeterminate ? '' : (pct + '%');
+    }
+
+    function renderPackages(packages) {
+        const body = document.getElementById('pkgBody');
+        if (!packages || !packages.length) {
+            body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">暂无安装包</td></tr>';
+            return;
+        }
+        body.innerHTML = packages.map(pkg => {
+            const statusBadge = pkg.source === 'managed'
+                ? '<span class="pkg-badge">已托管</span>'
+                : '<span class="pkg-badge seed">仓库种子</span>';
+            const fileCell = pkg.available
+                ? `<div class="pkg-file-cell"><span class="pkg-mono">${pkg.filename}</span>${statusBadge}</div>`
+                : `<span class="pkg-empty">暂无文件，请上传</span>`;
+            const dlDisabled = pkg.available ? '' : 'disabled';
+            const installDisabled = pkg.available && pkg.installable ? '' : 'disabled';
+            const uploadBtn = pkg.uploadable
+                ? `<button class="btn btn-sm btn-text" data-action="upload" data-id="${pkg.id}">上传更新</button>
+                   <input class="pkg-file" type="file" accept=".apk" id="file-${pkg.id}">`
+                : '';
+            return `
+              <tr data-id="${pkg.id}">
+                <td><div class="pkg-name">${pkg.name}</div></td>
+                <td><span class="pkg-mono">${pkg.package_name || '-'}</span></td>
+                <td>
+                  ${fileCell}
+                  <div id="msg-${pkg.id}" class="pkg-msg"></div>
+                  <div class="pkg-progress" id="progress-${pkg.id}">
+                    <div class="pkg-progress-label">
+                      <span id="plabel-${pkg.id}">准备中…</span>
+                      <span id="ppct-${pkg.id}"></span>
+                    </div>
+                    <div class="progress"><div class="progress-bar" id="bar-${pkg.id}"></div></div>
+                  </div>
+                </td>
+                <td class="pkg-size">${pkg.available ? formatSize(pkg.size) : '-'}</td>
+                <td class="pkg-time">${pkg.available ? formatTime(pkg.modified) : '-'}</td>
+                <td>
+                  <div class="pkg-actions row-actions">
+                    ${uploadBtn}
+                    <button class="btn btn-sm btn-primary ${dlDisabled}" type="button"
+                      data-action="download" data-id="${pkg.id}"
+                      data-url="${pkg.available ? pkg.download_url : ''}"
+                      data-name="${pkg.available ? (pkg.filename || (pkg.id + '.apk')) : ''}"
+                      ${dlDisabled}>下载</button>
+                    <button class="btn btn-sm btn-text ${installDisabled}" data-action="install" data-id="${pkg.id}" ${installDisabled}>安装到虚拟机</button>
+                  </div>
+                </td>
+              </tr>`;
+        }).join('');
+    }
+
+    function loadPackages() {
+        setGlobalMsg('');
+        fetch(guiEvalPath('/api/download/packages'))
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || '加载失败');
+                renderPackages(data.packages || []);
+            })
+            .catch(err => {
+                document.getElementById('pkgBody').innerHTML =
+                    `<tr><td colspan="6" class="text-center text-danger py-4">${err.message || '加载失败'}</td></tr>`;
+            });
+    }
+
+    function uploadPackage(pkgId, file) {
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.apk')) {
+            setRowMsg(pkgId, '仅支持 .apk 文件', 'danger');
+            return;
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+        setRowMsg(pkgId, '', '');
+        setProgress(pkgId, { show: true, percent: 0, label: '上传到服务器…' });
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', guiEvalPath(`/api/download/packages/${pkgId}/upload`));
+        xhr.upload.onprogress = (ev) => {
+            if (!ev.lengthComputable) {
+                setProgress(pkgId, { show: true, indeterminate: true, label: '上传中…' });
+                return;
+            }
+            const pct = Math.round(ev.loaded * 100 / ev.total);
+            setProgress(pkgId, {
+                show: true,
+                percent: pct,
+                label: `上传到服务器 ${formatSize(ev.loaded)} / ${formatSize(ev.total)}`,
+            });
+        };
+        xhr.onload = () => {
+            let data = {};
+            try { data = JSON.parse(xhr.responseText || '{}'); } catch (_) {}
+            if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+                setProgress(pkgId, { show: true, percent: 100, label: '上传完成' });
+                setGlobalMsg(`${data.apk?.name || pkgId} 上传成功`, 'success');
+                setTimeout(loadPackages, 400);
+            } else {
+                setProgress(pkgId, { show: false });
+                setRowMsg(pkgId, data.message || ('上传失败 (' + xhr.status + ')'), 'danger');
+            }
+        };
+        xhr.onerror = () => {
+            setProgress(pkgId, { show: false });
+            setRowMsg(pkgId, '上传失败：网络错误', 'danger');
+        };
+        xhr.send(formData);
+    }
+
+    function downloadPackage(pkgId, url, filename) {
+        if (!url) return;
+        setRowMsg(pkgId, '', '');
+        setProgress(pkgId, { show: true, percent: 0, label: '开始下载…' });
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', guiEvalPath(url));
+        xhr.responseType = 'blob';
+        xhr.onprogress = (ev) => {
+            if (!ev.lengthComputable) {
+                setProgress(pkgId, {
+                    show: true,
+                    indeterminate: true,
+                    label: `下载中 ${formatSize(ev.loaded || 0)}`,
+                });
+                return;
+            }
+            const pct = Math.round(ev.loaded * 100 / ev.total);
+            setProgress(pkgId, {
+                show: true,
+                percent: pct,
+                label: `下载 ${formatSize(ev.loaded)} / ${formatSize(ev.total)}`,
+            });
+        };
+        xhr.onload = () => {
+            if (xhr.status < 200 || xhr.status >= 300) {
+                setProgress(pkgId, { show: false });
+                setRowMsg(pkgId, `下载失败 (${xhr.status})`, 'danger');
+                return;
+            }
+            const blob = xhr.response;
+            const name = parseDownloadFilename(xhr, filename || (pkgId + '.apk'));
+            const objUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objUrl;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(objUrl), 2000);
+            setProgress(pkgId, { show: true, percent: 100, label: '下载完成' });
+            setTimeout(() => setProgress(pkgId, { show: false }), 1200);
+        };
+        xhr.onerror = () => {
+            setProgress(pkgId, { show: false });
+            setRowMsg(pkgId, '下载失败：网络错误', 'danger');
+        };
+        xhr.send();
+    }
+
+    function pollInstallProgress(pkgId, stopFlag) {
+        const tick = () => {
+            if (stopFlag.done) return;
+            fetch(guiEvalPath('/api/download/packages/install-progress'))
+                .then(r => r.json())
+                .then(data => {
+                    if (stopFlag.done) return;
+                    if (data.pkg_id && data.pkg_id !== pkgId) return;
+                    if (!data.busy && !(data.percent > 0)) return;
+                    const phase = data.phase || '';
+                    const indeterminate = phase === 'install' || phase === 'uninstall';
+                    setProgress(pkgId, {
+                        show: true,
+                        percent: data.percent || 0,
+                        label: data.message || '安装中…',
+                        indeterminate,
+                    });
+                })
+                .catch(() => {})
+                .finally(() => {
+                    if (!stopFlag.done) stopFlag.timer = setTimeout(tick, 500);
+                });
+        };
+        tick();
+    }
+
+    function installPackage(pkgId) {
+        const stopFlag = { done: false, timer: null };
+        setRowMsg(pkgId, '', '');
+        setProgress(pkgId, { show: true, percent: 0, label: '准备安装…' });
+        pollInstallProgress(pkgId, stopFlag);
+
+        fetch(guiEvalPath(`/api/download/packages/${pkgId}/install-emu`), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: '{}',
+        })
+            .then(async r => {
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || !data.success) throw new Error(data.message || r.statusText || '安装失败');
+                return data;
+            })
+            .then(data => {
+                setProgress(pkgId, { show: true, percent: 100, label: '安装成功' });
+                setRowMsg(pkgId, data.message || '安装成功', 'success');
+                setGlobalMsg(`${pkgId} → 虚拟机：${data.message}`, 'success');
+                setTimeout(() => setProgress(pkgId, { show: false }), 1500);
+            })
+            .catch(err => {
+                setProgress(pkgId, { show: false });
+                setRowMsg(pkgId, err.message || '安装失败', 'danger');
+            })
+            .finally(() => {
+                stopFlag.done = true;
+                if (stopFlag.timer) clearTimeout(stopFlag.timer);
+            });
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', loadPackages);
+    document.getElementById('pkgBody').addEventListener('click', (ev) => {
+        const btn = ev.target.closest('[data-action]');
+        if (!btn || btn.disabled) return;
+        const pkgId = btn.dataset.id;
+        const action = btn.dataset.action;
+        if (action === 'upload') {
+            const input = document.getElementById('file-' + pkgId);
+            if (input) input.click();
+        } else if (action === 'download') {
+            downloadPackage(pkgId, btn.dataset.url, btn.dataset.name);
+        } else if (action === 'install') {
+            btn.disabled = true;
+            installPackage(pkgId);
+            // Re-enable after request settles via polling window; keep disabled ~2s min
+            setTimeout(() => { btn.disabled = false; }, 2500);
+        }
+    });
+    document.getElementById('pkgBody').addEventListener('change', (ev) => {
+        const input = ev.target;
+        if (!input.classList.contains('pkg-file') || !input.files?.length) return;
+        const pkgId = input.id.replace(/^file-/, '');
+        uploadPackage(pkgId, input.files[0]);
+        input.value = '';
+    });
+
+    function setSharedMsg(text, type) {
+        const el = document.getElementById('sharedFilesMsg');
+        el.textContent = text || '';
+        el.className = type ? `text-${type}` : '';
+    }
+
+    function setSharedProgress({ percent, label, show, indeterminate } = {}) {
+        const wrap = document.getElementById('sharedProgress');
+        const bar = document.getElementById('sharedProgressBar');
+        const lab = document.getElementById('sharedProgressLabel');
+        const pctEl = document.getElementById('sharedProgressPct');
+        if (!wrap || !bar) return;
+        if (show === false) {
+            wrap.classList.remove('show', 'indeterminate');
+            bar.style.width = '0%';
+            if (pctEl) pctEl.textContent = '';
+            return;
+        }
+        wrap.classList.add('show');
+        wrap.classList.toggle('indeterminate', !!indeterminate);
+        const pct = Math.max(0, Math.min(100, Number(percent) || 0));
+        if (!indeterminate) bar.style.width = pct + '%';
+        if (lab && label != null) lab.textContent = label;
+        if (pctEl) pctEl.textContent = indeterminate ? '' : (pct + '%');
+    }
+
+    function sharedEncodePath(name) {
+        return String(name || '').split('/').map(encodeURIComponent).join('/');
+    }
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function parseDownloadFilename(xhr, fallback) {
+        const cd = xhr.getResponseHeader('Content-Disposition') || '';
+        const utf = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+        if (utf) {
+            try { return decodeURIComponent(utf[1].trim()); } catch (_) {}
+        }
+        const plain = /filename="?([^";]+)"?/i.exec(cd);
+        if (plain) return plain[1].trim();
+        return fallback || 'download.bin';
+    }
+
+    function renderSharedFiles(files) {
+        const body = document.getElementById('sharedFilesBody');
+        if (!files || !files.length) {
+            body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">暂无文件，请上传</td></tr>';
+            return;
+        }
+        body.innerHTML = files.map(f => {
+            const name = f.name || '';
+            const enc = sharedEncodePath(name);
+            const isDir = f.type === 'dir';
+            const typeLabel = isDir ? '文件夹' : '文件';
+            const dlLabel = isDir ? '下载ZIP' : '下载';
+            return `<tr>
+              <td title="${escapeHtml(name)}"><span class="shared-name">${escapeHtml(name)}</span></td>
+              <td><span class="shared-type-badge ${isDir ? 'dir' : ''}">${typeLabel}</span></td>
+              <td class="shared-meta">${isDir ? (f.size ? formatSize(f.size) + '+' : '-') : formatSize(f.size)}</td>
+              <td class="shared-meta">${formatTime(f.modified)}</td>
+              <td>
+                <div class="shared-actions">
+                  <button type="button" class="btn btn-sm btn-primary" data-shared-dl="${enc}" data-shared-name="${encodeURIComponent(name)}" data-shared-dir="${isDir ? '1' : '0'}">${dlLabel}</button>
+                  <button type="button" class="btn btn-sm btn-text btn-text-danger" data-shared-del="${enc}">删除</button>
+                </div>
+              </td>
+            </tr>`;
+        }).join('');
+    }
+
+    function loadSharedFiles() {
+        setSharedMsg('');
+        fetch(guiEvalPath('/api/download/shared-files'))
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || '加载失败');
+                renderSharedFiles(data.files || []);
+            })
+            .catch(err => {
+                document.getElementById('sharedFilesBody').innerHTML =
+                    `<tr><td colspan="5" class="text-center text-danger py-3">${err.message || '加载失败'}</td></tr>`;
+            });
+    }
+
+    function uploadSharedFiles(fileList) {
+        const files = Array.from(fileList || []).filter(f => f && f.name);
+        if (!files.length) return;
+        const formData = new FormData();
+        let totalBytes = 0;
+        files.forEach(file => {
+            const rel = (file.webkitRelativePath || file.name || '').replace(/\\/g, '/');
+            if (!rel || rel.endsWith('/')) return;
+            formData.append('file', file, file.name);
+            formData.append('relative_path', rel);
+            totalBytes += file.size || 0;
+        });
+        setSharedMsg(`上传中（${files.length} 个文件）…`, 'muted');
+        setSharedProgress({ show: true, percent: 0, label: '准备上传…' });
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', guiEvalPath('/api/download/shared-files/upload'));
+        xhr.upload.onprogress = (ev) => {
+            if (!ev.lengthComputable) {
+                setSharedProgress({ show: true, indeterminate: true, label: '上传中…' });
+                return;
+            }
+            const pct = Math.round(ev.loaded * 100 / ev.total);
+            setSharedProgress({
+                show: true,
+                percent: pct,
+                label: `上传 ${formatSize(ev.loaded)} / ${formatSize(ev.total)}`,
+            });
+        };
+        xhr.onload = () => {
+            let data = {};
+            try { data = JSON.parse(xhr.responseText || '{}'); } catch (_) {}
+            if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+                setSharedProgress({ show: true, percent: 100, label: '上传完成' });
+                setSharedMsg(data.message || '上传成功', 'success');
+                setTimeout(() => setSharedProgress({ show: false }), 800);
+                loadSharedFiles();
+            } else {
+                setSharedProgress({ show: false });
+                setSharedMsg(data.message || ('上传失败 (' + xhr.status + ')'), 'danger');
+            }
+        };
+        xhr.onerror = () => {
+            setSharedProgress({ show: false });
+            setSharedMsg('上传失败：网络错误', 'danger');
+        };
+        xhr.send(formData);
+    }
+
+    function downloadSharedFile(nameEnc, displayName, isDir) {
+        const pretty = displayName || nameEnc.split('/').map(s => {
+            try { return decodeURIComponent(s); } catch (_) { return s; }
+        }).join('/');
+        const url = guiEvalPath(`/api/download/shared-files/${nameEnc}`);
+        const fallbackName = isDir ? `${pretty}.zip` : pretty.split('/').pop();
+
+        setSharedMsg(`下载中：${pretty}`, 'muted');
+        setSharedProgress({ show: true, percent: 0, label: isDir ? '打包下载中…' : '开始下载…' });
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', url);
+        xhr.responseType = 'blob';
+        xhr.onprogress = (ev) => {
+            if (!ev.lengthComputable) {
+                setSharedProgress({
+                    show: true,
+                    indeterminate: true,
+                    label: `下载中 ${formatSize(ev.loaded || 0)}`,
+                });
+                return;
+            }
+            const pct = Math.round(ev.loaded * 100 / ev.total);
+            setSharedProgress({
+                show: true,
+                percent: pct,
+                label: `下载 ${formatSize(ev.loaded)} / ${formatSize(ev.total)}`,
+            });
+        };
+        xhr.onload = () => {
+            if (xhr.status < 200 || xhr.status >= 300) {
+                setSharedProgress({ show: false });
+                setSharedMsg(`下载失败 (${xhr.status})`, 'danger');
+                return;
+            }
+            const blob = xhr.response;
+            const filename = parseDownloadFilename(xhr, fallbackName);
+            const objUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(objUrl), 2000);
+            setSharedProgress({ show: true, percent: 100, label: '下载完成' });
+            setSharedMsg(`已下载：${filename}`, 'success');
+            setTimeout(() => setSharedProgress({ show: false }), 1000);
+        };
+        xhr.onerror = () => {
+            setSharedProgress({ show: false });
+            setSharedMsg('下载失败：网络错误', 'danger');
+        };
+        xhr.send();
+    }
+
+    function deleteSharedFile(nameEnc) {
+        const pretty = nameEnc.split('/').map(s => {
+            try { return decodeURIComponent(s); } catch (_) { return s; }
+        }).join('/');
+        if (!confirm(`确认删除「${pretty}」？\n（文件夹将整目录删除）`)) return;
+        fetch(guiEvalPath(`/api/download/shared-files/${nameEnc}`), { method: 'DELETE' })
+            .then(async r => {
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || !data.success) throw new Error(data.message || '删除失败');
+                return data;
+            })
+            .then(() => {
+                setSharedMsg(`已删除：${pretty}`, 'success');
+                loadSharedFiles();
+            })
+            .catch(err => setSharedMsg(err.message || '删除失败', 'danger'));
+    }
+
+    document.getElementById('sharedFilesBtn').addEventListener('click', () => {
+        const modalEl = document.getElementById('sharedFilesModal');
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        setSharedProgress({ show: false });
+        loadSharedFiles();
+        modal.show();
+    });
+    document.getElementById('sharedRefreshBtn').addEventListener('click', loadSharedFiles);
+    document.getElementById('sharedPickFiles').addEventListener('click', () => {
+        document.getElementById('sharedUploadInput').click();
+    });
+    document.getElementById('sharedPickFolder').addEventListener('click', () => {
+        document.getElementById('sharedUploadFolderInput').click();
+    });
+    document.getElementById('sharedUploadInput').addEventListener('change', (ev) => {
+        const input = ev.target;
+        if (!input.files?.length) return;
+        uploadSharedFiles(input.files);
+        input.value = '';
+    });
+    document.getElementById('sharedUploadFolderInput').addEventListener('change', (ev) => {
+        const input = ev.target;
+        if (!input.files?.length) return;
+        uploadSharedFiles(input.files);
+        input.value = '';
+    });
+    document.getElementById('sharedFilesBody').addEventListener('click', (ev) => {
+        const delBtn = ev.target.closest('[data-shared-del]');
+        if (delBtn) {
+            deleteSharedFile(delBtn.getAttribute('data-shared-del'));
+            return;
+        }
+        const dlBtn = ev.target.closest('[data-shared-dl]');
+        if (dlBtn) {
+            downloadSharedFile(
+                dlBtn.getAttribute('data-shared-dl'),
+                (() => {
+                    try { return decodeURIComponent(dlBtn.getAttribute('data-shared-name') || ''); }
+                    catch (_) { return dlBtn.getAttribute('data-shared-name') || ''; }
+                })(),
+                dlBtn.getAttribute('data-shared-dir') === '1',
+            );
+        }
+    });
+
+    function setNotepadStatus(text, type) {
+        const el = document.getElementById('notepadStatus');
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'mt-2' + (type ? ` text-${type}` : ' text-muted');
+    }
+
+    function openNotepad() {
+        const editor = document.getElementById('notepadEditor');
+        const modalEl = document.getElementById('notepadModal');
+        setNotepadStatus('加载中…');
+        editor.value = '';
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+        fetch(guiEvalPath('/api/download/notepad'))
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || '加载失败');
+                editor.value = data.content || '';
+                setNotepadStatus('已加载，可编辑后保存');
+                editor.focus();
+            })
+            .catch(err => setNotepadStatus(err.message || '加载失败', 'danger'));
+    }
+
+    function saveNotepad() {
+        const editor = document.getElementById('notepadEditor');
+        const btn = document.getElementById('notepadSaveBtn');
+        btn.disabled = true;
+        setNotepadStatus('保存中…');
+        fetch(guiEvalPath('/api/download/notepad'), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ content: editor.value }),
+        })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) throw new Error(data.message || '保存失败');
+                setNotepadStatus('已保存', 'success');
+                setGlobalMsg('记事本已保存', 'success');
+            })
+            .catch(err => setNotepadStatus(err.message || '保存失败', 'danger'))
+            .finally(() => { btn.disabled = false; });
+    }
+
+    function clearNotepad() {
+        const editor = document.getElementById('notepadEditor');
+        if (!confirm('确定清空记事本内容？清空后需点「保存」才会写入服务器。')) return;
+        editor.value = '';
+        setNotepadStatus('已清空（未保存）', 'warning');
+        editor.focus();
+    }
+
+    function copyNotepad() {
+        const editor = document.getElementById('notepadEditor');
+        const text = editor.value || '';
+        const done = () => setNotepadStatus(text ? '已复制' : '内容为空，已复制', 'success');
+        const fallback = () => {
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            editor.focus();
+            editor.select();
+            let ok = false;
+            try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+            if (typeof start === 'number' && typeof end === 'number') {
+                editor.setSelectionRange(start, end);
+            }
+            return ok;
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(done).catch(() => {
+                if (fallback()) done();
+                else setNotepadStatus('复制失败', 'danger');
+            });
+            return;
+        }
+        if (fallback()) done();
+        else setNotepadStatus('复制失败', 'danger');
+    }
+
+    document.getElementById('notepadBtn').addEventListener('click', openNotepad);
+    document.getElementById('notepadClearBtn').addEventListener('click', clearNotepad);
+    document.getElementById('notepadCopyBtn').addEventListener('click', copyNotepad);
+    document.getElementById('notepadSaveBtn').addEventListener('click', saveNotepad);
+
+    document.addEventListener('DOMContentLoaded', loadPackages);
+</script>
+{% endblock %}

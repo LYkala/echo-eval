@@ -1,0 +1,119 @@
+{
+  "version": "1.0.0",
+  "testId": "TC-CHAT-001",
+  "testName": "聊天发送消息测试",
+  "description": "测试聊天功能发送消息",
+  "exitBackCount": 6,
+  "targetApp": {
+    "packageName": "com.example.appforfunction"
+  },
+  "steps": [
+    {
+      "stepId": "launch",
+      "description": "启动目标应用",
+      "action": "launchApp"
+    },
+    {
+      "stepId": "wait-home",
+      "description": "等待首页加载",
+      "action": "wait",
+      "params": {
+        "duration": 1000
+      }
+    },
+    {
+      "stepId": "click-chat-entry",
+      "description": "点击进入聊天按钮",
+      "action": "click",
+      "target": {
+        "strategy": "text",
+        "value": "进入聊天"
+      }
+    },
+    {
+      "stepId": "wait-chat-page",
+      "description": "等待聊天页面加载",
+      "action": "wait",
+      "params": {
+        "duration": 500
+      }
+    },
+    {
+      "stepId": "click-input",
+      "description": "点击输入框",
+      "action": "click",
+      "target": {
+        "strategy": "id",
+        "value": "com.example.appforfunction:id/etMessage"
+      }
+    },
+    {
+      "stepId": "input-message",
+      "description": "输入消息内容",
+      "action": "input",
+      "target": {
+        "strategy": "id",
+        "value": "com.example.appforfunction:id/etMessage"
+      },
+      "params": {
+        "text": "这是一条测试消息",
+        "clearFirst": true
+      }
+    },
+    {
+      "stepId": "click-send",
+      "description": "点击发送按钮",
+      "action": "click",
+      "target": {
+        "strategy": "id",
+        "value": "com.example.appforfunction:id/btnSend"
+      }
+    },
+    {
+      "stepId": "wait-response",
+      "description": "等待系统回复",
+      "action": "wait",
+      "params": {
+        "duration": 1500
+      }
+    },
+    {
+      "stepId": "screenshot-result",
+      "description": "截图保存结果",
+      "action": "screenshot",
+      "params": {
+        "saveName": "chat_result"
+      }
+    },
+    {
+      "stepId": "exit-back-1",
+      "description": "返回第1次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-2",
+      "description": "返回第2次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-3",
+      "description": "返回第3次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-4",
+      "description": "返回第4次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-5",
+      "description": "返回第5次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-6",
+      "description": "返回第6次",
+      "action": "press_back"
+    }
+  ]
+}

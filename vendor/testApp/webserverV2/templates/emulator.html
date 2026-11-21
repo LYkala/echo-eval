@@ -1,0 +1,1404 @@
+{% extends "base.html" %}
+{% block title %}ARM 安卓虚拟机 - TestApp{% endblock %}
+{% block body_class %}no-sidebar{% endblock %}
+{% block extra_css %}
+<style>
+  .emu-wrap { max-width: 1480px; margin: 0 auto; }
+  .emu-header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .emu-header h3 { margin: 0; }
+  .emu-meta { color: #909399; font-size: 0.9rem; }
+  .emu-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 0.75rem; background: #ecf5ff; color: #337ecc;
+  }
+  .emu-badge.bad { background: #fef0f0; color: #f56c6c; }
+  .emu-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 248px;
+    gap: 12px;
+    align-items: start;
+  }
+  .emu-screen-card {
+    background: #303133; border-radius: 12px; padding: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    min-width: 0;
+  }
+  .emu-zoom-bar {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    margin-bottom: 8px; padding: 6px 8px; border-radius: 8px;
+    background: #303133; color: #e4e7ed; font-size: 0.78rem;
+  }
+  .emu-zoom-bar .zoom-title { white-space: nowrap; color: #a0cfff; font-weight: 600; }
+  .emu-zoom-bar input[type="range"] { flex: 1; min-width: 100px; accent-color: #79bbff; }
+  .emu-zoom-bar button.zbtn {
+    appearance: none; border: 1px solid #909399; background: #606266; color: #f5f7fa;
+    border-radius: 6px; padding: 2px 7px; cursor: pointer; font-size: 0.72rem;
+  }
+  .emu-zoom-bar button.zbtn.active { background: #409eff; border-color: #a0cfff; }
+  .emu-qos-live {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-left: auto; flex-wrap: wrap;
+  }
+  .emu-qos-live .qos-chip {
+    display: inline-flex; align-items: baseline; gap: 4px;
+    padding: 2px 8px; border-radius: 999px;
+    background: #1f1f1f; border: 1px solid #4c4d4f;
+    color: #c0c4cc; font-size: 0.72rem; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .emu-qos-live .qos-chip b { font-weight: 700; color: #ebeef5; }
+  .emu-qos-live .qos-chip.good b { color: #95d475; }
+  .emu-qos-live .qos-chip.warn b { color: #eebe77; }
+  .emu-qos-live .qos-chip.bad b { color: #f89898; }
+  .emu-qos-live .qos-chip .qos-k { color: #909399; }
+  .emu-screen-wrap {
+    display: flex; justify-content: center; align-items: flex-start;
+    background: #000; border-radius: 10px; overflow: auto;
+    min-height: 360px; max-height: 85vh;
+  }
+  #screen {
+    width: auto; height: auto; max-width: none;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    cursor: crosshair; user-select: none; display: block;
+  }
+  .emu-controls {
+    display: flex; flex-direction: column; gap: 8px;
+    background: #303133; border-radius: 12px; padding: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    position: sticky; top: 10px;
+    max-height: calc(85vh + 48px);
+    overflow: auto;
+  }
+  .emu-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+  }
+  .emu-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .emu-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  button.ctrl.orient-active {
+    background: #67c23a; border-color: #95d475; color: #f0f9eb;
+  }
+  button.ctrl.orient-active:hover { background: #67c23a; }
+  .emu-dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 28px);
+    gap: 4px;
+    width: 100%;
+    max-width: 140px;
+    margin: 0 auto;
+  }
+  .emu-dpad .ctrl { min-width: 0; padding: 0; }
+  .emu-dpad .u { grid-column: 2; grid-row: 1; }
+  .emu-dpad .l { grid-column: 1; grid-row: 2; }
+  .emu-dpad .ok { grid-column: 2; grid-row: 2; background: #409eff; border-color: #a0cfff; }
+  .emu-dpad .r { grid-column: 3; grid-row: 2; }
+  .emu-dpad .d { grid-column: 2; grid-row: 3; }
+  button.ctrl {
+    appearance: none; border: 1px solid #606266; background: #303133; color: #ebeef5;
+    border-radius: 7px; padding: 6px 4px; font-size: 0.72rem; cursor: pointer;
+    min-width: 0; line-height: 1.2; white-space: nowrap;
+    position: relative;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .1s, border-color .1s, transform .08s, box-shadow .1s, opacity .1s;
+  }
+  button.ctrl:hover { background: #606266; border-color: #909399; }
+  button.ctrl.primary { background: #409eff; border-color: #409eff; color: #fff; }
+  button.ctrl.primary:hover { background: #337ecc; }
+  button.ctrl.danger { background: #c45656; border-color: #f56c6c; color: #fde2e2; }
+  button.ctrl.danger:hover { background: #c45656; }
+  /* Instant press feedback before remote ADB returns */
+  button.ctrl:active,
+  button.ctrl.is-pressed {
+    transform: scale(0.94);
+    filter: brightness(1.18);
+  }
+  button.ctrl.is-pending {
+    background: #b88230 !important;
+    border-color: #e6a23c !important;
+    color: #fdf6ec !important;
+    opacity: 1;
+    cursor: wait;
+    pointer-events: none;
+    transform: none;
+  }
+  button.ctrl.is-pending::after {
+    content: '';
+    position: absolute;
+    left: 8%; right: 8%; bottom: 2px; height: 3px;
+    border-radius: 2px;
+    background: #f3d19e;
+    animation: ctrl-pending .7s ease-in-out infinite alternate;
+  }
+  @keyframes ctrl-pending {
+    from { opacity: .35; transform: scaleX(0.4); }
+    to { opacity: 1; transform: scaleX(1); }
+  }
+  button.ctrl.is-ok {
+    background: #529b2e !important;
+    border-color: #95d475 !important;
+    color: #f0f9eb !important;
+    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.55);
+  }
+  .emu-text-row { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 2px; align-items: stretch; }
+  .emu-text-row .emu-input-wrap {
+    position: relative; display: flex; align-items: center; width: 100%;
+  }
+  .emu-text-row .emu-input-wrap input#textInput {
+    width: 100%; border-radius: 7px; border: 1px solid #606266;
+    background: #303133; color: #fff; padding: 7px 30px 7px 8px; font-size: 0.78rem;
+    box-sizing: border-box;
+  }
+  .emu-text-row .emu-clear {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    width: 20px; height: 20px; border: none; border-radius: 50%;
+    background: #909399; color: #fff; cursor: pointer; line-height: 20px;
+    font-size: 14px; padding: 0; display: none;
+  }
+  .emu-text-row .emu-clear.show { display: inline-block; }
+  .emu-text-row .emu-clear:hover { background: #a8abb2; }
+  button.ctrl:disabled { opacity: 0.55; cursor: not-allowed; }
+  .emu-sys-actions {
+    display: grid; grid-template-columns: 1fr; gap: 6px; width: 100%;
+    margin-top: auto; padding-top: 28px;
+  }
+  .emu-text-row label.emu-check {
+    display: flex; align-items: center; justify-content: flex-start;
+    gap: 6px; margin: 0; padding: 0; width: 100%;
+    color: #e4e7ed; font-size: 0.75rem; font-weight: 400;
+    text-align: left; white-space: nowrap;
+    box-sizing: border-box;
+  }
+  .emu-text-row label.emu-check input[type="checkbox"] {
+    width: 14px; height: 14px; min-width: 14px; max-width: 14px;
+    margin: 0; flex: none; accent-color: #409eff;
+  }
+  .emu-text-row label.emu-check .emu-check-text {
+    flex: 0 1 auto; line-height: 1.2;
+  }
+  .emu-divider {
+    height: 1px; background: #303133; margin: 1px 0;
+  }
+  .emu-menu-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%;
+  }
+  .emu-menu-dd {
+    position: relative; min-width: 0;
+  }
+  .emu-menu-dd > button.ctrl {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    gap: 4px; padding: 7px 8px;
+  }
+  .emu-menu-dd > button.ctrl .arrow {
+    color: #909399; font-size: 0.65rem; flex: none;
+  }
+  .emu-menu-dd.open > button.ctrl {
+    border-color: #409eff; background: #606266;
+  }
+  .emu-menu-list {
+    display: none; position: absolute; left: 0; right: 0; bottom: calc(100% + 4px);
+    z-index: 45; background: #303133; border: 1px solid #303133;
+    border-radius: 8px; padding: 4px;
+    box-shadow: 0 -8px 20px rgba(0,0,0,.35);
+  }
+  .emu-menu-dd.open .emu-menu-list { display: block; }
+  .emu-menu-list button {
+    appearance: none; width: 100%; text-align: left;
+    border: none; background: transparent; color: #ebeef5;
+    border-radius: 6px; padding: 8px 10px; font-size: 0.72rem;
+    cursor: pointer; line-height: 1.2;
+  }
+  .emu-menu-list button:hover { background: #303133; color: #a0cfff; }
+  .emu-menu-list button.danger { color: #fde2e2; }
+  .emu-menu-list button.danger:hover { background: #c45656; color: #fff; }
+  .emu-modal-mask {
+    display: none; position: fixed; inset: 0; z-index: 80;
+    background: rgba(2, 6, 23, 0.62);
+    align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .emu-modal-mask.open { display: flex; }
+  .emu-modal {
+    width: min(440px, 100%); max-height: min(82vh, 640px);
+    background: #303133; border: 1px solid #303133; border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(0,0,0,.45);
+    display: flex; flex-direction: column; overflow: hidden;
+    color: #ebeef5;
+  }
+  .emu-modal.wide { width: min(520px, 100%); }
+  .emu-modal-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 14px; border-bottom: 1px solid #303133;
+    flex: none;
+  }
+  .emu-modal-head .ttl {
+    flex: 1; color: #a0cfff; font-size: 0.9rem; font-weight: 600;
+  }
+  .emu-modal-head .emu-modal-close {
+    appearance: none; border: 1px solid #606266; background: #303133;
+    color: #ebeef5; border-radius: 6px; width: 28px; height: 28px;
+    cursor: pointer; font-size: 1rem; line-height: 1; padding: 0;
+  }
+  .emu-modal-head .emu-modal-close:hover { background: #606266; }
+  .emu-modal-body {
+    padding: 12px 14px; overflow: auto; flex: 1; min-height: 0;
+  }
+  .emu-modal-foot {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 10px 14px; border-top: 1px solid #303133; flex: none;
+  }
+  .emu-modal-foot .hint {
+    flex: 1; min-width: 120px; color: #909399; font-size: 0.7rem; line-height: 1.3;
+  }
+  .emu-modal-foot button.ctrl { padding: 6px 12px; font-size: 0.75rem; }
+  .emu-check-list {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .emu-check-list .emu-check-opt {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 7px 6px; border-radius: 6px; cursor: pointer;
+    color: #ebeef5; font-size: 0.78rem; line-height: 1.25;
+  }
+  .emu-check-list .emu-check-opt:hover { background: #303133; }
+  .emu-check-list .emu-check-opt input {
+    margin: 2px 0 0; flex: none; accent-color: #409eff;
+  }
+  .emu-check-list .emu-check-opt .txt { min-width: 0; flex: 1; }
+  .emu-check-list .emu-check-opt .lab {
+    display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .emu-check-list .emu-check-opt .pkg {
+    display: block; color: #909399; font-size: 0.65rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .emu-check-list .emu-check-opt.all {
+    border-bottom: 1px solid #303133; margin-bottom: 4px; padding-bottom: 10px;
+    color: #a0cfff; font-weight: 600;
+  }
+  .emu-check-list .emu-empty {
+    color: #909399; font-size: 0.78rem; padding: 16px 6px; text-align: center;
+  }
+  .emu-info-section {
+    margin-bottom: 14px;
+  }
+  .emu-info-section:last-child { margin-bottom: 0; }
+  .emu-info-section .sec-ttl {
+    color: #a0cfff; font-size: 0.78rem; font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .emu-meter {
+    margin-bottom: 10px;
+  }
+  .emu-meter .meter-label {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-size: 0.72rem; color: #e4e7ed; margin-bottom: 4px;
+  }
+  .emu-meter .meter-label .val { color: #a8abb2; white-space: nowrap; }
+  .emu-meter .bar {
+    height: 8px; border-radius: 999px; background: #303133; overflow: hidden;
+    border: 1px solid #303133;
+  }
+  .emu-meter .bar > i {
+    display: block; height: 100%; width: 0%;
+    background: #409eff; border-radius: 999px;
+    transition: width .25s ease;
+  }
+  .emu-meter.warn .bar > i { background: #e6a23c; }
+  .emu-meter.danger .bar > i { background: #f56c6c; }
+  .emu-info-kv {
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+    font-size: 0.74rem;
+  }
+  .emu-info-kv .k { color: #909399; }
+  .emu-info-kv .v { color: #ebeef5; word-break: break-all; }
+  .emu-toast {
+    position: fixed; right: 16px; bottom: 16px; background: #303133; color: #fff;
+    padding: 10px 14px; border-radius: 10px; opacity: 0; transition: opacity .2s; z-index: 90;
+  }
+  .emu-toast.show { opacity: 1; }
+  body.emu-popup-mode nav.navbar,
+  body.emu-popup-mode .sidebar,
+  body.emu-popup-mode .topbar { display: none !important; }
+  body.emu-popup-mode .main-content { margin-left: 0; }
+  body.emu-popup-mode .page-content { padding: 10px 12px; max-width: none; }
+  body.emu-popup-mode .emu-back-link { display: none !important; }
+  @media (max-width: 960px) {
+    .emu-layout { grid-template-columns: 1fr; }
+    .emu-controls { position: static; max-height: none; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<script>
+  if (new URLSearchParams(location.search).get('popup') === '1') {
+    document.body.classList.add('emu-popup-mode');
+    try { document.title = '虚拟机画面'; } catch (e) {}
+  }
+</script>
+<div class="emu-wrap">
+  <div class="emu-header">
+    <h3>ARM 安卓虚拟机
+      <span id="badge" class="emu-badge {% if not ready %}bad{% endif %}">
+        {% if ready %}在线{% else %}离线{% endif %}
+      </span>
+    </h3>
+    <div class="emu-meta">
+      {% if active_avd %}目标 AVD <code>{{ active_avd }}</code> · {% endif %}
+      ADB {{ adb_port|default(5555) }}
+      · 分辨率 <span id="res">{{ width }}x{{ height }}</span>
+      · 显示 <span id="dispSize">-</span>
+      <span id="busyHint" class="text-warning" style="display:none"></span>
+      {% if error %} · <span class="text-danger">{{ error }}</span>{% endif %}
+      · <a class="emu-back-link" href="{{ gui_base_path }}/emulator-manage" style="color:#a0cfff">← 返回模拟器管理</a>
+    </div>
+  </div>
+
+  <div class="emu-layout">
+    <div class="emu-screen-card">
+      <div class="emu-zoom-bar">
+        <span class="zoom-title">可视化大小</span>
+        <button type="button" class="zbtn" data-zoom="0.5">0.5×</button>
+        <button type="button" class="zbtn" data-zoom="0.55">0.55×</button>
+        <button type="button" class="zbtn" data-zoom="0.75">0.75×</button>
+        <button type="button" class="zbtn" data-zoom="1">1×</button>
+        <input id="zoomRange" type="range" min="0.4" max="1" step="0.05" value="0.55" title="拖动调节显示大小（不影响设备分辨率）" />
+        <strong id="zoomLabel">0.55×</strong>
+        <div class="emu-qos-live" id="emuQosLive" title="实时网络延迟与流畅度（0卡～100顺）">
+          <span class="qos-chip" id="qosLatChip"><span class="qos-k">延迟</span><b id="qosLat">—</b></span>
+          <span class="qos-chip" id="qosSmoothChip"><span class="qos-k">流畅度</span><b id="qosSmooth">—</b></span>
+        </div>
+      </div>
+      <div class="emu-screen-wrap" id="screenWrap">
+        <img id="screen" src="{{ gui_base_path }}/api/emulator/stream" alt="emulator" draggable="false"
+             data-native-w="{{ width }}" data-native-h="{{ height }}" />
+      </div>
+    </div>
+
+    <div class="emu-controls">
+      <div class="emu-grid">
+        <button class="ctrl" data-key="BACK">返回</button>
+        <button class="ctrl primary" data-key="HOME">主页</button>
+        <button class="ctrl" data-key="APP_SWITCH">多任务</button>
+        <button class="ctrl" data-key="MENU">菜单</button>
+        <button class="ctrl" data-key="NOTIFICATION">通知</button>
+        <button class="ctrl" data-key="WAKE">唤醒</button>
+      </div>
+      <div class="emu-grid cols-2" id="orientRow">
+        <button type="button" class="ctrl" id="orientPortrait" data-orient="portrait">竖屏</button>
+        <button type="button" class="ctrl" id="orientLandscape" data-orient="landscape">横屏</button>
+      </div>
+      <div class="emu-grid cols-4">
+        <button class="ctrl" data-swipe="left">左滑</button>
+        <button class="ctrl" data-swipe="right">右滑</button>
+        <button class="ctrl" data-swipe="up">上滑</button>
+        <button class="ctrl" data-swipe="down">下滑</button>
+      </div>
+      <div class="emu-grid cols-4">
+        <button class="ctrl" data-key="VOLUME_UP">音+</button>
+        <button class="ctrl" data-key="VOLUME_DOWN">音-</button>
+        <button class="ctrl" data-key="MUTE">静音</button>
+        <button class="ctrl danger" data-key="POWER">电源</button>
+      </div>
+      <div class="emu-divider"></div>
+      <div class="emu-dpad">
+        <button class="ctrl u" data-key="DPAD_UP">↑</button>
+        <button class="ctrl l" data-key="DPAD_LEFT">←</button>
+        <button class="ctrl ok" data-key="ENTER">OK</button>
+        <button class="ctrl r" data-key="DPAD_RIGHT">→</button>
+        <button class="ctrl d" data-key="DPAD_DOWN">↓</button>
+      </div>
+      <div class="emu-divider"></div>
+      <div class="emu-text-row">
+        <div class="emu-input-wrap">
+          <input id="textInput" placeholder="先点目标输入框，再注入" autocomplete="off" />
+          <button type="button" class="emu-clear" id="clearText" title="清除" aria-label="清除">×</button>
+        </div>
+        <label class="emu-check" for="pressEnter">
+          <input type="checkbox" id="pressEnter" checked />
+          <span class="emu-check-text">注入后回车发送</span>
+        </label>
+        <div class="emu-grid cols-4">
+          <button class="ctrl" data-key="DEL">删除</button>
+          <button class="ctrl" data-key="CLEAR_TEXT">清空</button>
+          <button class="ctrl" data-key="SOFT_KB">键盘</button>
+          <button class="ctrl primary" id="sendText">注入</button>
+        </div>
+      </div>
+      <div class="emu-sys-actions">
+        <div class="emu-divider"></div>
+        <div class="emu-menu-row">
+          <div class="emu-menu-dd" id="advMenuDd">
+            <button type="button" class="ctrl" id="advMenuBtn" aria-haspopup="menu" aria-expanded="false">
+              <span>高级配置</span><span class="arrow">▴</span>
+            </button>
+            <div class="emu-menu-list" role="menu">
+              <button type="button" data-open-modal="recentsModal">多任务应用</button>
+              <button type="button" data-open-modal="permsModal">权限配置</button>
+            </div>
+          </div>
+          <div class="emu-menu-dd" id="moreMenuDd">
+            <button type="button" class="ctrl" id="moreMenuBtn" aria-haspopup="menu" aria-expanded="false">
+              <span>更多</span><span class="arrow">▴</span>
+            </button>
+            <div class="emu-menu-list" role="menu">
+              <button type="button" data-open-modal="vmInfoModal">虚拟机信息</button>
+              <button type="button" id="reconnectBtn">重连</button>
+              <button type="button" id="fixMicBtn" title="诊断并修复 VirtualMic / hostmicon（不重启虚拟机）">麦克风修复</button>
+              <button type="button" class="danger" id="restartBtn">重启虚拟机</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 多任务应用 -->
+<div class="emu-modal-mask" id="recentsModal" role="dialog" aria-modal="true" aria-labelledby="recentsModalTitle">
+  <div class="emu-modal">
+    <div class="emu-modal-head">
+      <span class="ttl" id="recentsModalTitle">多任务应用</span>
+      <button type="button" class="emu-modal-close" data-close-modal title="关闭">×</button>
+    </div>
+    <div class="emu-modal-body">
+      <div class="emu-check-list" id="recentsList"></div>
+    </div>
+    <div class="emu-modal-foot">
+      <span class="hint" id="recentsHint">勾选应用后点清除</span>
+      <button type="button" class="ctrl" id="refreshRecents">刷新</button>
+      <button type="button" class="ctrl danger" id="clearCheckedRecents">清除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 权限配置 -->
+<div class="emu-modal-mask" id="permsModal" role="dialog" aria-modal="true" aria-labelledby="permsModalTitle">
+  <div class="emu-modal">
+    <div class="emu-modal-head">
+      <span class="ttl" id="permsModalTitle">权限配置</span>
+      <button type="button" class="emu-modal-close" data-close-modal title="关闭">×</button>
+    </div>
+    <div class="emu-modal-body">
+      <div class="emu-check-list" id="permsList"></div>
+    </div>
+    <div class="emu-modal-foot">
+      <span class="hint" id="permsHint">仅第三方已装应用 · 勾选后点配置 / 位置权限</span>
+      <button type="button" class="ctrl" id="refreshPerms">刷新</button>
+      <button type="button" class="ctrl" id="grantLocationBtn">位置权限</button>
+      <button type="button" class="ctrl primary" id="grantPermsBtn">配置</button>
+    </div>
+  </div>
+</div>
+
+<!-- 虚拟机信息 -->
+<div class="emu-modal-mask" id="vmInfoModal" role="dialog" aria-modal="true" aria-labelledby="vmInfoModalTitle">
+  <div class="emu-modal wide">
+    <div class="emu-modal-head">
+      <span class="ttl" id="vmInfoModalTitle">虚拟机信息</span>
+      <button type="button" class="emu-modal-close" data-close-modal title="关闭">×</button>
+    </div>
+    <div class="emu-modal-body" id="vmInfoBody">
+      <div class="emu-check-list"><div class="emu-empty">加载中…</div></div>
+    </div>
+    <div class="emu-modal-foot">
+      <span class="hint" id="vmInfoHint"></span>
+      <button type="button" class="ctrl" id="refreshVmInfo">刷新</button>
+    </div>
+  </div>
+</div>
+
+<!-- 麦克风诊断 -->
+<div class="emu-modal-mask" id="micFixModal" role="dialog" aria-modal="true" aria-labelledby="micFixModalTitle">
+  <div class="emu-modal wide">
+    <div class="emu-modal-head">
+      <span class="ttl" id="micFixModalTitle">麦克风诊断 / 修复</span>
+      <button type="button" class="emu-modal-close" data-close-modal title="关闭">×</button>
+    </div>
+    <div class="emu-modal-body" id="micFixBody">
+      <div class="emu-empty">尚未执行</div>
+    </div>
+    <div class="emu-modal-foot">
+      <span class="hint" id="micFixHint"></span>
+      <button type="button" class="ctrl danger" id="micFixRestartBtn" style="display:none">重启虚拟机</button>
+      <button type="button" class="ctrl" data-close-modal>关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="emu-toast"></div>
+<script>
+  const toast = (msg) => {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1400);
+  };
+  async function post(url, body) {
+    const r = await fetch(guiEvalPath(url), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body || {})
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.ok === false) throw new Error(j.error || r.statusText);
+    return j;
+  }
+  /** Immediate UI feedback + single-flight lock to avoid multi-click during ADB latency. */
+  async function runCtrlAction(btn, action, { sentToast } = {}) {
+    if (!btn || btn.disabled || btn.classList.contains('is-pending') || btn.dataset.busy === '1') {
+      return null;
+    }
+    const originalLabel = btn.textContent;
+    btn.dataset.busy = '1';
+    btn.disabled = true;
+    btn.classList.remove('is-ok');
+    btn.classList.add('is-pressed', 'is-pending');
+    btn.textContent = '发送中…';
+    if (sentToast) toast(sentToast);
+    try {
+      const result = await action();
+      btn.classList.remove('is-pressed', 'is-pending');
+      btn.classList.add('is-ok');
+      btn.textContent = '✓ 已发送';
+      await new Promise((r) => setTimeout(r, 800));
+      return result;
+    } finally {
+      btn.classList.remove('is-pressed', 'is-pending', 'is-ok');
+      btn.textContent = originalLabel;
+      btn.disabled = false;
+      btn.dataset.busy = '0';
+    }
+  }
+  function bindPressFlash(btn) {
+    const down = () => btn.classList.add('is-pressed');
+    const up = () => btn.classList.remove('is-pressed');
+    btn.addEventListener('pointerdown', down);
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointerleave', up);
+    btn.addEventListener('pointercancel', up);
+  }
+  function escapeHtml(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ---- dropdown menus ----
+  function closeAllMenus() {
+    document.querySelectorAll('.emu-menu-dd.open').forEach((dd) => {
+      dd.classList.remove('open');
+      const btn = dd.querySelector('button.ctrl');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    });
+  }
+  function toggleMenu(dd) {
+    const willOpen = !dd.classList.contains('open');
+    closeAllMenus();
+    if (willOpen) {
+      dd.classList.add('open');
+      const btn = dd.querySelector('button.ctrl');
+      if (btn) btn.setAttribute('aria-expanded', 'true');
+    }
+  }
+  document.getElementById('advMenuBtn')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    toggleMenu(document.getElementById('advMenuDd'));
+  });
+  document.getElementById('moreMenuBtn')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    toggleMenu(document.getElementById('moreMenuDd'));
+  });
+  document.addEventListener('click', (ev) => {
+    if (ev.target.closest('.emu-menu-dd')) return;
+    closeAllMenus();
+  });
+
+  // ---- modals ----
+  function openModal(id) {
+    closeAllMenus();
+    const mask = document.getElementById(id);
+    if (!mask) return;
+    mask.classList.add('open');
+    if (id === 'recentsModal') loadRecents();
+    else if (id === 'permsModal') loadPerms();
+    else if (id === 'vmInfoModal') loadVmInfo();
+  }
+  function closeModal(mask) {
+    if (!mask) return;
+    mask.classList.remove('open');
+  }
+  function closeAllModals() {
+    document.querySelectorAll('.emu-modal-mask.open').forEach(closeModal);
+  }
+  document.querySelectorAll('[data-open-modal]').forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      openModal(btn.getAttribute('data-open-modal'));
+    });
+  });
+  document.querySelectorAll('[data-close-modal]').forEach((btn) => {
+    btn.addEventListener('click', () => closeModal(btn.closest('.emu-modal-mask')));
+  });
+  document.querySelectorAll('.emu-modal-mask').forEach((mask) => {
+    mask.addEventListener('click', (ev) => {
+      if (ev.target === mask) closeModal(mask);
+    });
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') closeAllModals();
+  });
+
+  document.querySelectorAll('button[data-key]').forEach(btn => {
+    bindPressFlash(btn);
+    btn.addEventListener('click', async () => {
+      const label = btn.textContent.trim();
+      try {
+        const j = await runCtrlAction(btn, () => post('/api/emulator/key', {code: btn.dataset.key}), {
+          sentToast: '已发送 · ' + label,
+        });
+        if (!j) return;
+        if (btn.dataset.key === 'SOFT_KB') {
+          toast(j.soft_keyboard === 'hidden' ? '键盘已收起' : '键盘已弹出');
+        }
+      } catch (e) { toast('失败: ' + e.message); }
+    });
+  });
+  const img = document.getElementById('screen');
+  const zoomRange = document.getElementById('zoomRange');
+  const zoomLabel = document.getElementById('zoomLabel');
+  const dispSize = document.getElementById('dispSize');
+  const ZOOM_KEY = 'emu_display_zoom';
+  let nativeW = parseInt(img.dataset.nativeW || '720', 10) || 720;
+  let nativeH = parseInt(img.dataset.nativeH || '1280', 10) || 1280;
+  let lastTapNx = null;
+  let lastTapNy = null;
+
+  document.querySelectorAll('button[data-swipe]').forEach(btn => {
+    bindPressFlash(btn);
+    btn.addEventListener('click', async () => {
+      const label = btn.textContent.trim();
+      try {
+        const j = await runCtrlAction(btn, () => post('/api/emulator/swipe', {direction: btn.dataset.swipe}), {
+          sentToast: '已发送 · ' + label,
+        });
+        if (!j) return;
+      } catch (e) { toast('失败: ' + e.message); }
+    });
+  });
+
+  function syncOrientButtons(orientation) {
+    const portBtn = document.getElementById('orientPortrait');
+    const landBtn = document.getElementById('orientLandscape');
+    if (!portBtn || !landBtn) return;
+    const isLand = orientation === 'landscape';
+    portBtn.classList.toggle('orient-active', !isLand);
+    landBtn.classList.toggle('orient-active', isLand);
+  }
+
+  document.querySelectorAll('button[data-orient]').forEach((btn) => {
+    bindPressFlash(btn);
+    btn.addEventListener('click', async () => {
+      const mode = btn.dataset.orient;
+      const label = btn.textContent.trim();
+      try {
+        const j = await runCtrlAction(
+          btn,
+          () => post('/api/emulator/orientation', { orientation: mode }),
+          { sentToast: '已切换 · ' + label }
+        );
+        if (!j) return;
+        if (j.width && j.height) {
+          nativeW = j.width;
+          nativeH = j.height;
+          document.getElementById('res').textContent = `${j.width}x${j.height}`;
+          applyZoom(zoomRange.value);
+        }
+        syncOrientButtons(j.orientation || mode);
+        toast(j.orientation === 'landscape' ? `已横屏 ${j.width}x${j.height}` : `已竖屏 ${j.width}x${j.height}`);
+      } catch (e) {
+        toast('切换失败: ' + e.message);
+      }
+    });
+  });
+  // initial highlight from current size
+  syncOrientButtons(nativeW > nativeH ? 'landscape' : 'portrait');
+
+  const sendTextBtn = document.getElementById('sendText');
+  bindPressFlash(sendTextBtn);
+  sendTextBtn.addEventListener('click', async () => {
+    const input = document.getElementById('textInput');
+    const text = input.value;
+    if (!text) return;
+    const pressEnter = document.getElementById('pressEnter').checked;
+    const payload = {
+      text,
+      press_enter: pressEnter,
+      package: 'com.huawei.aisftvassistant',
+    };
+    if (lastTapNx != null && lastTapNy != null) {
+      payload.nx = lastTapNx;
+      payload.ny = lastTapNy;
+    }
+    try {
+      const j = await runCtrlAction(sendTextBtn, () => post('/api/emulator/text', payload), {
+        sentToast: '已发送 · 注入',
+      });
+      if (!j) return;
+      toast(j.used_tap ? '已注入到点击的输入框' : (j.message || '已注入'));
+    } catch (e) { toast('失败: ' + e.message); }
+  });
+  const textInput = document.getElementById('textInput');
+  const clearBtn = document.getElementById('clearText');
+  function syncClearBtn() {
+    clearBtn.classList.toggle('show', !!textInput.value);
+  }
+  textInput.addEventListener('input', syncClearBtn);
+  clearBtn.addEventListener('click', () => {
+    textInput.value = '';
+    syncClearBtn();
+    textInput.focus();
+  });
+  syncClearBtn();
+
+  // ---- 多任务应用（modal）----
+  const recentsList = document.getElementById('recentsList');
+  const recentsHint = document.getElementById('recentsHint');
+  let recentsApps = [];
+  function setRecentsHint(msg) {
+    if (recentsHint) recentsHint.textContent = msg || '';
+  }
+  function getCheckedRecents() {
+    if (!recentsList) return [];
+    return Array.from(recentsList.querySelectorAll('input.recents-item:checked'))
+      .map((el) => recentsApps[Number(el.value)])
+      .filter(Boolean);
+  }
+  function setAllItemsChecked(on) {
+    if (!recentsList) return;
+    recentsList.querySelectorAll('input.recents-item').forEach((cb) => {
+      cb.checked = !!on;
+    });
+    const allCb = recentsList.querySelector('input.recents-all');
+    if (allCb) {
+      allCb.checked = !!on;
+      allCb.indeterminate = false;
+    }
+  }
+  function syncRecentsHint() {
+    const n = recentsApps.length;
+    const checked = getCheckedRecents();
+    const allCb = recentsList?.querySelector('input.recents-all');
+    if (allCb) {
+      allCb.checked = checked.length === n && n > 0;
+      allCb.indeterminate = checked.length > 0 && checked.length < n;
+    }
+    if (!n) {
+      setRecentsHint('暂无最近任务');
+      return;
+    }
+    setRecentsHint(checked.length
+      ? `已勾选 ${checked.length}/${n} · 点清除删除勾选项`
+      : `共 ${n} 个 · 勾选「全选」可全部勾中`);
+  }
+  function fillRecentsList(apps) {
+    if (!recentsList) return;
+    recentsApps = apps || [];
+    if (!recentsApps.length) {
+      recentsList.innerHTML = '<div class="emu-empty">暂无最近任务</div>';
+      syncRecentsHint();
+      return;
+    }
+    const rows = [
+      `<label class="emu-check-opt all">
+        <input type="checkbox" class="recents-all" />
+        <span class="txt"><span class="lab">全选</span></span>
+      </label>`,
+    ].concat(recentsApps.map((app, i) => {
+      const lab = escapeHtml(app.label || app.package || '');
+      const pkg = escapeHtml(app.package || '');
+      return `<label class="emu-check-opt">
+        <input type="checkbox" class="recents-item" value="${i}" />
+        <span class="txt"><span class="lab">${lab}</span><span class="pkg">${pkg}</span></span>
+      </label>`;
+    }));
+    recentsList.innerHTML = rows.join('');
+    syncRecentsHint();
+  }
+  async function loadRecents() {
+    if (!recentsList) return;
+    recentsList.innerHTML = '<div class="emu-empty">加载中…</div>';
+    setRecentsHint('加载中…');
+    try {
+      const r = await fetch(guiEvalPath('/api/emulator/recents'));
+      const j = await r.json();
+      if (!r.ok || j.ok === false) throw new Error(j.error || r.statusText);
+      fillRecentsList(j.apps || []);
+    } catch (e) {
+      recentsApps = [];
+      recentsList.innerHTML = `<div class="emu-empty">加载失败: ${escapeHtml(e.message || String(e))}</div>`;
+      setRecentsHint('加载失败: ' + (e.message || String(e)));
+    }
+  }
+  recentsList?.addEventListener('click', (ev) => {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || !t.classList.contains('recents-all')) return;
+    if (t.indeterminate) {
+      ev.preventDefault();
+      setAllItemsChecked(true);
+      syncRecentsHint();
+    }
+  }, true);
+  recentsList?.addEventListener('change', (ev) => {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement)) return;
+    if (t.classList.contains('recents-all')) {
+      setAllItemsChecked(t.checked);
+      syncRecentsHint();
+      return;
+    }
+    if (t.classList.contains('recents-item')) syncRecentsHint();
+  });
+  document.getElementById('refreshRecents')?.addEventListener('click', async () => {
+    await loadRecents();
+    toast('已刷新多任务');
+  });
+  document.getElementById('clearCheckedRecents')?.addEventListener('click', async () => {
+    const checked = getCheckedRecents().filter((a) => a.clearable !== false);
+    if (!checked.length) {
+      toast('请先勾选要清除的应用');
+      return;
+    }
+    if (!confirm(`清除勾选的 ${checked.length} 个应用？`)) return;
+    const btn = document.getElementById('clearCheckedRecents');
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch(guiEvalPath('/api/emulator/recents/clear'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({packages: checked.map((a) => a.package)}),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok && j.ok !== true) {
+        throw new Error(j.error || r.statusText || '清除失败');
+      }
+      const failed = j.failed || [];
+      if (failed.length && !(j.count > 0)) {
+        const msg = failed[0]?.error || j.error || '清除失败';
+        toast('清除失败: ' + msg);
+      } else if (failed.length) {
+        toast(`清除 ${j.count || 0} 个，失败 ${failed.length}`);
+      } else {
+        toast(`已清除 ${j.count || checked.length} 个`);
+      }
+      await loadRecents();
+    } catch (e) {
+      toast('清除失败: ' + e.message);
+      await loadRecents();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+
+  // ---- 权限配置（modal）----
+  const permsList = document.getElementById('permsList');
+  const permsHint = document.getElementById('permsHint');
+  let permsApps = [];
+  function setPermsHint(msg) {
+    if (permsHint) permsHint.textContent = msg || '';
+  }
+  function getCheckedPerms() {
+    if (!permsList) return [];
+    return Array.from(permsList.querySelectorAll('input.perms-item:checked'))
+      .map((el) => permsApps[Number(el.value)])
+      .filter(Boolean);
+  }
+  function setAllPermsChecked(on) {
+    if (!permsList) return;
+    permsList.querySelectorAll('input.perms-item').forEach((cb) => { cb.checked = !!on; });
+    const allCb = permsList.querySelector('input.perms-all');
+    if (allCb) { allCb.checked = !!on; allCb.indeterminate = false; }
+  }
+  function syncPermsHint() {
+    const n = permsApps.length;
+    const checked = getCheckedPerms();
+    const allCb = permsList?.querySelector('input.perms-all');
+    if (allCb) {
+      allCb.checked = checked.length === n && n > 0;
+      allCb.indeterminate = checked.length > 0 && checked.length < n;
+    }
+    if (!n) {
+      setPermsHint('暂无第三方应用');
+      return;
+    }
+    setPermsHint(checked.length
+      ? `已勾选 ${checked.length}/${n} · 点配置授予权限`
+      : `共 ${n} 个第三方应用 · 勾选「全选」可全部勾中`);
+  }
+  function fillPermsList(apps) {
+    if (!permsList) return;
+    permsApps = apps || [];
+    if (!permsApps.length) {
+      permsList.innerHTML = '<div class="emu-empty">暂无第三方已装应用</div>';
+      syncPermsHint();
+      return;
+    }
+    const rows = [
+      `<label class="emu-check-opt all">
+        <input type="checkbox" class="perms-all" />
+        <span class="txt"><span class="lab">全选</span></span>
+      </label>`,
+    ].concat(permsApps.map((app, i) => {
+      const lab = escapeHtml(app.label || app.package || '');
+      const pkg = escapeHtml(app.package || '');
+      return `<label class="emu-check-opt">
+        <input type="checkbox" class="perms-item" value="${i}" />
+        <span class="txt"><span class="lab">${lab}</span><span class="pkg">${pkg}</span></span>
+      </label>`;
+    }));
+    permsList.innerHTML = rows.join('');
+    syncPermsHint();
+  }
+  async function loadPerms() {
+    if (!permsList) return;
+    permsList.innerHTML = '<div class="emu-empty">加载中…</div>';
+    setPermsHint('加载中…');
+    try {
+      const r = await fetch(guiEvalPath('/api/emulator/permissions'));
+      const j = await r.json();
+      if (!r.ok || j.ok === false) throw new Error(j.error || r.statusText);
+      fillPermsList((j.apps || []).filter((a) => a.installed !== false));
+    } catch (e) {
+      permsApps = [];
+      permsList.innerHTML = `<div class="emu-empty">加载失败: ${escapeHtml(e.message || String(e))}</div>`;
+      setPermsHint('加载失败: ' + (e.message || String(e)));
+    }
+  }
+  permsList?.addEventListener('click', (ev) => {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || !t.classList.contains('perms-all')) return;
+    if (t.indeterminate) {
+      ev.preventDefault();
+      setAllPermsChecked(true);
+      syncPermsHint();
+    }
+  }, true);
+  permsList?.addEventListener('change', (ev) => {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement)) return;
+    if (t.classList.contains('perms-all')) {
+      setAllPermsChecked(t.checked);
+      syncPermsHint();
+      return;
+    }
+    if (t.classList.contains('perms-item')) syncPermsHint();
+  });
+  document.getElementById('refreshPerms')?.addEventListener('click', async () => {
+    await loadPerms();
+    toast('已刷新权限应用列表');
+  });
+  async function grantSelectedPerms(mode) {
+    const checked = getCheckedPerms();
+    if (!checked.length) {
+      toast('请先勾选要配置权限的应用');
+      return;
+    }
+    const isLoc = mode === 'location';
+    const confirmMsg = isLoc
+      ? `为勾选的 ${checked.length} 个应用授予位置权限？\n（精确定位 / 粗略定位 / 后台定位等）`
+      : `为一键配置 ${checked.length} 个应用的权限？\n（运行时权限 / 悬浮窗 / 无障碍等）`;
+    if (!confirm(confirmMsg)) return;
+    const btn = document.getElementById(isLoc ? 'grantLocationBtn' : 'grantPermsBtn');
+    const other = document.getElementById(isLoc ? 'grantPermsBtn' : 'grantLocationBtn');
+    if (btn) btn.disabled = true;
+    if (other) other.disabled = true;
+    try {
+      const r = await fetch(guiEvalPath('/api/emulator/permissions/grant'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          packages: checked.map((a) => a.package),
+          mode: isLoc ? 'location' : 'all',
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok && j.ok !== true) {
+        throw new Error(j.error || r.statusText || '配置失败');
+      }
+      const failed = j.failed || [];
+      const label = isLoc ? '位置权限' : '权限';
+      if (failed.length && !(j.count > 0)) {
+        toast(`配置${label}失败: ` + (failed[0]?.error || j.error || '未知错误'));
+      } else if (failed.length) {
+        toast(`已配置${label} ${j.count || 0} 个，失败 ${failed.length}`);
+      } else {
+        toast(`已为 ${j.count || checked.length} 个应用配置${label}`);
+      }
+      await loadPerms();
+    } catch (e) {
+      toast('配置失败: ' + e.message);
+    } finally {
+      if (btn) btn.disabled = false;
+      if (other) other.disabled = false;
+    }
+  }
+  document.getElementById('grantLocationBtn')?.addEventListener('click', async () => {
+    await grantSelectedPerms('location');
+  });
+  document.getElementById('grantPermsBtn')?.addEventListener('click', async () => {
+    await grantSelectedPerms('all');
+  });
+
+  // ---- 虚拟机信息（modal）----
+  const vmInfoBody = document.getElementById('vmInfoBody');
+  const vmInfoHint = document.getElementById('vmInfoHint');
+  function meterClass(pct) {
+    const n = Number(pct) || 0;
+    if (n >= 90) return 'danger';
+    if (n >= 75) return 'warn';
+    return '';
+  }
+  function fmtMb(mb) {
+    const n = Number(mb);
+    if (!Number.isFinite(n)) return '-';
+    if (n >= 1024) return (n / 1024).toFixed(2) + ' GB';
+    return n.toFixed(1) + ' MB';
+  }
+  function renderMeter(label, pct, detail) {
+    const p = Math.max(0, Math.min(100, Number(pct) || 0));
+    const cls = meterClass(p);
+    return `<div class="emu-meter ${cls}">
+      <div class="meter-label"><span>${escapeHtml(label)}</span><span class="val">${escapeHtml(detail)}</span></div>
+      <div class="bar"><i style="width:${p}%"></i></div>
+    </div>`;
+  }
+  function fmtNetMs(ms) {
+    if (ms == null || ms === '' || Number.isNaN(Number(ms))) return '-';
+    const n = Number(ms);
+    if (n > 0 && n < 10) return n.toFixed(1) + ' ms';
+    return Math.round(n) + ' ms';
+  }
+  function renderVmInfo(info) {
+    if (!vmInfoBody) return;
+    const mem = info.memory || {};
+    const storage = info.storage || {};
+    const net = info.network || {};
+    const qos = info.qos || {};
+    const dev = info.device || {};
+    const data = storage.data || {};
+    const root = storage.root || {};
+    const memPct = mem.used_pct ?? 0;
+    const dataPct = data.use_pct_num ?? (parseFloat(data.use_pct) || 0);
+    const rootPct = root.use_pct_num ?? (parseFloat(root.use_pct) || 0);
+
+    let html = '';
+    html += `<div class="emu-info-section"><div class="sec-ttl">内存</div>`;
+    html += renderMeter(
+      '内存占用',
+      memPct,
+      `${fmtMb(mem.used_mb)} / ${fmtMb(mem.total_mb)}（${memPct}%）· 可用 ${fmtMb(mem.available_mb)}`
+    );
+    html += `</div>`;
+
+    html += `<div class="emu-info-section"><div class="sec-ttl">磁盘</div>`;
+    html += renderMeter(
+      '/data 用户盘',
+      dataPct,
+      data.size
+        ? `${data.used || '-'} / ${data.size}（${data.use_pct || dataPct}%）· 可用 ${data.avail || '-'}`
+        : '无数据'
+    );
+    html += renderMeter(
+      '/ 系统盘',
+      rootPct,
+      root.size
+        ? `${root.used || '-'} / ${root.size}（${root.use_pct || rootPct}%）· 可用 ${root.avail || '-'}`
+        : '无数据'
+    );
+    html += `</div>`;
+
+    html += `<div class="emu-info-section"><div class="sec-ttl">网络 / 流畅度</div>
+      <div class="emu-info-kv">
+        <span class="k">实时延迟</span><span class="v">${escapeHtml(fmtNetMs(net.latency_ms))}</span>
+        <span class="k">流畅度</span><span class="v">${escapeHtml(qos.smoothness_score != null ? String(qos.smoothness_score) : '-')} <small style="color:#909399">(0卡～100顺)</small></span>
+        <span class="k">抖动</span><span class="v">${escapeHtml(net.jitter_ms != null ? (Number(net.jitter_ms).toFixed(1) + ' ms') : '-')}</span>
+        <span class="k">网关 RTT</span><span class="v">${escapeHtml(fmtNetMs(net.gw_latency_ms))} ${net.gateway_ok ? '✓' : '✗'}</span>
+        <span class="k">Hub RTT</span><span class="v">${escapeHtml(fmtNetMs(net.hub_latency_ms != null ? net.hub_latency_ms : qos.hub_latency_ms))}</span>
+        <span class="k">公网 RTT</span><span class="v">${escapeHtml(fmtNetMs(net.net_latency_ms))}</span>
+        <span class="k">IPv4</span><span class="v">${escapeHtml(net.ipv4 || '-')}</span>
+        <span class="k">宿主机 CPU</span><span class="v">${escapeHtml(qos.qemu_cpu_pct != null ? (Number(qos.qemu_cpu_pct).toFixed(0) + '%') : '-')}</span>
+        <span class="k">访客 load1</span><span class="v">${escapeHtml(qos.guest_load1 != null ? String(qos.guest_load1) : '-')}</span>
+        <span class="k">Wi‑Fi</span><span class="v">${net.wifi_on ? '开' : '关'}</span>
+        <span class="k">飞行模式</span><span class="v">${net.airplane ? '开' : '关'}</span>
+      </div></div>`;
+
+    html += `<div class="emu-info-section"><div class="sec-ttl">设备</div>
+      <div class="emu-info-kv">
+        <span class="k">型号</span><span class="v">${escapeHtml(dev.model || '-')}</span>
+        <span class="k">Android</span><span class="v">${escapeHtml(dev.android || '-')} (SDK ${escapeHtml(dev.sdk || '-')})</span>
+        <span class="k">ABI</span><span class="v">${escapeHtml(dev.abi || '-')}</span>
+        <span class="k">分辨率</span><span class="v">${escapeHtml(String(dev.width || '-'))}×${escapeHtml(String(dev.height || '-'))}</span>
+        <span class="k">序列号</span><span class="v">${escapeHtml(dev.serial || '-')}</span>
+        <span class="k">AVD</span><span class="v">${escapeHtml(dev.avd || '-')}</span>
+        <span class="k">语言</span><span class="v">${escapeHtml(dev.locale || '-')}</span>
+        <span class="k">时区</span><span class="v">${escapeHtml(dev.timezone || '-')}</span>
+        <span class="k">第三方应用</span><span class="v">${escapeHtml(String(info.third_party_count ?? (info.third_party_packages || []).length))} 个</span>
+      </div></div>`;
+
+    vmInfoBody.innerHTML = html;
+  }
+  async function loadVmInfo() {
+    if (!vmInfoBody) return;
+    vmInfoBody.innerHTML = '<div class="emu-check-list"><div class="emu-empty">加载中…</div></div>';
+    if (vmInfoHint) vmInfoHint.textContent = '加载中…';
+    try {
+      const r = await fetch(guiEvalPath('/api/emulator/info'));
+      const j = await r.json();
+      if (!r.ok || j.ok === false) throw new Error(j.error || r.statusText);
+      renderVmInfo(j);
+      if (vmInfoHint) vmInfoHint.textContent = '数据来自虚拟机实时查询';
+    } catch (e) {
+      vmInfoBody.innerHTML = `<div class="emu-check-list"><div class="emu-empty">加载失败: ${escapeHtml(e.message || String(e))}</div></div>`;
+      if (vmInfoHint) vmInfoHint.textContent = '加载失败';
+    }
+  }
+  document.getElementById('refreshVmInfo')?.addEventListener('click', async () => {
+    await loadVmInfo();
+    toast('已刷新虚拟机信息');
+  });
+
+  document.getElementById('reconnectBtn').addEventListener('click', async () => {
+    closeAllMenus();
+    try { await post('/api/emulator/reconnect', {}); toast('已请求重连'); location.reload(); }
+    catch (e) { toast('失败: ' + e.message); }
+  });
+
+  const fixMicBtn = document.getElementById('fixMicBtn');
+  const micFixBody = document.getElementById('micFixBody');
+  const micFixHint = document.getElementById('micFixHint');
+  const micFixRestartBtn = document.getElementById('micFixRestartBtn');
+
+  function renderMicIssues(title, diag) {
+    const issues = (diag && diag.issues) || [];
+    const flags = (diag && diag.flags) || {};
+    const rows = issues.map((it) => {
+      const tag = it.level === 'error' ? '❌' : (it.level === 'warn' ? '⚠' : 'ℹ');
+      const fix = it.need_restart ? '（需重启）' : (it.fixable ? '（可修麦）' : '');
+      return `<div class="emu-check-item" style="display:block;padding:6px 0;border-bottom:1px solid #303133">
+        <div>${tag} ${it.msg}${fix}</div>
+      </div>`;
+    }).join('') || '<div class="emu-empty">无问题项</div>';
+    const flagLine = [
+      `Pulse=${flags.PULSE_OK === '1' ? 'OK' : 'NO'}`,
+      `VirtualMic=${flags.SINK_OK === '1' ? 'OK' : 'NO'}`,
+      `qemu_pid=${flags.QEMU_PID || '-'}`,
+      `qemu_pulse_env=${flags.QEMU_PULSE_ENV === '1' ? 'OK' : 'NO'}`,
+      `host_audio=${flags.QEMU_HOST_AUDIO === '1' ? 'OK' : 'NO'}`,
+    ].join(' · ');
+    return `<div style="margin-bottom:10px"><strong>${title}</strong>
+      <div style="color:#a8abb2;font-size:0.75rem;margin-top:4px">${flagLine}</div>
+      ${rows}</div>`;
+  }
+
+  function showMicFixReport(j) {
+    const before = j.before || {};
+    const after = j.after || {};
+    const fixed = (j.fixed_ids || []).join(', ') || '无';
+    micFixBody.innerHTML =
+      renderMicIssues('修复前', before) +
+      renderMicIssues('修复后', after) +
+      `<div style="margin-top:8px;line-height:1.5">
+        <div><strong>建议：</strong>${j.recommendation || ''}</div>
+        <div style="color:#a8abb2;font-size:0.75rem;margin-top:6px">已修复项: ${fixed}</div>
+      </div>`;
+    micFixHint.textContent = j.need_restart ? '需要重启虚拟机' : '可再试灌语音';
+    micFixRestartBtn.style.display = j.need_restart ? '' : 'none';
+    openModal('micFixModal');
+  }
+
+  fixMicBtn.addEventListener('click', async () => {
+    closeAllMenus();
+    if (!confirm('确认诊断并修复麦克风？\n先检查 Pulse/VirtualMic/qemu 绑定，再尝试修麦（不重启虚拟机）。')) return;
+    fixMicBtn.disabled = true;
+    toast('正在诊断并修复麦克风…');
+    micFixBody.innerHTML = '<div class="emu-empty">诊断 / 修复中…</div>';
+    micFixHint.textContent = '';
+    micFixRestartBtn.style.display = 'none';
+    openModal('micFixModal');
+    try {
+      const j = await post('/api/emulator/fix-mic', {});
+      showMicFixReport(j);
+      toast(j.need_restart ? '修麦完成，但仍需重启虚拟机' : '麦克风诊断/修复完成');
+    } catch (e) {
+      micFixBody.innerHTML = `<div class="emu-empty" style="color:#f89898">失败: ${e.message}</div>`;
+      toast('修复失败: ' + e.message);
+    } finally {
+      fixMicBtn.disabled = false;
+    }
+  });
+
+  micFixRestartBtn.addEventListener('click', () => {
+    closeModal(document.getElementById('micFixModal'));
+    document.getElementById('restartBtn').click();
+  });
+
+  const restartBtn = document.getElementById('restartBtn');
+  restartBtn.addEventListener('click', async () => {
+    closeAllMenus();
+    if (!confirm('确认重启安卓虚拟机？\n将停止 qemu 并重新启动（约数分钟），开机后会自动配置 DDS 网络。')) return;
+    restartBtn.disabled = true;
+    try {
+      await post('/api/emulator/restart', {});
+      toast('重启已开始，请等待开机…');
+      const badge = document.getElementById('badge');
+      const busyHint = document.getElementById('busyHint');
+      const poll = setInterval(async () => {
+        try {
+          const r = await fetch(guiEvalPath('/api/emulator/status'));
+          const j = await r.json();
+          if (busyHint) {
+            if (j.busy) {
+              busyHint.style.display = '';
+              busyHint.textContent = ' · ' + (j.busy_msg || '正在重启虚拟机…');
+            } else {
+              busyHint.style.display = 'none';
+            }
+          }
+          if (badge) {
+            badge.textContent = j.ready ? '在线' : '离线';
+            badge.classList.toggle('bad', !j.ready);
+          }
+          if (!j.busy) {
+            clearInterval(poll);
+            restartBtn.disabled = false;
+            toast(j.error ? ('重启结束: ' + j.error) : '重启完成');
+            if (j.ready) location.reload();
+          }
+        } catch (_) { /* keep polling */ }
+      }, 3000);
+    } catch (e) {
+      restartBtn.disabled = false;
+      toast('失败: ' + e.message);
+    }
+  });
+
+  function applyZoom(scale) {
+    scale = Math.min(1, Math.max(0.4, Number(scale) || 0.55));
+    const w = Math.round(nativeW * scale);
+    const h = Math.round(nativeH * scale);
+    img.style.width = w + 'px';
+    img.style.height = h + 'px';
+    zoomRange.value = String(scale);
+    const nice = Math.round(scale * 100) / 100;
+    zoomLabel.textContent = (Number.isInteger(nice) ? String(nice) : String(nice)) + '×';
+    dispSize.textContent = w + '×' + h + ' (' + zoomLabel.textContent + ')';
+    document.querySelectorAll('.emu-zoom-bar button.zbtn').forEach(btn => {
+      const z = Number(btn.dataset.zoom);
+      btn.classList.toggle('active', Math.abs(z - scale) < 0.03);
+    });
+    try { localStorage.setItem(ZOOM_KEY, String(scale)); } catch (_) {}
+  }
+
+  zoomRange.addEventListener('input', () => applyZoom(zoomRange.value));
+  document.querySelectorAll('.emu-zoom-bar button.zbtn').forEach(btn => {
+    btn.addEventListener('click', () => applyZoom(btn.dataset.zoom));
+  });
+
+  let saved = 0.55;
+  try {
+    const v = parseFloat(localStorage.getItem(ZOOM_KEY) || '');
+    if (!Number.isNaN(v)) saved = v;
+  } catch (_) {}
+  applyZoom(saved);
+
+  let screenTapBusy = false;
+  img.addEventListener('click', async (ev) => {
+    if (screenTapBusy) return;
+    const rect = img.getBoundingClientRect();
+    const nx = (ev.clientX - rect.left) / rect.width;
+    const ny = (ev.clientY - rect.top) / rect.height;
+    lastTapNx = nx;
+    lastTapNy = ny;
+    screenTapBusy = true;
+    img.style.cursor = 'wait';
+    toast('已发送 · 点击');
+    try {
+      const j = await post('/api/emulator/tap', {nx, ny});
+      toast(`已点选 (${j.x}, ${j.y})`);
+    } catch (e) { toast('点击失败: ' + e.message); }
+    finally {
+      screenTapBusy = false;
+      img.style.cursor = '';
+    }
+  });
+  setInterval(async () => {
+    try {
+      const r = await fetch(guiEvalPath('/api/emulator/status'));
+      const j = await r.json();
+      const badge = document.getElementById('badge');
+      if (j.connecting) {
+        badge.textContent = '重连中';
+        badge.classList.add('bad');
+      } else {
+        badge.textContent = j.ready ? '在线' : '离线';
+        badge.classList.toggle('bad', !j.ready);
+      }
+      document.getElementById('res').textContent = `${j.width}x${j.height}`;
+      if (j.orientation) syncOrientButtons(j.orientation);
+      else if (j.width && j.height) syncOrientButtons(j.width > j.height ? 'landscape' : 'portrait');
+      const busyHint = document.getElementById('busyHint');
+      if (j.busy) {
+        busyHint.style.display = '';
+        busyHint.textContent = ' · ' + (j.busy_msg || '虚拟机忙碌中（安装等），画面暂停');
+      } else if (j.connecting) {
+        busyHint.style.display = '';
+        busyHint.textContent = ' · 宿主机连接中断，正在自动重连…';
+      } else {
+        busyHint.style.display = 'none';
+        busyHint.textContent = '';
+      }
+      if (j.width && j.height && (j.width !== nativeW || j.height !== nativeH)) {
+        nativeW = j.width;
+        nativeH = j.height;
+        applyZoom(zoomRange.value);
+      }
+      updateQosLive(j);
+    } catch (_) {}
+  }, 5000);
+
+  function qosLatClass(ms) {
+    if (ms == null || Number.isNaN(Number(ms))) return '';
+    const n = Number(ms);
+    if (n <= 60) return 'good';
+    if (n <= 120) return 'warn';
+    return 'bad';
+  }
+  function qosSmoothClassLive(score) {
+    if (score == null || Number.isNaN(Number(score))) return '';
+    const n = Number(score);
+    if (n >= 75) return 'good';
+    if (n >= 50) return 'warn';
+    return 'bad';
+  }
+  function updateQosLive(j) {
+    const latEl = document.getElementById('qosLat');
+    const smEl = document.getElementById('qosSmooth');
+    const latChip = document.getElementById('qosLatChip');
+    const smChip = document.getElementById('qosSmoothChip');
+    if (!latEl || !smEl) return;
+    const lat = j.latency_ms;
+    const sm = j.smoothness_score;
+    latEl.textContent = (lat == null || Number.isNaN(Number(lat)))
+      ? '—'
+      : (Number(lat) > 0 && Number(lat) < 10 ? Number(lat).toFixed(1) : String(Math.round(Number(lat)))) + ' ms';
+    smEl.textContent = (sm == null || Number.isNaN(Number(sm))) ? '—' : String(Math.round(Number(sm)));
+    if (latChip) latChip.className = 'qos-chip ' + qosLatClass(lat);
+    if (smChip) smChip.className = 'qos-chip ' + qosSmoothClassLive(sm);
+  }
+  // first paint
+  updateQosLive({});
+</script>
+{% endblock %}

@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">DeviceSDK V2 Demo</string>
+    <string name="init_sdk">初始化SDK</string>
+    <string name="login">登录</string>
+    <string name="logout">登出</string>
+    <string name="upload_log">上传日志</string>
+    <string name="query_login_info">查询登录信息</string>
+    <string name="accessibility_service_description">DeviceSDK Demo 无障碍服务，用于支持 SDK 功能</string>
+</resources>

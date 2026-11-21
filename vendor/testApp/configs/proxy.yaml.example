@@ -1,0 +1,17 @@
+# HTTP/HTTPS 出站代理配置（WebServer V2 与 LLM 评判等出站请求共用）
+# 复制为 proxy.yaml 后按需修改
+#
+# 详见 webserverV2/configs/proxy.yaml.example
+
+enabled: auto
+
+proxy:
+  scheme: http
+  address: proxyhk.huawei.com
+  port: 8080
+  user_id: ""
+  user_password: ""
+  no_proxy: localhost,127.0.0.1,*.huawei.com,*.huawei.net
+  adaptive:
+    probe_direct_url: https://dashscope.aliyuncs.com/compatible-mode/v1/models
+    probe_timeout_sec: 5

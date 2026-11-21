@@ -1,0 +1,83 @@
+# SystemAgent 配置文件
+# 优先级：命令行参数 > 环境变量 > 配置文件 > 默认值
+# 模型配置统一在 model.yaml 中定义，此处通过标签引用。
+
+# 服务配置
+server:
+  port: 8081
+  log_level: "info"
+
+# 模型配置（填写 model.yaml 中定义的标签）
+chat_model: "kimi25"   # 主模型，用于大多数节点
+
+# Talker节点专用模型（用于纯对话请求，留空则与 chat_model 相同）
+talk_model: "kimi25"
+
+# Agent 配置
+agent:
+  id: "sysagent-001"
+  name: "SystemAgent"
+  max_iterations: 10
+  temperature: 1
+  max_tokens: 8000
+
+# 工作区配置
+workspace:
+  root_path: ""  # 空则使用默认值 ~/.sysagent/workspace
+  bootstrap_max_chars: 20000
+
+# 工具配置
+tools:
+  enabled:
+    - read
+    - write
+    - edit
+    - exec
+    - web_search
+    - web_fetch
+  # 工具 HTTP 请求超时（秒），适用于搜索、天气、航班、火车等外部 API 调用
+  request_timeout: 30
+  # ToolProxy 代理配置（统一工具入口，支持 Fixture 缓存和调用记录）
+  proxy:
+    enabled: true # 是否启用 ToolProxy 代理
+    endpoint: "http://localhost:8090" # ToolProxy 服务地址
+    timeout: 30                       # HTTP 请求超时（秒）
+# 上下文存储配置 (DMService / Jiuwen / ContextAgent 集成)
+context:
+  # 存储模式: local (本地), remote (远程), hybrid (混合)
+  mode: "remote"
+
+  # 上下文提供者: "dmservice" (默认) | "jiuwen" | "context-agent"
+  # 三者实现相同的 DMService HTTP API，共用同一端口和地址，互斥部署
+  # 两者实现相同的 HTTP API，共用同一端口和地址
+  provider: "dmservice"
+  
+  # 上下文服务地址（dmservice / jiuwen / context-agent 共用）
+  # 格式: http://<ip>:<port>/internal/v1
+  service_url: "http://localhost:8080/internal/v1"
+  
+  # API 密钥（如果 DMService 需要认证）
+  api_key: ""
+  
+  # 默认策略 ID
+  default_strategy: ""
+  
+  # 是否启用同步到远程
+  enable_sync: false
+
+  # 压缩模式: true=同步（等压缩完再返回）, false=异步（立即返回后台压缩）
+  sync_compress: false
+
+  # 缓存模式: true=同步（等缓存生成再返回）, false=异步（立即返回后台生成）
+  sync_cache: false
+
+  # 同步接口超时（秒）: 用于 /contexts/search/sync 和 /contexts/sync
+  # 应大于模型响应时间，避免因模型执行慢导致的超时
+  sync_timeout: 300
+
+  # 异步接口超时（秒）: 用于 /contexts/search 和 /contexts（fire-and-forget）
+  async_timeout: 10
+
+  # Step3 SaveQARecord 是否异步执行（不阻塞响应返回）
+  # true=响应返回后台保存（推荐）, false=等待保存完成再返回
+  save_async: true

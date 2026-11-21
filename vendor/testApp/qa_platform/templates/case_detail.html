@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ case.case_id }} - 豆包小艺QA自动化测试平台{% endblock %}
+{% block content %}
+<p class="page-sub"><a href="/cases">测试用例管理</a> / {{ case.case_id }}</p>
+<h1 class="page-title">{{ case.title or case.case_id }}</h1>
+<div class="card mb-3">
+    <div class="card-body">
+        <span class="badge-prod badge-{{ case.product }}">{{ product_label[case.product] }}</span>
+        <span class="ms-2">{{ case.case_id }}</span>
+        <span class="ms-3 text-muted">S1 {{ case.s1 or '—' }}</span>
+        <span class="ms-3 text-muted">S2 {{ case.s2 or '—' }}</span>
+        <span class="ms-3 text-muted">S3 {{ case.s3 or '—' }}</span>
+        <span class="ms-3 text-muted">等级 {{ case.level or '—' }}</span>
+        <div class="mt-3">
+            {% for item in tasks %}
+            <a class="btn btn-sm {% if task_id == item.task_id %}btn-primary{% else %}btn-outline-primary{% endif %} me-1" href="/cases/{{ case.product }}/{{ case.case_id }}?task={{ item.task_id }}">{{ item.name }}</a>
+            {% endfor %}
+            {% if task_id %}<a class="btn btn-sm btn-outline-primary" href="/cases/{{ case.product }}/{{ case.case_id }}">全部任务</a>{% endif %}
+        </div>
+    </div>
+</div>
+{% for row in rounds %}
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between">
+        <span>第 {{ row.round_no }} 轮 · {{ row.executed_at or '打分结果' }}</span>
+        <span>
+            {% if row.score is not none %}
+            <span class="badge-prod {% if row.score >= pass_line %}badge-ok{% else %}badge-no{% endif %}">{{ '%.2f'|format(row.score) }}</span>
+            {% endif %}
+        </span>
+    </div>
+    <div class="card-body">
+        {% if row.question %}<div class="qa-block"><strong>用户提问</strong>{{ row.question }}</div>{% endif %}
+        {% if row.expected %}<div class="qa-block"><strong>预期回答</strong>{{ row.expected }}</div>{% endif %}
+        {% if row.answer %}<div class="qa-block"><strong>模型回答</strong>{{ row.answer }}</div>{% endif %}
+        {% if not row.question and not row.answer %}<p class="text-muted mb-2">这份结果表只有分数，没有问答原文。</p>{% endif %}
+        <div class="text-muted">
+            完成 {{ row.task_completion if row.task_completion is not none else '—' }}
+            · 正确 {{ row.correctness if row.correctness is not none else '—' }}
+            · 相关 {{ row.relevance if row.relevance is not none else '—' }}
+            · 连贯 {{ row.coherence if row.coherence is not none else '—' }}
+            · 意图 {{ row.intent if row.intent is not none else '—' }}
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card"><div class="card-body text-muted">这个用例还没有执行结果。</div></div>
+{% endfor %}
+{% endblock %}

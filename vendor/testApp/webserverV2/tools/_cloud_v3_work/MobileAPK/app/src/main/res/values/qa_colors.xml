@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="qa_primary">#1677FF</color>
+    <color name="qa_primary_dark">#0958D9</color>
+    <color name="qa_page_bg">#F0F2F5</color>
+    <color name="qa_surface">#FFFFFF</color>
+    <color name="qa_text_primary">#1F1F1F</color>
+    <color name="qa_text_secondary">#8C8C8C</color>
+    <color name="qa_text_hint">#BFBFBF</color>
+    <color name="qa_divider">#F0F0F0</color>
+    <color name="qa_border">#E8E8E8</color>
+    <color name="qa_user_bubble">#1677FF</color>
+    <color name="qa_server_bubble">#FFFFFF</color>
+    <color name="qa_chip_bg">#F5F5F5</color>
+    <color name="qa_chip_stroke">#E8E8E8</color>
+    <color name="qa_danger">#FF4D4F</color>
+    <color name="qa_danger_bg">#FFF1F0</color>
+    <color name="qa_system_bg">#E8E8E8</color>
+    <color name="qa_system_text">#666666</color>
+    <color name="qa_input_bg">#F5F5F5</color>
+</resources>

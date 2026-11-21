@@ -1,0 +1,563 @@
+# TestApp 自动化测试框架使用指南
+
+> 版本：1.8.0
+> 更新日期：2026-04-10
+
+---
+
+## 1. 系统概述
+
+TestApp 是一个用于 Android 应用功能测试的自动化测试框架，通过无障碍服务实现对目标应用的完全控制，支持自动化执行测试流程、截图保存结果、日志记录等功能。
+
+### 1.1 系统组成
+
+| 组件 | 包名 | 说明 |
+|------|------|------|
+| testapp | com.example.testapp | 测试控制器，负责解析测试流程、控制目标应用、保存结果 |
+| appforfunction | com.example.appforfunction | 目标应用，提供登录、聊天、列表等功能供测试 |
+
+### 1.2 核心功能
+
+- JSON 测试流程配置，支持多步骤连贯测试
+- 通过 AccessibilityService 实现对目标应用的完全控制
+- 支持点击、输入、滑动、滚动、返回等操作
+- 自动截图保存测试结果
+- 完整的日志系统，支持导出和查看
+
+---
+
+## 2. 环境要求
+
+### 2.1 设备要求
+
+- Android 5.0 (API 21) 及以上
+- Android 11 (API 30) 及以上支持截图功能
+- 建议使用 Android 11+ 设备以获得完整功能
+
+### 2.2 权限要求
+
+testapp 需要以下权限：
+
+| 权限 | 用途 |
+|------|------|
+| 悬浮窗权限 | 用于显示测试状态浮窗 |
+| 无障碍服务 | 实现对目标应用的自动化控制 |
+| 存储权限 | 保存截图和日志文件 |
+| 网络权限 | 用于后续云端功能扩展 |
+
+---
+
+## 3. 快速开始
+
+### 3.1 安装应用
+
+1. 安装 testapp.apk 和 appforfunction.apk 到设备
+2. 打开 testapp 应用
+
+### 3.2 开启无障碍服务
+
+1. 在 testapp 主界面查看"无障碍服务"状态
+2. 如果显示"未启用"，点击跳转到系统设置
+3. 在无障碍设置中找到"TestApp Accessibility Service"
+4. 开启该服务
+
+### 3.3 执行测试
+
+1. 在 testapp 主界面选择测试文件
+2. 点击"启动测试"按钮
+3. 系统将自动启动目标应用并执行测试流程
+4. 测试完成后自动返回 testapp 界面
+
+### 3.4 查看结果
+
+- 点击"文件管理"查看截图和日志
+- 点击"查看日志"查看详细测试日志
+- 截图保存在应用私有目录下
+
+---
+
+## 4. 测试流程配置
+
+### 4.1 JSON 文件格式
+
+测试流程使用 JSON 格式配置，基本结构如下：
+
+```json
+{
+  "version": "1.0",
+  "testId": "login_basic_001",
+  "testName": "基础登录测试",
+  "description": "测试用户登录功能",
+  "targetPackage": "com.example.appforfunction",
+  "steps": [
+    {
+      "stepId": "step1",
+      "description": "点击登录按钮",
+      "action": "click",
+      "target": {
+        "strategy": "id",
+        "value": "com.example.appforfunction:id/btn_login"
+      }
+    }
+  ]
+}
+```
+
+### 4.2 支持的操作类型
+
+| 动作 | 说明 | 必需参数 |
+|------|------|----------|
+| click | 点击元素 | target (id/text) |
+| input | 输入文本 | target, params.text |
+| scroll | 滚动 | params.direction (up/down) |
+| swipe | 滑动 | params.startX/Y, endX/Y, duration |
+| wait | 等待 | params.duration |
+| press_back | 返回键 | - |
+| home | Home键 | - |
+| launchApp | 启动应用 | - |
+| screenshot | 截图 | - |
+
+**注意：** 返回键操作（press_back）建议在测试用例的最后步骤中显式执行，用于退出被测应用。建议执行6次返回键以确保完全退出。
+
+### 4.3 目标定位策略
+
+#### ID 定位
+```json
+"target": {
+  "strategy": "id",
+  "value": "com.example.appforfunction:id/btn_login"
+}
+```
+
+#### 文本定位
+```json
+"target": {
+  "strategy": "text",
+  "value": "登录"
+}
+```
+
+### 4.4 参数配置
+
+#### 输入操作参数
+```json
+{
+  "action": "input",
+  "target": { "strategy": "id", "value": "com.example.appforfunction:id/et_username" },
+  "params": {
+    "text": "testuser"
+  }
+}
+```
+
+#### 滑动操作参数
+```json
+{
+  "action": "swipe",
+  "params": {
+    "startX": 500,
+    "startY": 1500,
+    "endX": 500,
+    "endY": 500,
+    "duration": 300
+  }
+}
+```
+
+#### 滚动操作参数
+```json
+{
+  "action": "scroll",
+  "params": {
+    "direction": "down"
+  }
+}
+```
+
+---
+
+## 5. 测试用例示例
+
+### 5.1 登录测试示例
+
+```json
+{
+  "version": "1.0",
+  "testId": "TC-LOGIN-001",
+  "testName": "基础登录测试",
+  "description": "测试用户登录功能",
+  "exitBackCount": 6,
+  "targetApp": {
+    "packageName": "com.example.appforfunction"
+  },
+  "steps": [
+    {
+      "stepId": "launch",
+      "description": "启动目标应用",
+      "action": "launchApp"
+    },
+    {
+      "stepId": "wait-home",
+      "description": "等待首页加载",
+      "action": "wait",
+      "params": { "duration": 1000 }
+    },
+    {
+      "stepId": "click-login",
+      "description": "点击进入登录",
+      "action": "click",
+      "target": { "strategy": "text", "value": "进入登录" }
+    },
+    {
+      "stepId": "input-username",
+      "description": "输入用户名",
+      "action": "input",
+      "target": { "strategy": "id", "value": "com.example.appforfunction:id/etUsername" },
+      "params": { "text": "testuser" }
+    },
+    {
+      "stepId": "input-password",
+      "description": "输入密码",
+      "action": "input",
+      "target": { "strategy": "id", "value": "com.example.appforfunction:id/etPassword" },
+      "params": { "text": "123456" }
+    },
+    {
+      "stepId": "click-login-btn",
+      "description": "点击登录按钮",
+      "action": "click",
+      "target": { "strategy": "text", "value": "登录" }
+    },
+    {
+      "stepId": "wait-result",
+      "description": "等待登录完成",
+      "action": "wait",
+      "params": { "duration": 1000 }
+    },
+    {
+      "stepId": "screenshot-result",
+      "description": "截图保存结果",
+      "action": "screenshot"
+    },
+    {
+      "stepId": "exit-back-1",
+      "description": "返回第1次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-2",
+      "description": "返回第2次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-3",
+      "description": "返回第3次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-4",
+      "description": "返回第4次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-5",
+      "description": "返回第5次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-6",
+      "description": "返回第6次",
+      "action": "press_back"
+    }
+  ]
+}
+```
+
+### 5.2 聊天发送测试示例
+
+```json
+{
+  "version": "1.0",
+  "testId": "chat_send_001",
+  "testName": "聊天发送测试",
+  "description": "测试聊天消息发送功能",
+  "targetPackage": "com.example.appforfunction",
+  "steps": [
+    {
+      "stepId": "step1",
+      "description": "点击聊天输入框",
+      "action": "click",
+      "target": {
+        "strategy": "id",
+        "value": "com.example.appforfunction:id/et_message"
+      }
+    },
+    {
+      "stepId": "step2",
+      "description": "输入消息内容",
+      "action": "input",
+      "target": {
+        "strategy": "id",
+        "value": "com.example.appforfunction:id/et_message"
+      },
+      "params": { "text": "Hello, this is a test message!" }
+    },
+    {
+      "stepId": "step3",
+      "description": "点击发送按钮",
+      "action": "click",
+      "target": {
+        "strategy": "id",
+        "value": "com.example.appforfunction:id/btn_send"
+      }
+    },
+    {
+      "stepId": "step4",
+      "description": "等待消息发送",
+      "action": "wait",
+      "params": { "duration": 1000 }
+    },
+    {
+      "stepId": "step5",
+      "description": "截图保存结果",
+      "action": "screenshot"
+    }
+  ]
+}
+```
+
+---
+
+## 6. 文件存储位置
+
+### 6.1 截图文件
+
+```
+/storage/emulated/0/Android/data/com.example.testapp/files/Pictures/screenshots/
+└── {testId}/
+    ├── step_1_xxx.png
+    ├── step_2_xxx.png
+    └── result_xxx.png
+```
+
+### 6.2 日志文件
+
+```
+/storage/emulated/0/Android/data/com.example.testapp/files/logs/
+└── {testId}_{timestamp}.log
+```
+
+### 6.3 测试流程文件
+
+测试流程 JSON 文件位于应用 assets 目录：
+
+```
+testapp/src/main/assets/testflows/
+├── login_basic_001.json
+├── chat_send_001.json
+└── list_scroll_001.json
+```
+
+---
+
+## 7. 界面功能说明
+
+### 7.1 主界面
+
+```
+┌─────────────────────────────────────┐
+│           TestApp 主界面             │
+├─────────────────────────────────────┤
+│  测试状态: 待执行/执行中/已完成      │
+│  测试结果: -/成功/失败               │
+│  无障碍服务: 已启用 ✓ / 未启用 ✗     │
+├─────────────────────────────────────┤
+│  测试文件列表:                       │
+│  ┌─────────────────────────────┐   │
+│  │ login_basic_001.json        │   │
+│  │ chat_send_001.json          │   │
+│  │ list_scroll_001.json        │   │
+│  └─────────────────────────────┘   │
+├─────────────────────────────────────┤
+│  ┌───────────┐  ┌───────────┐     │
+│  │ 启动测试   │  │ 停止测试   │     │
+│  └───────────┘  └───────────┘     │
+│  ┌───────────┐  ┌───────────┐     │
+│  │ 文件管理   │  │ 查看日志   │     │
+│  └───────────┘  └───────────┘     │
+└─────────────────────────────────────┘
+```
+
+### 7.2 按钮功能
+
+| 按钮 | 功能 |
+|------|------|
+| 启动测试 | 开始执行选中的测试流程 |
+| 停止测试 | 终止当前正在执行的测试 |
+| 文件管理 | 查看截图和日志文件 |
+| 查看日志 | 查看详细测试执行日志 |
+
+---
+
+## 8. 异常处理
+
+### 8.1 无障碍服务未启用
+
+- 检测到服务未启用时会弹出对话框引导用户开启
+- 提供"去开启"按钮跳转到无障碍设置页面
+
+### 8.2 节点查找失败
+
+- 记录警告日志
+- 步骤标记为失败
+- 继续执行后续步骤
+
+### 8.3 截图失败
+
+系统会尝试多种截图方式：
+1. AccessibilityService.takeScreenshot() (API 30+)
+2. screencap shell 命令
+3. 创建占位图片作为记录
+
+---
+
+## 9. 技术架构
+
+### 9.1 核心组件
+
+| 组件 | 说明 |
+|------|------|
+| MainActivity | 主界面，测试文件选择和控制 |
+| TestExecuteService | 前台服务，执行测试流程 |
+| TestAccessibilityService | 无障碍服务，实现 UI 自动化 |
+| CommandExecutor | 命令执行器，解析并执行测试步骤 |
+| JsonParser | JSON 解析器，解析测试流程文件 |
+
+### 9.2 通信流程
+
+```
+MainActivity                    TestExecuteService
+    │                                  │
+    │──── ACTION_START_TEST ──────────>│
+    │                                  │ 执行测试
+    │<─── ACTION_TEST_FINISHED ────────│
+    │                                  │
+```
+
+---
+
+## 10. 版本兼容性
+
+| Android 版本 | API Level | 兼容性 | 说明 |
+|-------------|-----------|--------|------|
+| Android 5.0-6.0 | 21-23 | 基本兼容 | 无障碍服务可用，部分手势功能受限 |
+| Android 7.0-10 | 24-29 | 完全兼容 | 支持手势操作 |
+| Android 11+ | 30+ | 完全兼容 | 支持截图 API |
+
+---
+
+## 11. 常见问题
+
+### Q1: 截图无法打开？
+A: 确保设备为 Android 11+ 且无障碍服务已开启截图权限。
+
+### Q2: 测试无法启动？
+A: 检查无障碍服务是否已开启，目标应用是否已安装。
+
+### Q3: 点击操作无效？
+A: 确认目标元素的 ID 或文本是否正确，可在日志中查看详细错误信息。
+
+### Q4: 如何添加新的测试用例？
+A: 在 assets/testflows/ 目录下添加新的 JSON 文件，按照格式编写测试步骤。
+
+---
+
+## 12. 后续扩展
+
+- 截图对比验证
+- 性能数据采集
+- 测试报告生成
+- 云端测试结果同步
+- 测试用例在线编辑
+
+---
+
+## 13. Web Server 功能
+
+### 13.1 概述
+
+Web Server 提供基于浏览器的测试文件管理功能，支持：
+- 上传、删除、选择测试文件
+- 下发测试文件到已连接的 Android 设备
+- 查看已连接设备信息和文件列表
+- 远程管理设备上的测试文件（删除、刷新）
+- 远程执行设备上的测试用例
+- 查看测试执行结果和截图
+
+### 13.2 启动 Web Server V2
+
+```bash
+cd webserverV2
+pip install -r requirements.txt
+python webserver_v2.py
+```
+
+启动后访问：http://localhost:9527
+
+### 13.3 使用流程
+
+1. 启动 Web Server V2
+2. 在浏览器中访问 Web 界面
+3. 上传测试 JSON 文件
+4. testapp 启动后自动连接服务器（默认端口：9527）
+5. 在 Web 界面查看已连接设备，点击展开查看设备文件列表
+6. 选择服务器文件并点击"Send to Device"下发到设备
+7. 点击"Run"按钮远程执行设备上的测试用例
+8. 测试完成后，截图自动上传到服务器
+9. 在设备卡片的"Test Results"文件夹查看截图文件列表
+10. 选择截图后可批量下载到本地
+11. 可直接在 Web 界面删除设备上的测试文件
+
+### 13.4 设备连接说明
+
+- testapp 启动后自动通过 WebSocket 连接服务器
+- 连接状态在主界面实时显示
+- 心跳间隔：10秒
+- 服务器 ping 间隔：25秒
+- 断线后自动重连（2秒间隔，无限重试）
+- 双向心跳保活机制（ping/pong）
+
+### 13.5 配置服务器地址
+
+点击主界面的"服务器地址设置"按钮，修改服务器IP和端口。
+
+### 13.6 本地文件管理
+
+在 testapp 中点击"文件管理"：
+- 测试用例标签：查看、删除本地测试文件
+- 菜单栏"新建"：创建新的测试用例
+- 长按文件：删除测试文件
+
+### 13.7 测试结果历史页面
+
+点击主界面 Server Status 区域的"Test Results"按钮，可进入测试结果历史页面：
+
+**功能特点：**
+- 查看所有设备的历史测试结果，包括已离线的设备
+- 按设备分类显示测试结果和截图
+- 显示设备在线/离线状态
+- 支持批量选择和删除截图
+- 自动刷新（每30秒）
+- 设备名称离线后仍可显示
+
+**页面操作：**
+- 点击设备卡片展开/折叠测试结果列表
+- 点击测试结果文件夹展开/折叠截图列表
+- 勾选截图后点击"Delete Selected"批量删除
+- 点击"Select All Devices"选择所有设备的所有截图
+- 点击"View"在新标签页查看大图
+- 点击"Download"下载单个截图
+
+### 13.8 详细文档
+
+参见 webserverV2/doc/guide.md

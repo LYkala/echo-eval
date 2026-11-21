@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>模拟器 App 语音环回 - 流程图</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; margin: 24px; background: #f5f7fa; }
+    h1 { font-size: 20px; color: #1a1a2e; margin-bottom: 8px; }
+    .legend { display: flex; gap: 24px; margin: 16px 0; flex-wrap: wrap; }
+    .legend-item { padding: 10px 16px; border-radius: 8px; font-size: 14px; flex: 1; min-width: 280px; }
+    .left-box { background: #dbeafe; border-left: 4px solid #2563eb; }
+    .right-box { background: #dcfce7; border-left: 4px solid #16a34a; }
+    .cloud-box { background: #fef3c7; border-left: 4px solid #d97706; }
+    .legend-item strong { display: block; margin-bottom: 4px; }
+    p { color: #555; font-size: 14px; }
+    .box { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.08); overflow: auto; }
+    .cmd { background: #1e1e1e; color: #d4d4d4; padding: 12px 16px; border-radius: 6px; font-family: Consolas, monospace; font-size: 13px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h1>模拟器 App 语音环回 — 左 / 右 说明</h1>
+
+  <div class="legend">
+    <div class="legend-item left-box">
+      <strong>← 左边（蓝色区域）= Windows 宿主机</strong>
+      Python 脚本 · PowerShell 播 wav · VB-Cable 虚拟声卡 · SAPI 合成 · 输出文件夹 app_loop_output/
+    </div>
+    <div class="legend-item right-box">
+      <strong>右边（绿色区域）= Android 模拟器</strong>
+      emulator-5554 · Sherpa ASR App · 麦克风录音 · UI 识别文字 · /sdcard/voice_lab/
+    </div>
+    <div class="legend-item cloud-box">
+      <strong>中间 / 下方（黄色）= 云端 Kimi</strong>
+      识别文字上传 → 大模型回复 → 回到宿主机合成语音
+    </div>
+  </div>
+
+  <p>数据走向：<b>左 → 右</b> 灌语音进 App；<b>右 → 左</b> 读出识别文字；<b>云端 → 左</b> 大模型回复；<b>左 → 右</b> push 回复 wav 回模拟器。</p>
+
+  <div class="box">
+    <pre class="mermaid">
+flowchart LR
+    subgraph LEFT ["← 左边：Windows 宿主机"]
+        direction TB
+        L0["weather_question.wav<br/>「今天天气怎么样」"]
+        L1["voice_app_loop.py"]
+        L2["PowerShell 播放 wav"]
+        L3["VB-Cable Input → Output<br/>虚拟麦克风"]
+        L4["asr.txt · llm.txt"]
+        L5["SAPI 合成 output.wav"]
+        L6["app_loop_output/"]
+        L0 --> L1 --> L2 --> L3
+    end
+
+    subgraph RIGHT ["右边：Android 模拟器 →"]
+        direction TB
+        R0["adb push 输入文件<br/>/sdcard/voice_lab/"]
+        R1["Sherpa ASR App<br/>点 START 录音"]
+        R2["Mic 收到音频<br/>Kaldi 识别"]
+        R3["UI my_text<br/>今天天气怎么样"]
+        R4["adb push output.wav<br/>/sdcard/voice_lab/"]
+        R0 --> R1 --> R2 --> R3
+    end
+
+    subgraph CLOUD ["云端 Kimi"]
+        C1["今天天气怎么样 → Kimi k2.5"]
+        C2["天气回复 → 宿主机 TTS"]
+        C1 --> C2
+    end
+
+    L3 -->|"音频进 Mic"| R2
+    R3 -->|"uiautomator 读取"| L4
+    L4 --> C1
+    C2 --> L5 --> L6
+    L5 -->|"adb push"| R4
+
+    style LEFT fill:#eff6ff,stroke:#2563eb
+    style RIGHT fill:#f0fdf4,stroke:#16a34a
+    style CLOUD fill:#fffbeb,stroke:#d97706
+    </pre>
+  </div>
+
+  <div class="box" style="margin-top:16px">
+    <pre class="mermaid">
+flowchart TB
+    START(["开始"]) --> PREP
+
+    subgraph PREP ["准备（跨左右）"]
+        direction LR
+        PL["左：启动脚本 · 示例 wav · VB-Cable"]
+        PR["右：start-emulator · 安装 Sherpa ASR"]
+    end
+
+    PREP --> LOOP
+
+    subgraph LOOP ["主循环 voice_app_loop.py"]
+        direction LR
+        subgraph L ["左 宿主机"]
+            A1["① 播放 wav 灌虚拟 Mic"]
+            A3["③ SAPI → output.wav"]
+        end
+        subgraph R ["右 模拟器"]
+            A2["② App ASR → asr.txt"]
+            A4["④ 收 push 的 output.wav"]
+        end
+        subgraph M ["中 云端"]
+            A2b["Kimi 大模型 → llm.txt"]
+        end
+        A1 --> A2 --> A2b --> A3 --> A4
+    end
+
+    LOOP --> END(["结束"])
+
+    style L fill:#dbeafe
+    style R fill:#dcfce7
+    style M fill:#fef3c7
+    </pre>
+  </div>
+
+  <div class="cmd">python voice_app_loop.py -i audio_samples/weather_question.wav</div>
+  <script>mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true, curve: "basis" } });</script>
+</body>
+</html>

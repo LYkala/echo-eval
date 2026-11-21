@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}测试用例管理 - 豆包小艺QA自动化测试平台{% endblock %}
+{% block extra_js %}
+<script>
+let sheetName = "";
+let sheetPage = 1;
+
+function showMsg(text, ok) {
+    const el = document.getElementById("pageMsg");
+    el.textContent = text;
+    el.className = ok ? "flash" : "flash";
+    el.style.display = "block";
+}
+
+document.getElementById("createDatasetBtn").addEventListener("click", async () => {
+    const name = document.getElementById("newDatasetName").value.trim();
+    const product = document.getElementById("newDatasetProduct").value;
+    const file = document.getElementById("newDatasetFile").files[0];
+    if (!name || !file) {
+        showMsg("请填写名称并选择 Excel", false);
+        return;
+    }
+    const body = new FormData();
+    body.append("name", name);
+    body.append("product", product);
+    body.append("file", file);
+    const resp = await fetch("/api/datasets", {method: "POST", body});
+    const data = await resp.json();
+    if (!resp.ok || !data.success) {
+        showMsg(data.message || "创建失败", false);
+        return;
+    }
+    location.reload();
+});
+
+document.querySelectorAll(".btn-edit").forEach(btn => {
+    btn.addEventListener("click", () => openSheet(btn.dataset.name, 1));
+});
+
+document.getElementById("sheetPrev").addEventListener("click", () => openSheet(sheetName, sheetPage - 1));
+document.getElementById("sheetNext").addEventListener("click", () => openSheet(sheetName, sheetPage + 1));
+document.getElementById("saveSheetBtn").addEventListener("click", saveSheet);
+
+document.querySelectorAll(".btn-delete").forEach(btn => {
+    btn.addEventListener("click", async () => {
+        if (!confirm("确定删除数据集「" + btn.dataset.name + "」吗？")) return;
+        const resp = await fetch("/api/datasets/" + encodeURIComponent(btn.dataset.name), {method: "DELETE"});
+        const data = await resp.json();
+        if (!resp.ok) {
+            showMsg(data.message || "删除失败", false);
+            return;
+        }
+        location.reload();
+    });
+});
+
+async function openSheet(name, page) {
+    sheetName = name;
+    const resp = await fetch("/api/datasets/" + encodeURIComponent(name) + "/sheet?page=" + page);
+    const data = await resp.json();
+    if (!resp.ok) return;
+    sheetPage = data.page;
+    document.getElementById("editExcelDatasetName").textContent = name;
+    document.getElementById("editExcelRowCount").textContent = data.total;
+    document.getElementById("editExcelPageMeta").textContent = data.page + " / " + data.pages;
+    const head = document.getElementById("excelSheetHead");
+    const body = document.getElementById("excelSheetBody");
+    head.innerHTML = "<tr>" + data.headers.map(h => "<th>" + escapeHtml(h) + "</th>").join("") + "</tr>";
+    body.innerHTML = data.rows.map(row => {
+        const cells = data.headers.map((_, i) => {
+            const value = row[i] == null ? "" : row[i];
+            return '<td><textarea class="sheet-cell">' + escapeHtml(value) + "</textarea></td>";
+        }).join("");
+        return "<tr>" + cells + "</tr>";
+    }).join("");
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("editExcelModal")).show();
+}
+
+async function saveSheet() {
+    const rows = [...document.querySelectorAll("#excelSheetBody tr")].map(tr =>
+        [...tr.querySelectorAll("textarea")].map(el => el.value)
+    );
+    const resp = await fetch("/api/datasets/" + encodeURIComponent(sheetName) + "/sheet", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({page: sheetPage, rows}),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+        showMsg(data.message || "保存失败", false);
+        return;
+    }
+    location.reload();
+}
+
+function escapeHtml(text) {
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+</script>
+{% endblock %}
+{% block content %}
+<h1 class="page-title">测试用例管理</h1>
+<p class="page-sub">管理测试集与用例文件。历史打分表已作为数据集导入，可下载、分页编辑。<a href="/cases/browse">查看用例明细</a></p>
+<div id="pageMsg" class="flash" style="display:none"></div>
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Excel 数据集</span>
+        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#newDatasetModal">新建数据集</button>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+            <tr><th>数据集名称</th><th>对象</th><th>用例数量</th><th>Excel 文件</th><th>更新时间</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+            {% for ds in datasets %}
+            <tr>
+                <td>{{ ds.name }}</td>
+                <td><span class="badge-prod badge-{{ ds.product }}">{{ product_label[ds.product] }}</span></td>
+                <td>{{ ds.case_count }}</td>
+                <td>{{ ds.filename }}</td>
+                <td><small class="text-muted">{{ ds.updated_at }}</small></td>
+                <td>
+                    <a class="btn btn-sm btn-primary" href="/api/datasets/{{ ds.name }}/download">下载</a>
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-edit" data-name="{{ ds.name }}">编辑内容</button>
+                    {% if not ds.builtin %}
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-delete" data-name="{{ ds.name }}">删除</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted py-4">暂无 Excel 数据集，请先新建</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="newDatasetModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建 Excel 数据集</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">数据集名称</label>
+                    <input class="form-control" id="newDatasetName" placeholder="例如：小艺回归集">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">对象</label>
+                    <select class="form-select" id="newDatasetProduct">
+                        <option value="xiaoyi">小艺</option>
+                        <option value="doubao">豆包</option>
+                    </select>
+                </div>
+                <label class="form-label">上传 Excel</label>
+                <input class="form-control" id="newDatasetFile" type="file" accept=".xlsx,.xlsm">
+                <small class="text-muted">支持 .xlsx / .xlsm。列与脚本一致：用例编号、用例标题、测试步骤（语料）、预期结果。</small>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="createDatasetBtn">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editExcelModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0">编辑数据集内容</h5>
+                    <p class="text-muted mb-0" style="font-size:13px">数据集：<strong id="editExcelDatasetName"></strong></p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="text-muted">共 <b id="editExcelRowCount">0</b> 行 <span id="editExcelPageMeta"></span></div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="sheetPrev">上一页</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="sheetNext">下一页</button>
+                    </div>
+                </div>
+                <div style="overflow:auto; max-height:60vh; border:1px solid #ebeef5">
+                    <table class="table table-sm" id="excelSheetTable">
+                        <thead id="excelSheetHead"></thead>
+                        <tbody id="excelSheetBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveSheetBtn">保存本页</button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    .sheet-cell { width: 180px; min-height: 48px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 12px; padding: 4px; }
+</style>
+{% endblock %}

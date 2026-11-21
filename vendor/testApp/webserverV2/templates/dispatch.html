@@ -1,0 +1,2068 @@
+{% extends "base.html" %}
+
+{% block title %}测试任务管理 - TestApp{% endblock %}
+
+{% block extra_css %}
+<style>
+    .device-picker {
+        position: relative;
+    }
+    .device-select-btn {
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding-right: 2rem;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 16px 12px;
+    }
+    .device-dropdown {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 1050;
+        margin-top: 2px;
+        background: #fff;
+        border: 1px solid #dcdfe6;
+        border-radius: 4px;
+        max-height: 220px;
+        overflow-y: auto;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
+    .device-dropdown.show {
+        display: block;
+    }
+    .device-dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .device-dropdown-item:hover {
+        background-color: #f5f7fa;
+    }
+    .device-dropdown-item.selected {
+        background-color: #ecf5ff;
+    }
+    .device-dropdown-item.device-busy {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    .device-dropdown-item.device-busy:hover {
+        background-color: transparent;
+    }
+    .device-dropdown-item + .device-dropdown-item {
+        border-top: 1px solid #ebeef5;
+    }
+    .device-dropdown-item .device-check {
+        flex-shrink: 0;
+        margin: 0;
+        pointer-events: none;
+    }
+    .device-dropdown-text {
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .device-dropdown-actions {
+        display: flex;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid #ebeef5;
+        background: #fafafa;
+    }
+    .device-dropdown-actions .btn {
+        font-size: 12px;
+        padding: 2px 8px;
+    }
+    .device-dropdown-empty {
+        padding: 10px 12px;
+        color: #909399;
+        font-size: 13px;
+    }
+    .testset-option {
+        padding: 8px 12px;
+        border-bottom: 1px solid #ebeef5;
+    }
+    .task-card {
+        transition: background-color 0.15s;
+    }
+    .task-card:hover {
+        box-shadow: none;
+    }
+    .dispatch-task-card .table > :not(caption) > * > * {
+        padding: 12px 14px;
+        vertical-align: middle;
+        line-height: 1.4;
+        font-weight: 400;
+    }
+    .dispatch-task-card .table tbody td {
+        font-size: 13px;
+        color: #303133;
+        border-bottom-color: #ebeef5;
+    }
+    .dispatch-task-card .table thead th {
+        font-size: 12px;
+        font-weight: 500 !important;
+        color: #909399 !important;
+        background: #f8f9fb !important;
+        white-space: nowrap;
+        padding: 10px 14px;
+    }
+    .dispatch-task-card .task-table {
+        table-layout: fixed;
+        width: 100%;
+        min-width: 0;
+        margin-bottom: 0;
+    }
+    .dispatch-task-card .cell-ellipsis {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 400;
+    }
+    .dispatch-task-card .cell-id {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: #606266;
+    }
+    .dispatch-task-card .cell-muted {
+        color: #909399;
+        font-size: 12px;
+    }
+    .dispatch-task-card .col-check {
+        width: 40px;
+        text-align: center;
+        padding-left: 10px !important;
+        padding-right: 6px !important;
+        vertical-align: middle;
+    }
+    .dispatch-task-card .col-check .form-check-input {
+        margin: 0;
+        cursor: pointer;
+    }
+    .dispatch-task-card .cell-num {
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        color: #606266;
+    }
+    .status-col {
+        width: 18%;
+        min-width: 0;
+        overflow: hidden;
+        white-space: normal;
+    }
+    .status-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1.4;
+    }
+    .status-pending {
+        background-color: #fdf6ec;
+        color: #b88230;
+    }
+    .status-running {
+        background-color: #d9ecff;
+        color: #337ecc;
+    }
+    .status-preparing {
+        background-color: #fdf6ec;
+        color: #b88230;
+    }
+    .status-finishing {
+        background-color: #f4f4f5;
+        color: #73767a;
+    }
+    .status-analyzing {
+        background-color: #ecf5ff;
+        color: #409eff;
+    }
+    .status-completed {
+        background-color: #f0f9eb;
+        color: #529b2e;
+    }
+    .status-cancelled {
+        background-color: #fef0f0;
+        color: #c45656;
+    }
+    .status-skipped, .status-failed {
+        background-color: #fef0f0;
+        color: #c45656;
+    }
+    .status-takeover {
+        background-color: #fdf6ec;
+        color: #b88230;
+    }
+    .status-cell {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .status-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .status-meta {
+        font-size: 12px;
+        color: #909399;
+        font-variant-numeric: tabular-nums;
+    }
+    .status-case {
+        font-size: 12px;
+        color: #909399;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+    }
+    .progress-row {
+        display: none;
+    }
+    .progress-block-task {
+        flex: none;
+        width: auto;
+    }
+    .progress-block-case {
+        display: none;
+    }
+    .status-cell .progress {
+        height: 6px;
+        background-color: #ebeef5;
+        border-radius: 100px;
+        overflow: hidden;
+        width: 100%;
+        max-width: 160px;
+    }
+    .progress-block .progress {
+        height: 6px;
+        background-color: #ebeef5;
+    }
+    .progress-block-task .progress {
+        width: 100%;
+        max-width: 160px;
+    }
+    .progress-block-case .progress {
+        width: 100%;
+    }
+    .progress-block small,
+    .case-progress-meta {
+        font-size: 12px;
+        color: #909399;
+        display: block;
+        margin-bottom: 2px;
+        line-height: 1.3;
+        white-space: nowrap;
+    }
+    .progress-block-case small,
+    .progress-block-case .case-progress-meta {
+        width: max-content;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .progress-block .status-badge {
+        font-size: 12px;
+        padding: 2px 8px;
+        vertical-align: middle;
+    }
+    .dispatch-task-card .row-actions {
+        display: inline-flex;
+        flex-wrap: nowrap;
+        gap: 0 2px;
+        align-items: center;
+        white-space: nowrap;
+    }
+    .dispatch-task-card .row-actions .btn-text {
+        padding: 4px 6px !important;
+        font-size: 13px !important;
+        flex-shrink: 0;
+    }
+    .dispatch-task-card .col-ops {
+        width: 168px;
+        min-width: 168px;
+        white-space: nowrap;
+        overflow: visible;
+    }
+    .dispatch-task-card .btn-view-results {
+        padding: 4px 6px !important;
+        font-size: 13px !important;
+    }
+    .progress-bar-running {
+        background-color: #409eff;
+    }
+    .progress-bar-finishing {
+        background-color: #909399;
+    }
+    .progress-bar-analyzing {
+        background-color: #909399;
+    }
+    .progress-bar-completed {
+        background-color: #67c23a;
+    }
+    .progress-bar-failed {
+        background-color: #f56c6c;
+    }
+    .progress-bar-takeover {
+        background-color: #e6a23c;
+    }
+    .start-btn {
+        min-width: 120px;
+    }
+    body:has(.dispatch-page) {
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+    .page-content:has(.dispatch-page) {
+        padding-bottom: 16px;
+        overflow: visible;
+        max-width: none;
+    }
+    .dispatch-page {
+        display: flex;
+        flex-direction: column;
+        min-height: calc(100vh - 40px);
+        height: auto;
+        overflow: visible;
+    }
+    .dispatch-page .page-title { font-size: 22px; }
+    .dispatch-page .page-sub { margin: 0; }
+    .dispatch-task-row {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+    }
+    .dispatch-task-row > .col-12 {
+        height: auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+    .dispatch-task-card {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        margin-bottom: 0 !important;
+    }
+    .dispatch-task-card .card-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .task-table-scroll {
+        flex: 0 1 auto;
+        min-height: 0;
+        max-height: calc(100vh - 220px);
+        overflow-x: hidden !important;
+        overflow-y: auto;
+        width: 100%;
+        border: 1px solid #ebeef5;
+        border-radius: 8px;
+        background: #fff;
+    }
+    .task-table-scroll thead th {
+        font-weight: 500 !important;
+        position: sticky;
+        top: 0;
+        background: #f8f9fb !important;
+        z-index: 1;
+        box-shadow: inset 0 -1px 0 #ebeef5;
+    }
+    .task-list-footer {
+        flex-shrink: 0;
+        margin-top: 12px;
+        padding-top: 8px;
+        border-top: 1px solid #ebeef5;
+    }
+    .task-list-footer .pager-size {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #909399;
+        font-size: 13px;
+    }
+    .task-list-footer .pager-size-btns {
+        display: inline-flex;
+        border: 1px solid #dcdfe6;
+        border-radius: 4px;
+        overflow: hidden;
+        background: #fff;
+    }
+    .task-list-footer .pager-size-btns button {
+        appearance: none;
+        border: none;
+        background: #fff;
+        color: #606266;
+        font-size: 13px;
+        padding: 4px 10px;
+        line-height: 1.2;
+        cursor: pointer;
+        border-right: 1px solid #dcdfe6;
+    }
+    .task-list-footer .pager-size-btns button:last-child {
+        border-right: none;
+    }
+    .task-list-footer .pager-size-btns button.active {
+        background: #ecf5ff;
+        color: #409eff;
+    }
+    .task-list-footer .pager-size-btns button:hover {
+        background: #f5f7fa;
+    }
+    .task-list-footer .task-page-info {
+        color: #909399;
+        font-size: 13px;
+    }
+    .schedule-options {
+        display: none;
+        margin-top: 10px;
+        padding: 10px;
+        background-color: #f5f7fa;
+        border-radius: 4px;
+    }
+    #newTaskModal .device-dropdown {
+        z-index: 1060;
+    }
+    #newTaskModal .modal-footer {
+        align-items: center;
+    }
+    #newTaskModal #taskMessage {
+        flex: 1;
+        text-align: left;
+        min-height: 1.25rem;
+    }
+    #newTaskModal .excel-import-block {
+        margin-top: 4px;
+        padding: 12px;
+        background: #ecf5ff;
+        border: 1px solid #ecf5ff;
+        border-radius: 8px;
+    }
+    #newTaskModal .excel-import-block .form-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: #909399;
+    }
+    #newTaskModal .excel-drop {
+        text-align: center;
+        padding: 16px;
+        border: 2px dashed #dcdfe6;
+        border-radius: 8px;
+        cursor: pointer;
+        background: #fff;
+        transition: border-color 0.2s, background 0.2s;
+    }
+    #newTaskModal .excel-drop:hover,
+    #newTaskModal .excel-drop.dragover {
+        border-color: #409eff;
+        background: #ecf5ff;
+    }
+    #newTaskModal .excel-selected-file {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        padding: 8px 10px;
+        background: #fff;
+        border: 1px solid #ecf5ff;
+        border-radius: 6px;
+        font-size: 13px;
+    }
+    #newTaskModal .excel-selected-file.show {
+        display: flex;
+    }
+    #newTaskModal .excel-selected-file-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid dispatch-page">
+    <div class="row dispatch-task-row">
+        <div class="col-12">
+            <div class="card dispatch-task-card">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <div class="fw-semibold" style="font-size:16px;color:#1a1a2e;">任务列表</div>
+                        <div class="text-muted" style="font-size:12px;font-weight:400;margin-top:2px;">创建任务并查看执行进度</div>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center">
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="btnBatchDeleteTasks" disabled>批量删除</button>
+                        <button type="button" class="btn btn-sm btn-primary"
+                                data-bs-toggle="modal" data-bs-target="#newTaskModal">新建任务</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="loadTasks()">刷新</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="task-table-scroll">
+                        <table class="table table-hover task-table">
+                            <colgroup>
+                                <col class="col-check" style="width: 40px">
+                                <col style="width: 14%">
+                                <col style="width: 10%">
+                                <col style="width: 11%">
+                                <col style="width: 12%">
+                                <col style="width: 5%">
+                                <col style="width: 6%">
+                                <col style="width: 16%">
+                                <col style="width: 10%">
+                                <col class="col-ops" style="width: 168px">
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th class="col-check">
+                                        <input type="checkbox" class="form-check-input" id="taskSelectAll"
+                                               title="全选本页可删除任务">
+                                    </th>
+                                    <th>任务ID</th>
+                                    <th>设备</th>
+                                    <th>用例集</th>
+                                    <th>目标应用包</th>
+                                    <th class="cell-num">文件</th>
+                                    <th class="cell-num">通过</th>
+                                    <th class="status-col">状态</th>
+                                    <th>开始时间</th>
+                                    <th class="col-ops">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="taskTableBody">
+                                <tr>
+                                    <td colspan="10" class="text-center text-muted">暂无任务</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="task-list-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="pager-size">
+                            <span>每页</span>
+                            <div class="pager-size-btns" role="group" aria-label="每页显示条数">
+                                <button type="button" data-per-page="10" class="active">10</button>
+                                <button type="button" data-per-page="20">20</button>
+                                <button type="button" data-per-page="50">50</button>
+                            </div>
+                            <span>条</span>
+                            <span id="taskPageInfo" class="task-page-info"></span>
+                        </div>
+                        <div id="taskPagination"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新建任务对话框 -->
+<div class="modal fade" id="newTaskModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建任务</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <form id="taskForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <label class="form-label">选择设备</label>
+                            <div class="device-picker" id="devicePicker">
+                                <button type="button" class="form-select device-select-btn" id="deviceDropdownBtn">
+                                    <span id="deviceSelectLabel">加载中...</span>
+                                </button>
+                                <div class="device-dropdown" id="deviceDropdown"></div>
+                            </div>
+                            <small class="text-muted" id="deviceSelectHint">勾选多台设备；不选则自动使用当前在线设备。分片并发请选 ≥2 台</small>
+                        </div>
+                        <div class="col-12 mb-2">
+                            <label class="form-label">并发模式</label>
+                            <div class="d-flex gap-3 flex-wrap">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="concurrencyMode"
+                                           id="modeBroadcast" value="broadcast" checked>
+                                    <label class="form-check-label" for="modeBroadcast">同案广播（每台跑相同用例）</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="concurrencyMode"
+                                           id="modeShard" value="shard">
+                                    <label class="form-check-label" for="modeShard">分片并发（多机瓜分用例队列）</label>
+                                </div>
+                            </div>
+                            <small class="text-muted">五台模拟器跑 50 条 QA 请选「分片并发」+ JSON 用例集 QA_Concurrent_50</small>
+                        </div>
+                        <div class="col-12 mb-2">
+                            <label class="form-label">用例来源 <span class="text-danger">*</span></label>
+                            <div class="d-flex gap-3 flex-wrap">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="sourceType"
+                                           id="sourceExcel" value="excel" checked>
+                                    <label class="form-check-label" for="sourceExcel">Excel 数据集</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="sourceType"
+                                           id="sourceJson" value="json">
+                                    <label class="form-check-label" for="sourceJson">JSON 用例集</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3" id="excelDatasetBlock">
+                            <label class="form-label">选择 Excel 数据集 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="excelDatasetSelect">
+                                <option value="">请选择...</option>
+                            </select>
+                            <small class="text-muted">启动任务时将 Excel 转换为 JSON 后执行</small>
+                        </div>
+                        <div class="col-md-6 mb-3" id="jsonTestsetBlock" style="display: none;">
+                            <label class="form-label">选择 JSON 用例集 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="testsetSelect">
+                                <option value="">请选择...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">目标应用包 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="targetAppSelect" required>
+                                <option value="com.example.devicesdkdemo" selected>Device SDK Demo (com.example.devicesdkdemo)</option>
+                                <option value="com.unicom.cloudphone">云手机 (com.unicom.cloudphone)</option>
+                            </select>
+                            <small class="text-muted">下发时按所选应用适配用例 JSON，不修改原文件</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">执行时间</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="startType"
+                                       id="startNow" value="immediate" checked>
+                                <label class="form-check-label" for="startNow">立即执行</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="startType"
+                                       id="startSchedule" value="scheduled">
+                                <label class="form-check-label" for="startSchedule">定时执行</label>
+                            </div>
+                            <div class="schedule-options" id="scheduleOptions">
+                                <input type="datetime-local" class="form-control" id="scheduleTime">
+                            </div>
+                        </div>
+                        <div class="col-12 mb-1" id="excelConvertBlock">
+                            <div class="excel-import-block">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-medium">Excel 转 JSON 参数</span>
+                                    <a href="#" class="small" id="excelTemplateLink">下载用例模板</a>
+                                </div>
+                                <p class="text-muted small mb-2">
+                                    以下参数在启动任务时将 Excel 转换为 JSON 时使用，目标应用包与上方一致。
+                                </p>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-sm-6">
+                                        <label for="excelDefaultTimeout" class="form-label">
+                                            默认超时 timeout <span class="text-muted">(ms)</span>
+                                        </label>
+                                        <input type="number" class="form-control form-control-sm"
+                                               id="excelDefaultTimeout" min="1000" step="1000" value="90000">
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label for="excelDefaultWaitDuration" class="form-label">
+                                            默认等待 wait_duration <span class="text-muted">(ms)</span>
+                                        </label>
+                                        <input type="number" class="form-control form-control-sm"
+                                               id="excelDefaultWaitDuration" min="100" step="100" value="1500">
+                                    </div>
+                                </div>
+                                <div class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" id="excelRememberDefaults" checked>
+                                    <label class="form-check-label small text-muted" for="excelRememberDefaults">
+                                        记住以上配置，下次自动填入
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <span id="taskMessage"></span>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary start-btn">启动任务</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="taskReportModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="taskReportModalTitle">预览</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body p-0" id="taskReportModalBody">
+                <div class="text-muted p-3">加载中...</div>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-outline-primary" id="taskReportModalDownload" href="#" download>下载 Excel</a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let selectedDevices = [];
+    let onlineDevices = [];
+    let allTestsets = [];
+    let allExcelDatasets = [];
+    const TARGET_APP_STORAGE_KEY = 'testapp_target_package';
+    const EXCEL_DEFAULTS_KEY = 'testapp_excel_import_defaults';
+    let taskRefreshTimer = null;
+    let taskCurrentPage = 1;
+    let taskPerPage = 10;
+    let taskTotalPages = 0;
+    let taskTotalCount = 0;
+    let cachedTasks = [];
+    let selectedTaskIds = new Set();
+
+    function apiUrl(path) {
+        const base = (window.guiEvalBasePath || '').replace(/\/$/, '');
+        return `${base}${path}`;
+    }
+
+    function getDeviceDisplayText(device, includeBusy) {
+        if (!device) return '';
+        let text = device.device_name || device.device_id;
+        if (includeBusy && device.busy) {
+            text += ` · 执行中 · 任务 ${device.busy_task_id || ''}`;
+        }
+        return text;
+    }
+
+    function getDeviceLabel(deviceId) {
+        const device = onlineDevices.find(d => d.device_id === deviceId);
+        return device ? getDeviceDisplayText(device, false) : deviceId;
+    }
+
+    function formatTaskDevices(deviceIds) {
+        if (!deviceIds || !deviceIds.length) {
+            return '-';
+        }
+        return deviceIds.map(id => escapeHtml(getDeviceLabel(id))).join(', ');
+    }
+
+    function updateDeviceSelectLabel() {
+        const label = document.getElementById('deviceSelectLabel');
+        if (!onlineDevices.length) {
+            label.textContent = '暂无在线设备';
+            return;
+        }
+        if (!selectedDevices.length) {
+            label.textContent = '请选择设备（可多选）...';
+            return;
+        }
+        if (selectedDevices.length === 1) {
+            label.textContent = getDeviceLabel(selectedDevices[0]);
+            return;
+        }
+        label.textContent = '已选 ' + selectedDevices.length + ' 台设备';
+    }
+
+    function renderDeviceDropdown() {
+        const dropdown = document.getElementById('deviceDropdown');
+        if (!onlineDevices.length) {
+            dropdown.innerHTML = `
+                <div class="device-dropdown-empty">
+                    暂无在线设备
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="btnWakeDevices">
+                            拉起模拟器 TestApp
+                        </button>
+                    </div>
+                    <div class="small text-muted mt-1">将启动各 AVD 上的 TestApp 并连接本服务器</div>
+                </div>`;
+            const btn = document.getElementById('btnWakeDevices');
+            if (btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    wakeLabDevices({force: true});
+                });
+            }
+            updateDeviceSelectLabel();
+            return;
+        }
+
+        dropdown.innerHTML = (() => {
+            const idle = onlineDevices.filter(d => !d.busy);
+            const allSelected = idle.length > 0 && idle.every(d => selectedDevices.includes(d.device_id));
+            const actions = `
+                <div class="device-dropdown-actions">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnSelectAllDevices">
+                        ${allSelected ? '取消全选' : '全选空闲'}
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnClearDevices">清空</button>
+                </div>`;
+            const items = onlineDevices.map(d => {
+                const busy = !!d.busy;
+                const selected = !busy && selectedDevices.includes(d.device_id);
+                const itemClass = [
+                    'device-dropdown-item',
+                    busy ? 'device-busy' : '',
+                    selected ? 'selected' : '',
+                ].filter(Boolean).join(' ');
+                const lineText = escapeHtml(getDeviceDisplayText(d, true));
+                return `
+                <div class="${itemClass}"
+                     data-device-id="${escapeHtml(d.device_id)}"
+                     data-device-busy="${busy ? '1' : '0'}"
+                     title="${lineText}">
+                    <input type="checkbox" class="form-check-input device-check"
+                           ${selected ? 'checked' : ''} ${busy ? 'disabled' : ''} tabindex="-1">
+                    <span class="device-dropdown-text">${lineText}${busy ? '（忙碌）' : ''}</span>
+                </div>`;
+            }).join('');
+            return actions + items;
+        })();
+        updateDeviceSelectLabel();
+    }
+
+    let wakeDevicesInFlight = false;
+    function wakeLabDevices(opts) {
+        opts = opts || {};
+        if (wakeDevicesInFlight) {
+            return Promise.resolve();
+        }
+        wakeDevicesInFlight = true;
+        const label = document.getElementById('deviceSelectLabel');
+        const prev = label ? label.textContent : '';
+        if (label) {
+            label.textContent = '正在拉起模拟器 TestApp...';
+        }
+        showMessage('正在拉起各模拟器 TestApp，请稍候…', 'info');
+        return fetch(apiUrl('/api/lab/wake-devices'), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                wait_online_sec: 90,
+                min_online: 1,
+            }),
+        })
+            .then(res => res.json().then(data => ({ok: res.ok, data})))
+            .then(({ok, data}) => {
+                if (ok && data.success) {
+                    showMessage(data.message || `已上线 ${data.online_count || 0} 台设备`, 'success');
+                } else {
+                    showMessage(data.message || '拉起设备未完全成功，请稍后重试', 'warning');
+                }
+                return loadDevices();
+            })
+            .catch(err => {
+                showMessage('拉起设备失败: ' + err.message, 'danger');
+                if (label) {
+                    label.textContent = prev || '暂无在线设备';
+                }
+            })
+            .finally(() => {
+                wakeDevicesInFlight = false;
+            });
+    }
+
+    // 加载在线设备
+    function loadDevices() {
+        return fetch('/api/devices')
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error('HTTP ' + res.status);
+                }
+                return res.json();
+            })
+            .then(data => {
+                onlineDevices = data.devices || [];
+                selectedDevices = selectedDevices.filter(id => {
+                    const current = onlineDevices.find(d => d.device_id === id);
+                    return current && !current.busy;
+                });
+                renderDeviceDropdown();
+                refreshTaskTableRows();
+                return onlineDevices;
+            })
+            .catch(err => {
+                onlineDevices = [];
+                selectedDevices = [];
+                const dropdown = document.getElementById('deviceDropdown');
+                dropdown.innerHTML = '<div class="device-dropdown-empty text-danger">无法连接服务器，请确认 V2 已启动且端口为 9527</div>';
+                document.getElementById('deviceSelectLabel').textContent = '加载失败';
+                console.error('loadDevices failed:', err);
+                return [];
+            });
+    }
+
+    function isDeviceBusy(deviceId) {
+        const device = onlineDevices.find(d => d.device_id === deviceId);
+        return !!(device && device.busy);
+    }
+
+    function selectDevice(deviceId) {
+        if (isDeviceBusy(deviceId)) {
+            return;
+        }
+        const idx = selectedDevices.indexOf(deviceId);
+        if (idx >= 0) {
+            selectedDevices.splice(idx, 1);
+        } else {
+            selectedDevices.push(deviceId);
+        }
+        renderDeviceDropdown();
+        document.getElementById('deviceDropdown').classList.add('show');
+    }
+
+    function selectAllIdleDevices() {
+        const idleIds = onlineDevices.filter(d => !d.busy).map(d => d.device_id);
+        const allSelected = idleIds.length > 0 && idleIds.every(id => selectedDevices.includes(id));
+        selectedDevices = allSelected ? [] : idleIds.slice();
+        renderDeviceDropdown();
+        document.getElementById('deviceDropdown').classList.add('show');
+    }
+
+    function clearSelectedDevices() {
+        selectedDevices = [];
+        renderDeviceDropdown();
+        document.getElementById('deviceDropdown').classList.add('show');
+    }
+
+    function toggleDeviceDropdown() {
+        document.getElementById('deviceDropdown').classList.toggle('show');
+    }
+
+    function hideDeviceDropdown() {
+        document.getElementById('deviceDropdown').classList.remove('show');
+    }
+
+    function initDevicePicker() {
+        const picker = document.getElementById('devicePicker');
+        const dropdownBtn = document.getElementById('deviceDropdownBtn');
+        const dropdown = document.getElementById('deviceDropdown');
+
+        dropdownBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            toggleDeviceDropdown();
+        });
+
+        dropdown.addEventListener('click', function(e) {
+            if (e.target.closest('#btnSelectAllDevices')) {
+                e.preventDefault();
+                e.stopPropagation();
+                selectAllIdleDevices();
+                return;
+            }
+            if (e.target.closest('#btnClearDevices')) {
+                e.preventDefault();
+                e.stopPropagation();
+                clearSelectedDevices();
+                return;
+            }
+            const item = e.target.closest('.device-dropdown-item');
+            if (!item || item.dataset.deviceBusy === '1' || !item.dataset.deviceId) {
+                return;
+            }
+            e.stopPropagation();
+            selectDevice(item.dataset.deviceId);
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!picker.contains(e.target)) {
+                hideDeviceDropdown();
+            }
+        });
+    }
+
+    // 加载目标应用包列表
+    function loadTargetApps() {
+        const select = document.getElementById('targetAppSelect');
+        if (!select) return;
+        const saved = localStorage.getItem(TARGET_APP_STORAGE_KEY);
+        fetch(apiUrl('/api/target-apps'))
+            .then(res => res.json())
+            .then(data => {
+                const apps = data.apps || [];
+                if (!apps.length) return;
+                select.innerHTML = apps.map(app => `
+                    <option value="${escapeHtml(app.package)}">
+                        ${escapeHtml(app.label)} (${escapeHtml(app.package)})
+                    </option>
+                `).join('');
+                if (saved && [...select.options].some(o => o.value === saved)) {
+                    select.value = saved;
+                }
+            })
+            .catch(() => {
+                if (saved && [...select.options].some(o => o.value === saved)) {
+                    select.value = saved;
+                }
+            });
+    }
+
+    // 加载 JSON 用例集
+    function loadTestsets() {
+        fetch('/api/testsets')
+            .then(res => res.json())
+            .then(data => {
+                allTestsets = data.testsets || [];
+                const select = document.getElementById('testsetSelect');
+                select.innerHTML = '<option value="">请选择...</option>' +
+                    allTestsets.map(ts => `<option value="${ts.name}">${ts.name} (${ts.files.length} 个 JSON)</option>`).join('');
+            });
+    }
+
+    function loadExcelDatasets() {
+        fetch(apiUrl('/api/excel-datasets?_=' + Date.now()), {cache: 'no-store'})
+            .then(res => res.json())
+            .then(data => {
+                allExcelDatasets = (data.datasets || []).slice().sort((a, b) => {
+                    const ta = Number(a.last_modified || a.create_time || 0);
+                    const tb = Number(b.last_modified || b.create_time || 0);
+                    return tb - ta;
+                });
+                const select = document.getElementById('excelDatasetSelect');
+                select.innerHTML = '<option value="">请选择...</option>' +
+                    allExcelDatasets.map(ds => {
+                        const suffix = ds.has_file ? '' : ' (未上传 Excel)';
+                        const count = ds.has_file && ds.case_count != null ? ` (${ds.case_count}条)` : '';
+                        return `<option value="${ds.name}" ${ds.has_file ? '' : 'disabled'}>${ds.name}${count}${suffix}</option>`;
+                    }).join('');
+            });
+    }
+
+    function getSelectedSourceType() {
+        return document.querySelector('input[name="sourceType"]:checked')?.value || 'excel';
+    }
+
+    function updateSourceTypeUI() {
+        const sourceType = getSelectedSourceType();
+        const isExcel = sourceType === 'excel';
+        document.getElementById('excelDatasetBlock').style.display = isExcel ? 'block' : 'none';
+        document.getElementById('jsonTestsetBlock').style.display = isExcel ? 'none' : 'block';
+        document.getElementById('excelConvertBlock').style.display = isExcel ? 'block' : 'none';
+    }
+
+    function formatTaskTestset(task) {
+        if (task.excel_dataset) {
+            return escapeHtml(task.excel_dataset) + ' <small class="text-muted">(Excel)</small>';
+        }
+        return escapeHtml(task.testset || '-');
+    }
+
+    function buildProgressBar(percent, status, striped) {
+        const barClass = getProgressBarClass(status);
+        const stripedClass = striped ? ' progress-bar-striped progress-bar-animated' : '';
+        const safePercent = Math.max(0, Math.min(100, percent || 0));
+        return `
+            <div class="progress">
+                <div class="progress-bar ${barClass}${stripedClass}"
+                     style="width: ${safePercent}%"></div>
+            </div>`;
+    }
+
+    function getProgressBarClass(status) {
+        const key = String(status || '').trim().toLowerCase();
+        const map = {
+            running: 'progress-bar-running',
+            finishing: 'progress-bar-finishing',
+            analyzing: 'progress-bar-analyzing',
+            completed: 'progress-bar-completed',
+            failed: 'progress-bar-failed',
+            skipped: 'progress-bar-failed',
+            takeover: 'progress-bar-takeover',
+            pending: 'bg-secondary',
+            cancelled: 'bg-secondary'
+        };
+        return map[key] || 'progress-bar-running';
+    }
+
+    function getCaseProgressPercent(caseItem) {
+        const status = String((caseItem && caseItem.status) || '').trim().toLowerCase();
+        const stepIndex = caseItem.step_index;
+        const stepTotal = caseItem.step_total;
+        if (status === 'running' && stepTotal > 0 && stepIndex > 0) {
+            return Math.min(99, Math.round(stepIndex / stepTotal * 100));
+        }
+        if (status === 'finishing') {
+            return 99;
+        }
+        if (status === 'running' && caseItem.started_at && caseItem.timeout_sec) {
+            const now = Date.now() / 1000;
+            const elapsed = Math.max(0, now - caseItem.started_at);
+            return Math.min(95, Math.round(elapsed / caseItem.timeout_sec * 100));
+        }
+        if (status === 'analyzing' && caseItem.analyzing_started_at) {
+            const now = Date.now() / 1000;
+            const elapsed = Math.max(0, now - caseItem.analyzing_started_at);
+            return Math.min(99, 95 + Math.round(elapsed / 60 * 4));
+        }
+        const map = {
+            pending: 0,
+            running: 10,
+            finishing: 99,
+            analyzing: 95,
+            completed: 100,
+            failed: 100,
+            takeover: 100,
+            skipped: 100,
+            cancelled: 0
+        };
+        return map[status] || 0;
+    }
+
+    function formatCaseStepMeta(caseItem) {
+        const stepIndex = caseItem.step_index;
+        const stepTotal = caseItem.step_total;
+        if (stepTotal > 0 && stepIndex > 0) {
+            return `步骤 ${stepIndex}/${stepTotal}`;
+        }
+        return '';
+    }
+
+    function getEffectiveCaseStatus(task, caseItem) {
+        if (!caseItem) {
+            return 'pending';
+        }
+        if (caseItem.status !== 'pending') {
+            return caseItem.status;
+        }
+        if (task.status === 'analyzing') {
+            return 'analyzing';
+        }
+        if (task.status === 'finishing') {
+            return 'finishing';
+        }
+        if (task.status === 'running') {
+            return 'running';
+        }
+        return caseItem.status;
+    }
+
+    function isTerminalCaseStatus(status) {
+        return ['completed', 'failed', 'cancelled', 'skipped', 'takeover'].includes(status);
+    }
+
+    function getCurrentCase(task) {
+        const cases = normalizeCaseProgress(task);
+        const active = cases.find(c => ['running', 'finishing', 'analyzing'].includes(c.status));
+        if (active) {
+            return active;
+        }
+        if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
+            // 取最后一条已结束用例（含失败/接管），避免只显示成功用例
+            const terminal = cases.filter(c => isTerminalCaseStatus(c.status));
+            return terminal.slice(-1)[0] || cases[cases.length - 1];
+        }
+        if (['running', 'finishing', 'analyzing'].includes(task.status)) {
+            return cases.find(c => c.status === 'pending') || cases[0] || null;
+        }
+        return cases.find(c => c.status === 'pending') || null;
+    }
+
+    function normalizeCaseProgress(task) {
+        if (task.case_progress && task.case_progress.length) {
+            return task.case_progress;
+        }
+        return (task.files || []).map(filename => ({
+            case_id: filename.replace(/\.json$/i, ''),
+            filename,
+            status: task.status === 'completed' ? 'completed' : 'pending'
+        }));
+    }
+
+    function getTaskProgress(task) {
+        const cases = normalizeCaseProgress(task);
+        const total = cases.length;
+        // 已结束 = 成功 + 失败 + 接管 + 跳过 + 取消（都算进度）
+        const finished = cases.filter(c => isTerminalCaseStatus(c.status)).length;
+        const success = cases.filter(c => c.status === 'completed').length;
+        const failed = cases.filter(c => c.status === 'failed').length;
+        const takeover = cases.filter(c => c.status === 'takeover').length;
+        if (!total) {
+            return { completed: 0, total: 0, percent: 0, success: 0, failed: 0, takeover: 0 };
+        }
+        const current = getCurrentCase(task);
+        let partial = 0;
+        if (current) {
+            const caseStatus = getEffectiveCaseStatus(task, current);
+            if (['running', 'finishing', 'analyzing'].includes(caseStatus)) {
+                partial = getCaseProgressPercent({ ...current, status: caseStatus }) / 100;
+            }
+        }
+        const percent = Math.min(100, Math.round((finished + partial) / total * 100));
+        return {
+            completed: finished,
+            total,
+            percent,
+            success,
+            failed,
+            takeover,
+        };
+    }
+
+    function formatProgressMeta(progress) {
+        return `${progress.completed}/${progress.total} · ${progress.percent}%`;
+    }
+
+    function formatCasePass(task) {
+        const stats = task.case_pass || {};
+        const total = stats.total != null ? stats.total : (task.files || []).length;
+        const passed = stats.passed != null ? stats.passed : 0;
+        return `${passed}/${total}`;
+    }
+
+    function isPreflightActive(task) {
+        if (!task || task.status !== 'running') return false;
+        const phase = (task.preflight_phase || '').trim();
+        if (!phase || phase === 'done' || phase === 'none') return false;
+        return true;
+    }
+
+    function getPreflightText(task) {
+        const phase = (task.preflight_phase || '').trim();
+        const msg = (task.preflight_message || '').trim();
+        const map = {
+            checking: '检测环境…',
+            preparing: '打开 QA 聊天页并重连 TestApp…',
+            waiting_online: '等待 TestApp 上线…',
+            waking: '重新拉起 TestApp…',
+            failed: '前置准备失败',
+        };
+        const short = map[phase] || '前置准备中…';
+        return msg || short;
+    }
+
+    function renderProgressCell(task) {
+        const progress = getTaskProgress(task);
+        const preparing = isPreflightActive(task);
+        const taskStriped = ['running', 'finishing', 'analyzing'].includes(task.status);
+        const currentCase = getCurrentCase(task);
+
+        let caseLine = '';
+        if (preparing) {
+            const pfText = getPreflightText(task);
+            caseLine = `<div class="status-case" title="${escapeHtml(pfText)}">前置：${escapeHtml(pfText)}</div>`;
+        } else if (currentCase) {
+            const caseStatus = getEffectiveCaseStatus(task, currentCase);
+            const casePercent = getCaseProgressPercent({ ...currentCase, status: caseStatus });
+            const caseLabel = currentCase.case_id || currentCase.filename || '';
+            const stepMeta = formatCaseStepMeta(currentCase);
+            const title = `用例: ${caseLabel}${stepMeta ? ' ' + stepMeta : ''} ${getStatusText(caseStatus)} (${casePercent}%)`;
+            caseLine = `<div class="status-case" title="${escapeHtml(title)}">用例 ${escapeHtml(caseLabel)} · ${getStatusText(caseStatus)}</div>`;
+        }
+
+        const badgeClass = preparing ? 'status-preparing' : `status-${task.status}`;
+        const badgeText = preparing ? '前置准备中' : getStatusText(task.status);
+        const metaText = preparing
+            ? '准备中 · 约 1～3 分钟'
+            : formatProgressMeta(progress);
+        const barStatus = preparing ? 'running' : task.status;
+
+        return `
+            <div class="status-cell">
+                <div class="status-line">
+                    <span class="status-badge ${badgeClass}">${badgeText}</span>
+                    <span class="status-meta">${escapeHtml(metaText)}</span>
+                </div>
+                ${buildProgressBar(preparing ? Math.max(5, progress.percent) : progress.percent, barStatus, taskStriped || preparing)}
+                ${caseLine}
+            </div>`;
+    }
+
+    function renderTaskRows(task) {
+        const isActive = ['pending', 'running', 'finishing', 'analyzing'].includes(task.status);
+        const stopBtn = isActive
+            ? `<button type="button"
+                    class="btn btn-sm btn-text btn-text-warning btn-stop-task"
+                    data-task-id="${escapeHtml(task.id)}">停止</button>`
+            : '';
+        const restartBtn = `<button type="button"
+                class="btn btn-sm btn-text btn-text-muted btn-restart-task"
+                data-task-id="${escapeHtml(task.id)}"
+                data-task-active="${isActive ? '1' : '0'}"
+                title="${isActive ? '请先停止任务' : '重新执行任务'}">重启</button>`;
+        const deleteBtn = `<button type="button"
+                class="btn btn-sm btn-text btn-text-danger btn-delete-task"
+                data-task-id="${escapeHtml(task.id)}"
+                data-task-active="${isActive ? '1' : '0'}"
+                title="${isActive ? '请先停止任务' : '删除任务'}">删除</button>`;
+        const viewResultsBtn = `<button type="button"
+                class="btn btn-sm btn-text btn-view-results"
+                data-task-id="${escapeHtml(task.id)}"
+                title="查看该任务的用例详情">详情</button>`;
+        const previewReportBtn = `<button type="button"
+                class="btn btn-sm btn-text btn-preview-report"
+                data-task-id="${escapeHtml(task.id)}"
+                title="整合预览全部用例结果并可下载 Excel">预览</button>`;
+        const deviceText = formatTaskDevices(task.devices);
+        const testsetPlain = task.excel_dataset
+            ? `${task.excel_dataset} (Excel)`
+            : (task.testset || '-');
+        const testsetHtml = formatTaskTestset(task);
+        const pkg = task.target_package || 'com.unicom.cloudphone';
+        const startTime = formatTaskStartTime(task);
+        return `
+            <tr class="task-card" data-task-id="${escapeHtml(task.id)}">
+                <td class="col-check">
+                    <input type="checkbox" class="form-check-input task-row-checkbox"
+                           data-task-id="${escapeHtml(task.id)}"
+                           ${isActive ? 'disabled title="运行中的任务请先停止再删除"' : ''}
+                           ${!isActive && selectedTaskIds.has(task.id) ? 'checked' : ''}>
+                </td>
+                <td><span class="cell-ellipsis cell-id" title="${escapeHtml(task.id)}">${escapeHtml(task.id)}</span></td>
+                <td><span class="cell-ellipsis" title="${deviceText.replace(/<[^>]+>/g, '')}">${deviceText}</span></td>
+                <td><span class="cell-ellipsis" title="${escapeHtml(testsetPlain)}">${testsetHtml}</span></td>
+                <td><span class="cell-ellipsis cell-muted" title="${escapeHtml(pkg)}">${escapeHtml(pkg)}</span></td>
+                <td class="cell-num">${task.files.length}</td>
+                <td class="cell-num">${formatCasePass(task)}</td>
+                <td class="status-col">${renderProgressCell(task)}</td>
+                <td><span class="cell-ellipsis cell-muted" title="${escapeHtml(startTime)}">${escapeHtml(startTime)}</span></td>
+                <td class="col-ops">
+                    <div class="row-actions">
+                        ${viewResultsBtn}
+                        ${previewReportBtn}
+                        ${stopBtn}
+                        ${restartBtn}
+                        ${deleteBtn}
+                    </div>
+                </td>
+            </tr>`;
+    }
+
+    function scheduleTaskRefresh(hasActiveTasks) {
+        if (taskRefreshTimer) {
+            clearInterval(taskRefreshTimer);
+            taskRefreshTimer = null;
+        }
+        if (hasActiveTasks) {
+            taskRefreshTimer = setInterval(loadTasks, 5000);
+        }
+    }
+
+    function renderTaskPagination() {
+        const container = document.getElementById('taskPagination');
+        const info = document.getElementById('taskPageInfo');
+        if (taskTotalCount === 0) {
+            container.innerHTML = '';
+            info.textContent = '共 0 条';
+            return;
+        }
+
+        const start = (taskCurrentPage - 1) * taskPerPage + 1;
+        const end = Math.min(taskCurrentPage * taskPerPage, taskTotalCount);
+        info.textContent = `共 ${taskTotalCount} 条，显示 ${start}-${end}`;
+
+        if (taskTotalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let html = '<nav><ul class="pagination pagination-sm justify-content-end mb-0">';
+        html += `<li class="page-item ${taskCurrentPage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-task-page="${taskCurrentPage - 1}">上一页</a>
+        </li>`;
+
+        for (let i = 1; i <= taskTotalPages; i++) {
+            if (i === 1 || i === taskTotalPages || (i >= taskCurrentPage - 1 && i <= taskCurrentPage + 1)) {
+                html += `<li class="page-item ${i === taskCurrentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" data-task-page="${i}">${i}</a>
+                </li>`;
+            } else if (i === taskCurrentPage - 2 || i === taskCurrentPage + 2) {
+                html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+            }
+        }
+
+        html += `<li class="page-item ${taskCurrentPage === taskTotalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-task-page="${taskCurrentPage + 1}">下一页</a>
+        </li></ul></nav>`;
+        container.innerHTML = html;
+    }
+
+    function goToTaskPage(page) {
+        if (page < 1 || page > taskTotalPages) return;
+        taskCurrentPage = page;
+        loadTasks();
+    }
+
+    function refreshTaskTableRows() {
+        const tbody = document.getElementById('taskTableBody');
+        if (!tbody || !cachedTasks.length) {
+            return;
+        }
+        tbody.innerHTML = cachedTasks.map(renderTaskRows).join('');
+        updateTaskSelectionUI();
+    }
+
+    // 加载任务列表
+    function loadTasks() {
+        const url = apiUrl(
+            `/api/tasks?page=${taskCurrentPage}&per_page=${taskPerPage}`
+        );
+        fetch(url)
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error('HTTP ' + res.status);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (!data.success) {
+                    throw new Error(data.message || '加载任务列表失败');
+                }
+                const tbody = document.getElementById('taskTableBody');
+                const tasks = data.tasks || [];
+                cachedTasks = tasks;
+                taskTotalPages = data.total_pages || 0;
+                taskTotalCount = data.total || 0;
+                if (taskTotalPages > 0 && taskCurrentPage > taskTotalPages) {
+                    taskCurrentPage = taskTotalPages;
+                    loadTasks();
+                    return;
+                }
+                if (tasks.length > 0) {
+                    tbody.innerHTML = tasks.map(renderTaskRows).join('');
+                    updateTaskSelectionUI();
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">暂无任务</td></tr>';
+                    updateTaskSelectionUI();
+                }
+                renderTaskPagination();
+                alertScreenCaptureBlocks(tasks);
+                scheduleTaskRefresh(!!data.has_active_tasks);
+            })
+            .catch(err => {
+                console.error('loadTasks failed:', err);
+                showMessage('任务列表加载失败: ' + err.message, 'danger');
+            });
+    }
+
+    function alertScreenCaptureBlocks(tasks) {
+        (tasks || []).forEach(task => {
+            const msg = task && task.screen_capture_block;
+            const at = task && task.screen_capture_block_at;
+            if (!msg || !at) return;
+            const key = 'sc-block-' + task.id + '-' + at;
+            try {
+                if (sessionStorage.getItem(key)) return;
+                sessionStorage.setItem(key, '1');
+            } catch (e) { /* ignore */ }
+            alert(msg);
+        });
+    }
+
+    function getStatusText(status) {
+        const key = String(status || '').trim().toLowerCase();
+        const map = {
+            'pending': '等待中',
+            'running': '执行中',
+            'finishing': '收尾中',
+            'analyzing': '分析中',
+            'completed': '已完成',
+            'cancelled': '已取消',
+            'failed': '失败',
+            'takeover': '人工接管',
+            'skipped': '跳过'
+        };
+        return map[key] || status;
+    }
+
+    function formatTime(timestamp) {
+        if (!timestamp) return '-';
+        return new Date(timestamp * 1000).toLocaleString('zh-CN');
+    }
+
+    function formatTaskStartTime(task) {
+        if (task.start_time) {
+            return formatTime(task.start_time);
+        }
+        if (task.start_type === 'scheduled' && task.schedule_time) {
+            const text = String(task.schedule_time).replace('T', ' ');
+            const dt = new Date(task.schedule_time);
+            if (!Number.isNaN(dt.getTime())) {
+                return `定时 ${dt.toLocaleString('zh-CN')}`;
+            }
+            return `定时 ${text}`;
+        }
+        return '-';
+    }
+
+    // 切换定时选项
+    document.querySelectorAll('input[name="startType"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const scheduleOptions = document.getElementById('scheduleOptions');
+            scheduleOptions.style.display = this.value === 'scheduled' ? 'block' : 'none';
+        });
+    });
+
+    function loadExcelImportDefaults() {
+        const timeoutEl = document.getElementById('excelDefaultTimeout');
+        const waitEl = document.getElementById('excelDefaultWaitDuration');
+        const targetSelect = document.getElementById('targetAppSelect');
+        try {
+            const saved = JSON.parse(localStorage.getItem(EXCEL_DEFAULTS_KEY) || '{}');
+            if (saved.timeout_ms) {
+                timeoutEl.value = saved.timeout_ms;
+            }
+            if (saved.wait_duration) {
+                waitEl.value = saved.wait_duration;
+            }
+            if (saved.package_name && targetSelect &&
+                [...targetSelect.options].some(o => o.value === saved.package_name)) {
+                targetSelect.value = saved.package_name;
+            }
+        } catch (e) {
+            // ignore invalid cache
+        }
+    }
+
+    function saveExcelImportDefaults(packageName) {
+        const timeoutMs = parseInt(document.getElementById('excelDefaultTimeout').value, 10);
+        const waitDuration = parseInt(document.getElementById('excelDefaultWaitDuration').value, 10);
+        if (!timeoutMs || timeoutMs <= 0 || !waitDuration || waitDuration <= 0) {
+            return;
+        }
+        localStorage.setItem(EXCEL_DEFAULTS_KEY, JSON.stringify({
+            timeout_ms: timeoutMs,
+            wait_duration: waitDuration,
+            package_name: packageName,
+        }));
+    }
+
+    function getExcelImportDefaults(targetPackage) {
+        const timeoutMs = parseInt(document.getElementById('excelDefaultTimeout').value, 10);
+        const waitDuration = parseInt(document.getElementById('excelDefaultWaitDuration').value, 10);
+        if (!timeoutMs || timeoutMs <= 0) {
+            showMessage('timeout 须为正整数（毫秒）', 'danger');
+            return null;
+        }
+        if (!waitDuration || waitDuration <= 0) {
+            showMessage('wait_duration 须为正整数（毫秒）', 'danger');
+            return null;
+        }
+        return {
+            timeout_ms: timeoutMs,
+            wait_duration: waitDuration,
+            package_name: targetPackage,
+        };
+    }
+
+    function initExcelImportSection() {
+        const excelTemplateLink = document.getElementById('excelTemplateLink');
+        excelTemplateLink.href = apiUrl('/api/files/excel-template');
+        excelTemplateLink.addEventListener('click', e => e.stopPropagation());
+    }
+
+    // 提交任务
+    document.getElementById('taskForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const sourceType = getSelectedSourceType();
+        const excelDataset = document.getElementById('excelDatasetSelect').value;
+        const testset = document.getElementById('testsetSelect').value;
+        const targetPackage = document.getElementById('targetAppSelect').value;
+        const startType = document.querySelector('input[name="startType"]:checked').value;
+        const scheduleTime = document.getElementById('scheduleTime').value;
+        const submitBtn = this.querySelector('button[type="submit"]');
+
+        if (selectedDevices.some(isDeviceBusy)) {
+            showMessage('所选设备中有正在执行其他任务的设备', 'danger');
+            return;
+        }
+        const concurrencyMode = document.querySelector('input[name="concurrencyMode"]:checked')?.value || 'broadcast';
+        // 已选手动设备时仍校验分片至少 2 台；未选则交给服务端拉起后自动选齐
+        if (concurrencyMode === 'shard' && selectedDevices.length > 0 && selectedDevices.length < 2) {
+            showMessage('分片并发请至少选择 2 台设备', 'danger');
+            return;
+        }
+        if (sourceType === 'excel') {
+            if (!excelDataset) {
+                showMessage('请选择 Excel 数据集', 'danger');
+                return;
+            }
+        } else if (!testset) {
+            showMessage('请选择 JSON 用例集', 'danger');
+            return;
+        }
+        if (!targetPackage) {
+            showMessage('请选择目标应用包', 'danger');
+            return;
+        }
+        if (startType === 'scheduled' && !scheduleTime) {
+            showMessage('请选择定时执行时间', 'danger');
+            return;
+        }
+
+        // DeviceSDK 真机经 TestApp：禁止 lab auto_wake（会同步 SSH/等模拟器，把 9526 整站卡死）
+        const isDeviceSdk = !!(targetPackage && String(targetPackage).includes('devicesdk'));
+        const taskData = {
+            account: '',
+            devices: selectedDevices.slice(),
+            source_type: sourceType,
+            target_package: targetPackage,
+            start_type: startType,
+            concurrency_mode: concurrencyMode,
+            auto_wake: !isDeviceSdk,
+        };
+
+        if (sourceType === 'excel') {
+            const defaults = getExcelImportDefaults(targetPackage);
+            if (!defaults) return;
+            taskData.excel_dataset = excelDataset;
+            taskData.timeout_ms = defaults.timeout_ms;
+            taskData.wait_duration = defaults.wait_duration;
+            if (document.getElementById('excelRememberDefaults').checked) {
+                saveExcelImportDefaults(targetPackage);
+            }
+        } else {
+            taskData.testset = testset;
+        }
+
+        if (startType === 'scheduled' && scheduleTime) {
+            taskData.schedule_time = scheduleTime;
+        }
+
+        submitBtn.disabled = true;
+        const originalBtnText = submitBtn.textContent;
+        submitBtn.textContent = sourceType === 'excel' ? '转换并启动...' : '启动任务...';
+        if (selectedDevices.length === 0) {
+            submitBtn.textContent = '拉起设备并启动...';
+        }
+
+        fetch(apiUrl('/api/tasks'), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(taskData)
+        })
+        .then(res => res.json().then(data => ({ok: res.ok, data})))
+        .then(({ok, data}) => {
+            if (ok && data.success) {
+                localStorage.setItem(TARGET_APP_STORAGE_KEY, targetPackage);
+                selectedDevices = [];
+                updateDeviceSelectLabel();
+                const modalEl = document.getElementById('newTaskModal');
+                bootstrap.Modal.getInstance(modalEl)?.hide();
+                taskCurrentPage = 1;
+                loadTasks();
+            } else {
+                if (data.screen_capture_ok === false) {
+                    alert(data.message || 'DeviceSDK 录屏权限未开启');
+                }
+                showMessage(data.message || '任务创建失败', 'danger');
+            }
+        })
+        .catch(err => showMessage('任务创建失败: ' + err.message, 'danger'))
+        .finally(() => {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalBtnText;
+        });
+    });
+
+    function showMessage(msg, type) {
+        const el = document.getElementById('taskMessage');
+        if (!msg) {
+            el.textContent = '';
+            el.className = '';
+            return;
+        }
+        el.textContent = msg;
+        el.className = `text-${type}`;
+        setTimeout(() => showMessage('', ''), 3000);
+    }
+
+    // 停止任务
+    function stopTask(taskId) {
+        if (!taskId || !confirm(`确定要停止任务 "${taskId}" 吗？`)) return;
+
+        fetch(apiUrl(`/api/tasks/${encodeURIComponent(taskId)}/stop`), {method: 'POST'})
+            .then(res => res.json().then(data => ({ok: res.ok, data})))
+            .then(({ok, data}) => {
+                if (ok && data.success) {
+                    loadTasks();
+                } else {
+                    alert(data.message || '停止失败');
+                }
+            })
+            .catch(err => alert('停止失败: ' + err.message));
+    }
+
+    // 重启任务
+    let restartInFlight = null;
+    function restartTask(taskId, isActive) {
+        if (!taskId) return;
+        if (isActive) {
+            alert('任务运行中，请先停止后再重启');
+            return;
+        }
+        if (restartInFlight === taskId) {
+            alert('正在重启中，请稍候…');
+            return;
+        }
+        if (!confirm(`确定要重启任务 "${taskId}" 吗？\n（按顺序重新执行。每个用例开跑时才清空该用例的历史结果，未跑到的用例保留上次数据）`)) {
+            return;
+        }
+
+        restartInFlight = taskId;
+        fetch(apiUrl(`/api/tasks/${encodeURIComponent(taskId)}/restart`), {method: 'POST'})
+            .then(res => res.json().then(data => ({ok: res.ok, data})))
+            .then(({ok, data}) => {
+                if (ok && data.success) {
+                    alert(data.message || '任务已重启');
+                    loadTasks();
+                } else {
+                    alert(data.message || '重启失败');
+                    loadTasks();
+                }
+            })
+            .catch(err => alert('重启失败: ' + err.message))
+            .finally(() => {
+                if (restartInFlight === taskId) {
+                    restartInFlight = null;
+                }
+            });
+    }
+
+    // 删除任务
+    function deleteTask(taskId, isActive) {
+        if (!taskId) return;
+        if (isActive) {
+            alert('任务运行中，请先停止任务后再删除');
+            return;
+        }
+        if (!confirm(`确定要删除任务 "${taskId}" 吗？`)) return;
+
+        fetch(apiUrl(`/api/tasks/${encodeURIComponent(taskId)}`), {method: 'DELETE'})
+            .then(res => res.json().then(data => ({ok: res.ok, data})))
+            .then(({ok, data}) => {
+                if (ok && data.success) {
+                    selectedTaskIds.delete(taskId);
+                    if (taskRefreshTimer) {
+                        clearInterval(taskRefreshTimer);
+                        taskRefreshTimer = null;
+                    }
+                    loadTasks();
+                } else {
+                    alert(data.message || '删除失败');
+                }
+            })
+            .catch(err => alert('删除失败: ' + err.message));
+    }
+
+    function getDeletableTaskIdsOnPage() {
+        return cachedTasks
+            .filter(t => !['pending', 'running', 'finishing', 'analyzing'].includes(t.status))
+            .map(t => t.id);
+    }
+
+    function updateTaskSelectionUI() {
+        const pageIds = getDeletableTaskIdsOnPage();
+        const selectedOnPage = pageIds.filter(id => selectedTaskIds.has(id));
+        const selectAll = document.getElementById('taskSelectAll');
+        if (selectAll) {
+            selectAll.disabled = pageIds.length === 0;
+            selectAll.checked = pageIds.length > 0 && selectedOnPage.length === pageIds.length;
+            selectAll.indeterminate = selectedOnPage.length > 0 && selectedOnPage.length < pageIds.length;
+        }
+        const batchBtn = document.getElementById('btnBatchDeleteTasks');
+        if (batchBtn) {
+            const n = selectedTaskIds.size;
+            batchBtn.disabled = n === 0;
+            batchBtn.textContent = n ? `批量删除 (${n})` : '批量删除';
+        }
+    }
+
+    function deleteSelectedTasks() {
+        const ids = [...selectedTaskIds];
+        if (!ids.length) {
+            alert('请先勾选要删除的任务');
+            return;
+        }
+        if (!confirm(`确定删除选中的 ${ids.length} 个任务吗？运行中的任务会被跳过。`)) return;
+        fetch(apiUrl('/api/tasks/batch-delete'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_ids: ids }),
+        })
+            .then(res => res.json().then(data => ({ok: res.ok, data})))
+            .then(({ok, data}) => {
+                const deleted = (data && data.deleted) || [];
+                deleted.forEach(id => selectedTaskIds.delete(id));
+                if (ok && data.success) {
+                    if (taskRefreshTimer) {
+                        clearInterval(taskRefreshTimer);
+                        taskRefreshTimer = null;
+                    }
+                    loadTasks();
+                    if (data.skipped && data.skipped.length) {
+                        alert(data.message);
+                    }
+                } else {
+                    alert((data && data.message) || '批量删除失败');
+                    loadTasks();
+                }
+            })
+            .catch(err => alert('批量删除失败: ' + err.message));
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function formatReportLatency(ms) {
+        if (ms == null || ms === '') return '-';
+        const n = Number(ms);
+        if (Number.isNaN(n)) return '-';
+        return (n / 1000).toFixed(3);
+    }
+
+    function formatReportStepLatency(row) {
+        if (!row) return '-';
+        if (row.step_latency_sec != null && row.step_latency_sec !== '') {
+            const n = Number(row.step_latency_sec);
+            if (!Number.isNaN(n)) return n.toFixed(3);
+        }
+        return '-';
+    }
+
+    function formatReportStatus(row) {
+        if (!row) return '-';
+        if (row.status_text) return row.status_text;
+        const key = String(row.status || '').trim().toLowerCase();
+        const map = {
+            pending: '等待中',
+            running: '执行中',
+            finishing: '收尾中',
+            analyzing: '分析中',
+            completed: '已完成',
+            cancelled: '已取消',
+            failed: '失败',
+            takeover: '人工接管',
+            skipped: '跳过',
+        };
+        return map[key] || row.status || '-';
+    }
+
+    function buildTaskReportTableHtml(rows) {
+        if (!rows || !rows.length) {
+            return '<div class="text-muted p-3">暂无分步结果（用例尚未产生回复/结果）</div>';
+        }
+        const head = `
+            <thead><tr>
+                <th>用例编号</th><th>轮次</th><th>状态</th><th>用户提问</th><th>澄清消息</th>
+                <th>预期回答</th><th>模型回答</th><th>评判</th><th>单步时延(秒)</th>
+                <th>首Token时延(秒)</th><th>执行时间</th>
+            </tr></thead>`;
+        const body = rows.map(r => `
+            <tr>
+                <td>${escapeHtml(r.case_id || '')}</td>
+                <td>${r.round != null ? r.round : ''}</td>
+                <td>${escapeHtml(formatReportStatus(r))}</td>
+                <td style="max-width:220px;white-space:pre-wrap;">${escapeHtml(r.user_message || '')}</td>
+                <td style="max-width:160px;white-space:pre-wrap;">${escapeHtml(r.clarify_message || '')}</td>
+                <td style="max-width:200px;white-space:pre-wrap;">${escapeHtml(r.expected || '')}</td>
+                <td style="max-width:240px;white-space:pre-wrap;">${escapeHtml(r.model_answer || '')}</td>
+                <td>${r.result ? escapeHtml(r.result) : '-'}</td>
+                <td>${escapeHtml(formatReportStepLatency(r))}</td>
+                <td>${escapeHtml(formatReportLatency(r.first_token_latency_ms))}</td>
+                <td>${escapeHtml(r.executed_at || '')}</td>
+            </tr>`).join('');
+        return `<div class="table-responsive"><table class="table table-sm table-bordered mb-0">${head}<tbody>${body}</tbody></table></div>`;
+    }
+
+    function previewTaskReport(taskId) {
+        if (!taskId) return;
+        const title = document.getElementById('taskReportModalTitle');
+        const body = document.getElementById('taskReportModalBody');
+        const dl = document.getElementById('taskReportModalDownload');
+        title.textContent = `预览 · ${taskId}`;
+        body.innerHTML = '<div class="text-muted p-3">加载中...</div>';
+        dl.href = '#';
+        dl.classList.add('disabled');
+        new bootstrap.Modal(document.getElementById('taskReportModal')).show();
+        fetch(apiUrl(`/api/results/${encodeURIComponent(taskId)}/report`), {cache: 'no-store'})
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || '加载失败');
+                const rows = data.rows || [];
+                body.innerHTML = buildTaskReportTableHtml(rows);
+                if (rows.length) {
+                    dl.href = apiUrl(`/api/results/${encodeURIComponent(taskId)}/report.xlsx`);
+                    dl.classList.remove('disabled');
+                } else {
+                    dl.href = '#';
+                    dl.classList.add('disabled');
+                }
+            })
+            .catch(err => {
+                body.innerHTML = `<div class="text-danger p-3">${escapeHtml(err.message || '加载失败')}</div>`;
+            });
+    }
+
+    function viewTaskResults(taskId) {
+        if (!taskId) {
+            return;
+        }
+        const url = guiEvalPath('/task-results/' + encodeURIComponent(taskId));
+        window.location.href = url;
+    }
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        initDevicePicker();
+        initExcelImportSection();
+        loadDevices();
+        loadTestsets();
+        loadExcelDatasets();
+        loadTargetApps();
+        loadExcelImportDefaults();
+        updateSourceTypeUI();
+
+        document.querySelectorAll('input[name="sourceType"]').forEach(radio => {
+            radio.addEventListener('change', updateSourceTypeUI);
+        });
+
+        const newTaskModal = document.getElementById('newTaskModal');
+        newTaskModal.addEventListener('show.bs.modal', function() {
+            showMessage('', '');
+            // 无论目标应用是什么：无在线设备时先拉起 TestApp，否则选不到设备
+            loadDevices().then(list => {
+                if (!list || !list.length) {
+                    wakeLabDevices();
+                }
+            });
+            loadTestsets();
+            loadExcelDatasets();
+            loadTargetApps();
+            loadExcelImportDefaults();
+            updateSourceTypeUI();
+        });
+        document.getElementById('targetAppSelect')?.addEventListener('change', function() {
+            if (!onlineDevices.length) {
+                wakeLabDevices();
+            }
+        });
+        newTaskModal.addEventListener('hidden.bs.modal', function() {
+            showMessage('', '');
+            hideDeviceDropdown();
+            loadExcelImportDefaults();
+        });
+        const taskTableBody = document.getElementById('taskTableBody');
+        document.querySelectorAll('.pager-size-btns [data-per-page]').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const next = parseInt(this.getAttribute('data-per-page'), 10) || 10;
+                if (next === taskPerPage) return;
+                taskPerPage = next;
+                taskCurrentPage = 1;
+                document.querySelectorAll('.pager-size-btns [data-per-page]').forEach(b => {
+                    b.classList.toggle('active', parseInt(b.getAttribute('data-per-page'), 10) === taskPerPage);
+                });
+                loadTasks();
+            });
+        });
+
+        document.getElementById('taskPagination').addEventListener('click', function(e) {
+            const link = e.target.closest('[data-task-page]');
+            if (!link) return;
+            e.preventDefault();
+            const page = parseInt(link.dataset.taskPage, 10);
+            if (!Number.isNaN(page)) {
+                goToTaskPage(page);
+            }
+        });
+
+        taskTableBody.addEventListener('click', function(e) {
+            const viewBtn = e.target.closest('.btn-view-results');
+            if (viewBtn && viewBtn.dataset.taskId) {
+                e.preventDefault();
+                e.stopPropagation();
+                viewTaskResults(viewBtn.dataset.taskId);
+                return;
+            }
+            const previewBtn = e.target.closest('.btn-preview-report');
+            if (previewBtn && previewBtn.dataset.taskId) {
+                e.preventDefault();
+                e.stopPropagation();
+                previewTaskReport(previewBtn.dataset.taskId);
+                return;
+            }
+            const stopBtn = e.target.closest('.btn-stop-task');
+            if (stopBtn && stopBtn.dataset.taskId) {
+                e.preventDefault();
+                e.stopPropagation();
+                stopTask(stopBtn.dataset.taskId);
+                return;
+            }
+            const restartBtn = e.target.closest('.btn-restart-task');
+            if (restartBtn && restartBtn.dataset.taskId) {
+                e.preventDefault();
+                e.stopPropagation();
+                restartTask(restartBtn.dataset.taskId, restartBtn.dataset.taskActive === '1');
+                return;
+            }
+            const deleteBtn = e.target.closest('.btn-delete-task');
+            if (deleteBtn && deleteBtn.dataset.taskId) {
+                e.preventDefault();
+                e.stopPropagation();
+                deleteTask(deleteBtn.dataset.taskId, deleteBtn.dataset.taskActive === '1');
+            }
+        });
+
+        taskTableBody.addEventListener('change', function(e) {
+            const cb = e.target.closest('.task-row-checkbox');
+            if (!cb || !cb.dataset.taskId) return;
+            if (cb.checked) selectedTaskIds.add(cb.dataset.taskId);
+            else selectedTaskIds.delete(cb.dataset.taskId);
+            updateTaskSelectionUI();
+        });
+
+        const selectAll = document.getElementById('taskSelectAll');
+        if (selectAll) {
+            selectAll.addEventListener('change', function() {
+                const ids = getDeletableTaskIdsOnPage();
+                if (selectAll.checked) ids.forEach(id => selectedTaskIds.add(id));
+                else ids.forEach(id => selectedTaskIds.delete(id));
+                document.querySelectorAll('.task-row-checkbox:not(:disabled)').forEach(cb => {
+                    cb.checked = selectAll.checked;
+                });
+                updateTaskSelectionUI();
+            });
+        }
+
+        const batchBtn = document.getElementById('btnBatchDeleteTasks');
+        if (batchBtn) {
+            batchBtn.addEventListener('click', deleteSelectedTasks);
+        }
+
+        loadTasks();
+
+        // Auto refresh devices every 10 seconds
+        setInterval(loadDevices, 15000);
+        window.addEventListener('beforeunload', () => {
+            if (taskRefreshTimer) {
+                clearInterval(taskRefreshTimer);
+            }
+        });
+    });
+</script>
+{% endblock %}

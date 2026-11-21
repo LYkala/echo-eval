@@ -1,0 +1,26 @@
+# DMService 配置文件
+# 模型配置统一在 model.yaml 中定义，此处通过标签引用。
+
+server:
+  port: "8080"
+
+database:
+  path: "user_data/dmservice.db"
+
+cache:
+  size: 500
+
+log:
+  path: "log/dmservice/run.log"
+  debug: true
+
+# 模型配置（填写 model.yaml 中定义的标签）
+model: "kimi25"
+
+dialogue:
+  time_window_hours: 3
+  recent_dialogue_count: 20
+  rewrite_history_count: 20
+  candidate_count: 20
+  # 最近 N 轮返回原始内容（不使用压缩），超出部分优先使用压缩。默认 5
+  raw_recent_count: 0

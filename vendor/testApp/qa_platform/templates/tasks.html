@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+{% block title %}测试任务管理 - 豆包小艺QA自动化测试平台{% endblock %}
+{% block extra_css %}
+<style>
+    .task-query { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .btn-text-danger { color: #f56c6c !important; }
+    .btn-text-danger:hover { color: #c45656 !important; background: #fef0f0 !important; }
+    .btn-text-warning { color: #e6a23c !important; }
+    .btn-text-warning:hover { color: #b88230 !important; background: #fdf6ec !important; }
+    .status-stopped { background: #fef0f0; color: #c45656; }
+</style>
+{% endblock %}
+{% block extra_js %}
+<script>
+const datasets = {{ datasets|tojson }};
+
+function fillDatasets(productName, selectId, selected) {
+    const product = document.querySelector(`input[name="${productName}"]:checked`).value;
+    const select = document.getElementById(selectId);
+    const matched = datasets.filter(item => item.product === product);
+    select.innerHTML = matched.length
+        ? matched.map(item => '<option value="' + item.name + '">' + item.name + '（' + item.case_count + '）</option>').join("")
+        : '<option value="">没有对应数据集</option>';
+    if (selected && [...select.options].some(option => option.value === selected)) {
+        select.value = selected;
+    }
+}
+
+document.querySelectorAll('input[name="product"]').forEach(el => {
+    el.addEventListener("change", () => fillDatasets("product", "excelDatasetSelect"));
+});
+document.querySelectorAll('input[name="editProduct"]').forEach(el => {
+    el.addEventListener("change", () => fillDatasets("editProduct", "editDatasetSelect"));
+});
+fillDatasets("product", "excelDatasetSelect");
+
+document.getElementById("taskForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const msg = document.getElementById("taskMessage");
+    const product = document.querySelector('input[name="product"]:checked').value;
+    const osName = document.querySelector('input[name="os"]:checked').value;
+    const dataset = document.getElementById("excelDatasetSelect").value;
+    const deviceCount = document.getElementById("deviceCountSelect").value;
+    const resp = await fetch("/api/tasks", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({product, dataset, os: osName, device_count: deviceCount}),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.success) {
+        msg.textContent = data.message || "创建失败";
+        return;
+    }
+    location.href = "/tasks/" + encodeURIComponent(data.task_id);
+});
+
+document.getElementById("taskTableBody").addEventListener("click", (event) => {
+    const button = event.target.closest(".btn-edit-task");
+    if (!button) return;
+    document.getElementById("editTaskId").value = button.dataset.taskId;
+    document.getElementById("editTaskName").value = button.dataset.name;
+    document.querySelector(`input[name="editProduct"][value="${button.dataset.product}"]`).checked = true;
+    const osValue = button.dataset.os || "harmony";
+    const osInput = document.querySelector(`input[name="editOs"][value="${osValue}"]`);
+    if (osInput) osInput.checked = true;
+    fillDatasets("editProduct", "editDatasetSelect", button.dataset.dataset);
+    const deviceCount = button.dataset.deviceCount || "1";
+    const deviceSelect = document.getElementById("editDeviceCountSelect");
+    if ([...deviceSelect.options].some(option => option.value === deviceCount)) {
+        deviceSelect.value = deviceCount;
+    }
+    document.getElementById("editTaskMessage").textContent = "";
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("editTaskModal")).show();
+});
+
+function confirmTaskRestart(status, taskId) {
+    if (status === "待执行" || status === "执行中") {
+        alert("任务进行中，请先停止后再重启");
+        return false;
+    }
+    return confirm("确定重启任务 " + taskId + " 吗？");
+}
+
+document.getElementById("editTaskForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const msg = document.getElementById("editTaskMessage");
+    const taskId = document.getElementById("editTaskId").value;
+    const resp = await fetch("/api/tasks/" + encodeURIComponent(taskId), {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            name: document.getElementById("editTaskName").value.trim(),
+            product: document.querySelector('input[name="editProduct"]:checked').value,
+            os: document.querySelector('input[name="editOs"]:checked').value,
+            dataset: document.getElementById("editDatasetSelect").value,
+            device_count: document.getElementById("editDeviceCountSelect").value,
+        }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.success) {
+        msg.textContent = data.message || "保存失败";
+        return;
+    }
+    location.reload();
+});
+</script>
+{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <div class="fw-semibold" style="font-size:16px;color:#1a1a2e;">任务列表</div>
+            <div class="text-muted" style="font-size:12px;font-weight:400;margin-top:2px;">创建任务并查看执行结果</div>
+        </div>
+        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#newTaskModal">新建任务</button>
+    </div>
+    <div class="card-body pb-0">
+        <form class="task-query" method="get">
+            <input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="检索任务ID、名称、数据集、对象或系统" style="max-width:360px;">
+            <button class="btn btn-sm btn-primary" type="submit">查询</button>
+            {% if q %}<a class="btn btn-sm btn-outline-secondary" href="/tasks">重置</a>{% endif %}
+            <span class="text-muted small">共 {{ tasks|length }} 条</span>
+        </form>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+            <tr>
+                <th>任务ID</th>
+                <th>对象</th>
+                <th>系统</th>
+                <th>并发</th>
+                <th>数据集</th>
+                <th>用例</th>
+                <th>通过</th>
+                <th>状态</th>
+                <th>开始时间</th>
+                <th>操作</th>
+            </tr>
+            </thead>
+            <tbody id="taskTableBody">
+            {% for task in tasks %}
+            <tr>
+                <td><a class="cell-id" href="/tasks/{{ task.task_id }}" title="{{ task.task_id }}">{{ task.task_id }}</a><div class="cell-muted">{{ task.name }}</div></td>
+                <td><span class="badge-prod badge-{{ task.product }}">{{ task.product_name }}</span></td>
+                <td>{{ task.os_label or '—' }}</td>
+                <td>{% if task.device_count %}{{ task.device_count }} 台{% else %}—{% endif %}</td>
+                <td>{{ task.dataset_name or '—' }}</td>
+                <td>{{ task.case_count }}</td>
+                <td>{% if task.scored_cases %}{{ task.passed_cases }} / {{ task.scored_cases }}{% else %}—{% endif %}</td>
+                <td>
+                    {% if task.status == '已完成' %}<span class="status-badge status-completed">已完成</span>
+                    {% elif task.status == '已停止' %}<span class="status-badge status-stopped">已停止</span>
+                    {% else %}<span class="status-badge status-pending">{{ task.status }}</span>{% endif %}
+                </td>
+                <td class="cell-muted">{{ task.created_at }}</td>
+                <td>
+                    <div class="row-actions">
+                        <a class="btn btn-sm btn-text" href="/tasks/{{ task.task_id }}">详情</a>
+                        {% if task.status in ['待执行', '执行中'] %}
+                        <form class="d-inline" method="post" action="/tasks/{{ task.task_id }}/stop?q={{ q|urlencode }}" onsubmit="return confirm('确定停止任务 {{ task.task_id }} 吗？')">
+                            <button class="btn btn-sm btn-text btn-text-warning" type="submit">停止</button>
+                        </form>
+                        {% endif %}
+                        <form class="d-inline" method="post" action="/tasks/{{ task.task_id }}/restart?q={{ q|urlencode }}" onsubmit="return confirmTaskRestart('{{ task.status }}', '{{ task.task_id }}')">
+                            <button class="btn btn-sm btn-text" type="submit">重启</button>
+                        </form>
+                        <button type="button" class="btn btn-sm btn-text btn-edit-task"
+                                data-task-id="{{ task.task_id }}"
+                                data-name="{{ task.name }}"
+                                data-product="{{ task.product }}"
+                                data-os="{{ task.os_name }}"
+                                data-dataset="{{ task.dataset_name }}"
+                                data-device-count="{{ task.device_count }}">编辑</button>
+                        <form class="d-inline" method="post" action="/tasks/{{ task.task_id }}/delete?q={{ q|urlencode }}" onsubmit="return confirm('确定删除任务 {{ task.task_id }} 吗？')">
+                            <button class="btn btn-sm btn-text btn-text-danger" type="submit">删除</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="10" class="text-center text-muted py-4">{% if q %}没有匹配的任务{% else %}暂无任务{% endif %}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="newTaskModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建任务</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="taskForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">对象</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="product" id="productXiaoyi" value="xiaoyi" checked>
+                                <label class="form-check-label" for="productXiaoyi">小艺</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="product" id="productDoubao" value="doubao">
+                                <label class="form-check-label" for="productDoubao">豆包</label>
+                            </div>
+                        </div>
+                        <small class="text-muted">对应两份脚本的被测应用。</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">系统</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="os" id="osHarmony" value="harmony" checked>
+                                <label class="form-check-label" for="osHarmony">鸿蒙</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="os" id="osAndroid" value="android">
+                                <label class="form-check-label" for="osAndroid">安卓</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="deviceCountSelect">并发真机数量</label>
+                        <select class="form-select" id="deviceCountSelect" style="max-width:160px;">
+                            {% for n in range(1, 11) %}
+                            <option value="{{ n }}" {% if n == 1 %}selected{% endif %}>{{ n }} 台</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">选择 Excel 数据集</label>
+                        <select class="form-select" id="excelDatasetSelect"></select>
+                        <small class="text-muted">任务绑定这个数据集。手机上的批量提问仍由 control_phone_proj 里的脚本执行。</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <span id="taskMessage" class="text-danger me-auto"></span>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">创建任务</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editTaskModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑任务</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editTaskForm">
+                <div class="modal-body">
+                    <input type="hidden" id="editTaskId">
+                    <div class="mb-3">
+                        <label class="form-label" for="editTaskName">任务名称</label>
+                        <input class="form-control" id="editTaskName">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">对象</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="editProduct" id="editProductXiaoyi" value="xiaoyi" checked>
+                                <label class="form-check-label" for="editProductXiaoyi">小艺</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="editProduct" id="editProductDoubao" value="doubao">
+                                <label class="form-check-label" for="editProductDoubao">豆包</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">系统</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="editOs" id="editOsHarmony" value="harmony" checked>
+                                <label class="form-check-label" for="editOsHarmony">鸿蒙</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="editOs" id="editOsAndroid" value="android">
+                                <label class="form-check-label" for="editOsAndroid">安卓</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="editDeviceCountSelect">并发真机数量</label>
+                        <select class="form-select" id="editDeviceCountSelect" style="max-width:160px;">
+                            {% for n in range(1, 11) %}
+                            <option value="{{ n }}">{{ n }} 台</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Excel 数据集</label>
+                        <select class="form-select" id="editDatasetSelect"></select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <span id="editTaskMessage" class="text-danger me-auto"></span>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+.agents/
+tmp_aar_check/
+tmp_aar_debug/
+app/build
+.gradle/
+.sisyphus/
+.idea/
+.claude/
+doc
+doc/
+LocalFileLogger_bytecode.txt
+LoggerImpl_bytecode.txt
+AGENTS.md
+com/huawei/aisfsdkv2/api/session/*.class
+classes.jar

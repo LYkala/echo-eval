@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}首页 - 豆包小艺QA自动化测试平台{% endblock %}
+{% block content %}
+<h1 class="page-title">控制台</h1>
+<p class="page-sub">小艺 QA、豆包 QA 的用例、任务和已执行打分结果</p>
+<div class="row g-3 mb-3">
+    <div class="col-md-3"><div class="stat"><b>{{ counts.xiaoyi }}</b><span>小艺用例</span></div></div>
+    <div class="col-md-3"><div class="stat"><b>{{ counts.doubao }}</b><span>豆包用例</span></div></div>
+    <div class="col-md-3"><div class="stat"><b>{{ tasks|length }}</b><span>测试任务</span></div></div>
+    <div class="col-md-3"><div class="stat"><b>{{ counts.rounds }}</b><span>结果记录</span></div></div>
+</div>
+<div class="card">
+    <div class="card-header">已导入任务</div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+            <tr><th>任务</th><th>对象</th><th>状态</th><th>用例</th><th>达到 {{ pass_line|int }} 分</th><th>平均分</th><th>来源</th></tr>
+            </thead>
+            <tbody>
+            {% for task in tasks %}
+            <tr>
+                <td><a href="/tasks/{{ task.task_id }}">{{ task.name }}</a></td>
+                <td><span class="badge-prod badge-{{ task.product }}">{{ task.product_name }}</span></td>
+                <td>{% if task.status == '已完成' %}<span class="badge-prod badge-ok">已完成</span>{% else %}<span class="badge-prod badge-wait">{{ task.status }}</span>{% endif %}</td>
+                <td>{{ task.case_count }}</td>
+                <td>{% if task.scored_cases %}{{ task.passed_cases }} / {{ task.scored_cases }}{% else %}—{% endif %}</td>
+                <td>{{ task.avg_score if task.avg_score is not none else '—' }}</td>
+                <td class="text-muted">{{ task.source_file or '本地新建' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-muted">还没有任务</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

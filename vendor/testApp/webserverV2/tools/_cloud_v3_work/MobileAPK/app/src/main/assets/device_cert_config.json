@@ -1,0 +1,4 @@
+{
+    "deviceKeyAssetName": "tls.key",
+    "deviceCertPassword": "tls-key.pwd"
+}

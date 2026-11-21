@@ -1,0 +1,38 @@
+---
+description: 开发默认 9526；9527 为 9526 独立克隆；原生产在 9528
+alwaysApply: true
+---
+
+# Webserver：三实例对照
+
+用户**开发 / 测试 / 部署默认走远程 9526**。不要用 `pkill -f webserver_v2`（会误杀多实例）。
+
+## 实例对照
+
+| 端口 | 远程目录 | systemd | 用途 |
+|------|----------|---------|------|
+| **9526** | `/opt/TestAppGUI/TestAPPGUI/testApp/webserverV2_9526` | `webserver-9526.service` | 开发测试（默认部署目标） |
+| **9527** | `/opt/TestAppGUI/TestAPPGUI/testApp/webserverV2_9527` | `webserver-9527.service` | 从 9526 复制的独立副本 |
+| **9528** | `/opt/TestAppGUI/TestAPPGUI/testApp/webserverV2` | `webserver-9528.service` | 原冻结生产（旧 9527 目录迁到此端口） |
+
+- Host：`124.71.69.102`
+- 公网：`http://124.71.69.102:9526` / `:9527` / `:9528`（需安全组放行对应 TCP）
+- ADB USB 桥：9526 用 `15036`；9527 克隆用 `15037`
+
+## 默认行为
+
+- APK 更新、软件下载、`webserver_v2.py` / 模板改动后：部署到 **9526**，不要只改本地就结束。
+- 部署脚本：`webserverV2/tools/_deploy_to_9526.py`（可加 `--apk`）。默认**不要**覆盖 9527/9528，除非用户明确要求。
+- 验证：远程 `ss -lntp | grep -E '9526|9527|9528'`、`curl 127.0.0.1:9526/api/download/packages` 含 `devicesdkdemo_cloud_v3`。
+
+## 不要做
+
+- 不要建议「启动本地 webserver」作为常规用法。
+- 不要只更新本地 `webserverV2/apks/` 而不部署 9526（除非用户明确说仅本地测试）。
+- 不要对 9528（原生产目录）做 rsync/部署覆盖，除非用户明确要求。
+
+## 本地仍可用于
+
+- 编译 Mobile APK（`tools/_cloud_v3_work/rebuild.ps1`）
+- ADB 装到手机
+- 改代码后再 **deploy 到 9526**

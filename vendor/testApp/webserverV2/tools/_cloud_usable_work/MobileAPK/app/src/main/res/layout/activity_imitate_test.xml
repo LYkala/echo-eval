@@ -1,0 +1,683 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- 标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="12dp">
+
+        <Button
+            android:id="@+id/btn_back"
+            android:layout_width="60dp"
+            android:layout_height="40dp"
+            android:text="←"
+            android:textSize="18sp"
+            android:padding="0dp"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="定时任务接口测试"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:gravity="center"/>
+
+        <!-- 占位保持居中 -->
+        <View
+            android:layout_width="60dp"
+            android:layout_height="40dp"/>
+    </LinearLayout>
+
+    <!-- 折叠项滚动区域 -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- 折叠项1: 测试 getTaskAbilityInfoList -->
+            <LinearLayout
+                android:id="@+id/item_get_task_ability_info_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#F5F5F5"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:id="@+id/title_get_task_ability_info_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="▶ 测试 getTaskAbilityInfoList"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:padding="12dp"
+                    android:background="#E0E0E0"
+                    android:clickable="true"
+                    android:focusable="true"/>
+
+                <LinearLayout
+                    android:id="@+id/content_get_task_ability_info_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="输入"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="无参数"
+                        android:textSize="13sp"
+                        android:layout_marginBottom="12dp"/>
+
+                    <Button
+                        android:id="@+id/btn_test_get_task_ability_info_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="执行测试"
+                        android:layout_marginBottom="12dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="输出"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"/>
+
+                    <TextView
+                        android:id="@+id/tv_output_get_task_ability_info_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="200dp"
+                        android:background="#FFFFFF"
+                        android:padding="8dp"
+                        android:text="点击执行测试..."
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textIsSelectable="true"
+                        android:scrollbars="vertical"
+                        android:fadeScrollbars="false"
+                        android:gravity="top"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 折叠项2: 测试 getScheduleTaskList -->
+            <LinearLayout
+                android:id="@+id/item_get_schedule_task_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#F5F5F5"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:id="@+id/title_get_schedule_task_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="▶ 测试 getScheduleTaskList"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:padding="12dp"
+                    android:background="#E0E0E0"
+                    android:clickable="true"
+                    android:focusable="true"/>
+
+                <LinearLayout
+                    android:id="@+id/content_get_schedule_task_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="输入"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="无参数"
+                        android:textSize="13sp"
+                        android:layout_marginBottom="12dp"/>
+
+                    <Button
+                        android:id="@+id/btn_test_get_schedule_task_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="执行测试"
+                        android:layout_marginBottom="12dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="输出"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"/>
+
+                    <TextView
+                        android:id="@+id/tv_output_get_schedule_task_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="200dp"
+                        android:background="#FFFFFF"
+                        android:padding="8dp"
+                        android:text="点击执行测试..."
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textIsSelectable="true"
+                        android:scrollbars="vertical"
+                        android:fadeScrollbars="false"
+                        android:gravity="top"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 折叠项3: 测试 createScheduleTask -->
+            <LinearLayout
+                android:id="@+id/item_create_schedule_task"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#F5F5F5"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:id="@+id/title_create_schedule_task"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="▶ 测试 createScheduleTask"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:padding="12dp"
+                    android:background="#E0E0E0"
+                    android:clickable="true"
+                    android:focusable="true"/>
+
+                <LinearLayout
+                    android:id="@+id/content_create_schedule_task"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="输入"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"/>
+
+                    <!-- Schedule 部分 -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Schedule"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="2dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="type"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <Spinner
+                        android:id="@+id/spinner_schedule_type"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="triggerTime"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_trigger_time"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="2026-05-10T00:00:00+08:00"
+                        android:text="2026-05-20T10:00:00+08:00"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="cron"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_cron"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="如: 0 0 10 * * ?"
+                        android:text=""
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="description"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_schedule_description"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="描述信息"
+                        android:text="测试定时任务"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="12dp"/>
+
+                    <!-- Action 部分 -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Action"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="2dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="type"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <Spinner
+                        android:id="@+id/spinner_action_type"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="title"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_action_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="通知标题"
+                        android:text="定时任务提醒"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="body"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_action_body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="通知内容"
+                        android:text="您的定时任务已触发"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="12dp"/>
+
+                    <Button
+                        android:id="@+id/btn_test_create_schedule_task"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="执行测试"
+                        android:layout_marginBottom="12dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="输出"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"/>
+
+                    <TextView
+                        android:id="@+id/tv_output_create_schedule_task"
+                        android:layout_width="match_parent"
+                        android:layout_height="150dp"
+                        android:background="#FFFFFF"
+                        android:padding="8dp"
+                        android:text="点击执行测试..."
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textIsSelectable="true"
+                        android:scrollbars="vertical"
+                        android:fadeScrollbars="false"
+                        android:gravity="top"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 折叠项4: 测试 deleteScheduleTask -->
+            <LinearLayout
+                android:id="@+id/item_delete_schedule_task"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#F5F5F5"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:id="@+id/title_delete_schedule_task"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="▶ 测试 deleteScheduleTask"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:padding="12dp"
+                    android:background="#E0E0E0"
+                    android:clickable="true"
+                    android:focusable="true"/>
+
+                <LinearLayout
+                    android:id="@+id/content_delete_schedule_task"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="输入"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="taskId"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_delete_task_id"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="任务ID"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="12dp"/>
+
+                    <Button
+                        android:id="@+id/btn_test_delete_schedule_task"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="执行测试"
+                        android:layout_marginBottom="12dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="输出"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"/>
+
+                    <TextView
+                        android:id="@+id/tv_output_delete_schedule_task"
+                        android:layout_width="match_parent"
+                        android:layout_height="150dp"
+                        android:background="#FFFFFF"
+                        android:padding="8dp"
+                        android:text="点击执行测试..."
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textIsSelectable="true"
+                        android:scrollbars="vertical"
+                        android:fadeScrollbars="false"
+                        android:gravity="top"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 折叠项5: 测试 updateScheduleTask -->
+            <LinearLayout
+                android:id="@+id/item_update_schedule_task"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#F5F5F5"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:id="@+id/title_update_schedule_task"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="▶ 测试 updateScheduleTask"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:padding="12dp"
+                    android:background="#E0E0E0"
+                    android:clickable="true"
+                    android:focusable="true"/>
+
+                <LinearLayout
+                    android:id="@+id/content_update_schedule_task"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="输入"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="taskId"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_update_task_id"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="任务ID"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="enable"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_update_enable"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="true/false"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="12dp"/>
+
+                    <!-- Schedule 部分 -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Schedule"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="2dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="type"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_update_schedule_type"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="如: CRON"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="triggerTime"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_update_trigger_time"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="如: 2024-01-01 10:00:00"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="cron"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_update_cron"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="如: 0 0 10 * * ?"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="description"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_update_schedule_description"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="描述信息"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="12dp"/>
+
+                    <!-- Action 部分 -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Action"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="2dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="type"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_update_action_type"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="如: NOTIFICATION"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="title"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_update_action_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="通知标题"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="body"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="2dp"/>
+                    <EditText
+                        android:id="@+id/et_update_action_body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="通知内容"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="12dp"/>
+
+                    <Button
+                        android:id="@+id/btn_test_update_schedule_task"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="执行测试"
+                        android:layout_marginBottom="12dp"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="输出"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"/>
+
+                    <TextView
+                        android:id="@+id/tv_output_update_schedule_task"
+                        android:layout_width="match_parent"
+                        android:layout_height="150dp"
+                        android:background="#FFFFFF"
+                        android:padding="8dp"
+                        android:text="点击执行测试..."
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textIsSelectable="true"
+                        android:scrollbars="vertical"
+                        android:fadeScrollbars="false"
+                        android:gravity="top"/>
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

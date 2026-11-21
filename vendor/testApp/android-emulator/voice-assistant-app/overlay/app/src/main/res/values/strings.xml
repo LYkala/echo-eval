@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">语音助手</string>
+    <string name="app_title">Sherpa 识别 + Kimi + 播报</string>
+    <string name="status_ready">正在初始化…</string>
+    <string name="asr_label">识别文字</string>
+    <string name="asr_hint">说完后点「停止」</string>
+    <string name="llm_label">Kimi 回复</string>
+    <string name="llm_hint">等待大模型回复…</string>
+    <string name="start">开始说话</string>
+    <string name="stop">停止</string>
+    <string name="demo_weather">问天气示例</string>
+    <string name="file_asr">读文件</string>
+</resources>

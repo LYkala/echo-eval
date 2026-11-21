@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- 标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="12dp">
+
+        <Button
+            android:id="@+id/btn_back"
+            android:layout_width="60dp"
+            android:layout_height="40dp"
+            android:text="←"
+            android:textSize="18sp"
+            android:padding="0dp"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="技能接口测试"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:gravity="center"/>
+
+        <!-- 占位保持居中 -->
+        <View
+            android:layout_width="60dp"
+            android:layout_height="40dp"/>
+    </LinearLayout>
+
+    <!-- 折叠项滚动区域 -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+    <!-- 折叠项1: 测试 getSkillList -->
+    <LinearLayout
+        android:id="@+id/item_get_skill_list"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/title_get_skill_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ 测试 getSkillList"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="#E0E0E0"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <LinearLayout
+            android:id="@+id/content_get_skill_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输入"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="无参数"
+                android:textSize="13sp"
+                android:layout_marginBottom="12dp"/>
+
+            <Button
+                android:id="@+id/btn_test_get_skill_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="执行测试"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输出"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:id="@+id/tv_output_get_skill_list"
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:background="#FFFFFF"
+                android:padding="8dp"
+                android:text="点击执行测试..."
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:scrollbars="vertical"
+                android:fadeScrollbars="false"
+                android:gravity="top"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 折叠项2: 测试 createSkill -->
+    <LinearLayout
+        android:id="@+id/item_create_skill"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/title_create_skill"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ 测试 createSkill"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="#E0E0E0"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <LinearLayout
+            android:id="@+id/content_create_skill"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输入"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="skillName (技能名称)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <EditText
+                android:id="@+id/et_create_skill_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="请输入技能名称"
+                android:textSize="14sp"
+                android:inputType="text"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="summary (技能摘要)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <EditText
+                android:id="@+id/et_create_skill_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="请输入技能摘要"
+                android:textSize="14sp"
+                android:inputType="text"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="app (所属应用)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <EditText
+                android:id="@+id/et_create_skill_app"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="请输入所属应用"
+                android:textSize="14sp"
+                android:inputType="text"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="steps (步骤)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <EditText
+                android:id="@+id/et_create_skill_steps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="请输入步骤"
+                android:textSize="14sp"
+                android:minLines="2"
+                android:gravity="top"
+                android:inputType="textMultiLine"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="variables (变量)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <EditText
+                android:id="@+id/et_create_skill_variables"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="请输入变量"
+                android:textSize="14sp"
+                android:inputType="text"
+                android:layout_marginBottom="12dp"/>
+
+            <Button
+                android:id="@+id/btn_test_create_skill"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="执行测试"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输出"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:id="@+id/tv_output_create_skill"
+                android:layout_width="match_parent"
+                android:layout_height="150dp"
+                android:background="#FFFFFF"
+                android:padding="8dp"
+                android:text="点击执行测试..."
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:scrollbars="vertical"
+                android:fadeScrollbars="false"
+                android:gravity="top"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 折叠项3: 测试 deleteSkill -->
+    <LinearLayout
+        android:id="@+id/item_delete_skill"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/title_delete_skill"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ 测试 deleteSkill"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="#E0E0E0"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <LinearLayout
+            android:id="@+id/content_delete_skill"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输入"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="skillId (技能ID)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <EditText
+                android:id="@+id/et_delete_skill_id"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="请输入要删除的技能ID"
+                android:textSize="14sp"
+                android:layout_marginBottom="12dp"/>
+
+            <Button
+                android:id="@+id/btn_test_delete_skill"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="执行测试"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输出"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:id="@+id/tv_output_delete_skill"
+                android:layout_width="match_parent"
+                android:layout_height="150dp"
+                android:background="#FFFFFF"
+                android:padding="8dp"
+                android:text="点击执行测试..."
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:scrollbars="vertical"
+                android:fadeScrollbars="false"
+                android:gravity="top"/>
+        </LinearLayout>
+    </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

@@ -1,0 +1,22 @@
+移动网盘搜索 · 本地USB版
+========================
+
+本包已内置：
+- tools/platform-tools/adb.exe
+- tools/adbkeyboard/ADBKeyboard.apk
+
+对方电脑只需：Python 3.10+（能运行 pip / python）
+
+使用步骤
+1. 解压 zip
+2. 手机 USB 连电脑，打开「USB 调试」，手机上点允许
+3. 双击 start.bat
+   - 自动用包内 adb
+   - 自动安装并 enable ADB Keyboard（需已连上手机）
+   - 缺依赖时自动 pip install
+4. 浏览器打开 http://127.0.0.1:9530/
+5. 刷新设备 → 选手机 → 勾选用例 → 开始
+
+手机还需安装「中国移动云盘」App。
+
+若 start.bat 提示无 device：先插线授权后再开一次 start.bat。

@@ -1,0 +1,14 @@
+DeviceSDK Demo — 云端底座 v3（直连 webserver，无 TestApp）
+============================================================
+Date: 2026-09-03
+APK 命名: devicesdk-yyyyMMdd-HHmmss.apk（rebuild.ps1 编译产出）
+
+当前软件下载基线
+----------------
+- 稳定下载路径仍为 apks/devicesdkdemo-cloud-v3/devicesdkdemo.apk（每次 rebuild 覆盖为最新）
+- 带时间戳副本：webserverV2/apks/devicesdk-*.apk 、_cloud_v3_work/dist/ 、桌面
+
+重建 / 部署
+----------
+  powershell -File rebuild.ps1
+  python webserverV2/tools/_deploy_download_cloud_apk.py

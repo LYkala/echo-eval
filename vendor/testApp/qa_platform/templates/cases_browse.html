@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}测试用例管理 - 豆包小艺QA自动化测试平台{% endblock %}
+{% block content %}
+<p class="page-sub"><a href="/cases">测试用例管理</a> / 用例明细</p>
+<h1 class="page-title">用例明细</h1>
+<p class="page-sub">按用例编号查看场景、等级和已跑出的平均分。</p>
+<div class="card mb-3">
+    <div class="card-body">
+        <form class="row g-2 align-items-end" method="get">
+            <div class="col-md-2">
+                <label class="form-label">对象</label>
+                <select class="form-select" name="product">
+                    <option value="">全部</option>
+                    <option value="xiaoyi" {% if product == 'xiaoyi' %}selected{% endif %}>小艺</option>
+                    <option value="doubao" {% if product == 'doubao' %}selected{% endif %}>豆包</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">S2 场景</label>
+                <select class="form-select" name="s2">
+                    <option value="">全部</option>
+                    {% for scene in scenes %}
+                    <option value="{{ scene }}" {% if s2 == scene %}selected{% endif %}>{{ scene }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">搜索</label>
+                <input class="form-control" name="q" value="{{ q }}" placeholder="用例编号、标题、场景">
+            </div>
+            <div class="col-md-2"><button class="btn btn-primary" type="submit">查询</button></div>
+        </form>
+    </div>
+</div>
+<div class="card mb-3">
+    <div class="card-header">上传用例 Excel</div>
+    <div class="card-body">
+        <form class="row g-2 align-items-end" method="post" action="/cases/upload" enctype="multipart/form-data">
+            <div class="col-md-2">
+                <label class="form-label">对象</label>
+                <select class="form-select" name="product">
+                    <option value="xiaoyi">小艺</option>
+                    <option value="doubao">豆包</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">脚本同款表格</label>
+                <input class="form-control" type="file" name="file" accept=".xlsx" required>
+            </div>
+            <div class="col-md-2"><button class="btn btn-outline-primary" type="submit">导入</button></div>
+            <div class="col-12 text-muted">列名与脚本一致：用例编号、用例标题、测试步骤（语料）、预期结果、S1场景、S2场景、S3场景、用例等级。</div>
+        </form>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header d-flex justify-content-between"><span>用例列表</span><span class="text-muted fw-normal">{{ total }} 条</span></div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+            <tr><th>用例编号</th><th>标题</th><th>对象</th><th>S1</th><th>S2</th><th>S3</th><th>等级</th><th>记录</th><th>平均分</th></tr>
+            </thead>
+            <tbody>
+            {% for row in rows %}
+            <tr>
+                <td><a href="/cases/{{ row.product }}/{{ row.case_id }}">{{ row.case_id }}</a></td>
+                <td class="clip" title="{{ row.title }}">{{ row.title or '—' }}</td>
+                <td><span class="badge-prod badge-{{ row.product }}">{{ product_label[row.product] }}</span></td>
+                <td>{{ row.s1 or '—' }}</td>
+                <td>{{ row.s2 or '—' }}</td>
+                <td>{{ row.s3 or '—' }}</td>
+                <td>{{ row.level or '—' }}</td>
+                <td>{{ row.round_count }}</td>
+                <td>
+                    {% if row.avg_score is not none %}
+                        <span class="badge-prod {% if row.avg_score >= pass_line %}badge-ok{% else %}badge-no{% endif %}">{{ '%.2f'|format(row.avg_score) }}</span>
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="text-muted">没有匹配的用例</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card-body pager">
+        {% if page_no > 1 %}<a href="?product={{ product }}&s2={{ s2 }}&q={{ q }}&page={{ page_no - 1 }}">上一页</a>{% endif %}
+        <span class="on">{{ page_no }} / {{ pages }}</span>
+        {% if page_no < pages %}<a href="?product={{ product }}&s2={{ s2 }}&q={{ q }}&page={{ page_no + 1 }}">下一页</a>{% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,514 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - TestApp{% endblock %}
+
+{% block extra_css %}
+<style>
+    .home-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+    }
+    .home-head .page-title { margin-bottom: 4px; }
+    .home-sub {
+        margin: 0;
+        color: var(--vx-muted);
+        font-size: 13px;
+    }
+    .log-container {
+        height: 420px;
+        overflow-y: auto;
+        background: #1a1a2e;
+        color: #dcdfe6;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        padding: 12px 14px;
+        border-radius: 6px;
+        border: 1px solid #2a2a4a;
+    }
+    .log-line { margin: 2px 0; line-height: 1.45; word-break: break-all; }
+    .log-info { color: #79bbff; }
+    .log-warn { color: #e6a23c; }
+    .log-error { color: #f56c6c; }
+    .log-meta { color: #909399; }
+    .device-card {
+        border: 1px solid var(--vx-border-light) !important;
+        box-shadow: none !important;
+        border-radius: 6px !important;
+        cursor: pointer;
+    }
+    .device-card:hover {
+        border-color: #d9ecff !important;
+        background: #ecf5ff;
+    }
+    .device-card.active-device {
+        border-color: #409eff !important;
+        background: #ecf5ff !important;
+        box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2) !important;
+    }
+    .online-badge {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+        vertical-align: middle;
+    }
+    .online { background-color: var(--vx-success); box-shadow: 0 0 0 3px rgba(103, 194, 58, 0.2); }
+    .online-ws-demo { background-color: #67c23a; box-shadow: 0 0 0 3px rgba(103, 194, 58, 0.25); }
+    .online-ws-testapp { background-color: #409eff; box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.2); }
+    .offline { background-color: var(--vx-muted); }
+    .ws-device-panel .device-card { border-color: #c2e7b0 !important; background: #f6ffed; }
+    .ws-device-panel .device-card:hover { background: #eef9e8; border-color: #95d475 !important; }
+    .ws-device-panel .device-card.active-device { background: #ecf5ff !important; border-color: #409eff !important; }
+    .device-count-badge {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #ecf5ff;
+        color: #409eff;
+        border: 1px solid #d9ecff;
+        margin-left: 6px;
+    }
+    .device-count-badge.ws { background: #f0f9eb; color: #67c23a; border-color: #e1f3d8; }
+    .device-card code {
+        color: var(--vx-primary);
+        background: #ecf5ff;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 12px;
+    }
+    #selectedDeviceLabel {
+        font-size: 12px;
+        color: var(--vx-muted);
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="home-head">
+    <div>
+        <h1 class="page-title">控制台</h1>
+        <p class="home-sub">WS 设备实时日志与在线状态 · 点右侧设备切换查看</p>
+    </div>
+</div>
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card mb-0">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span>设备日志</span>
+                    <span id="selectedDeviceLabel">未选择设备</span>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <select id="logSource" class="form-select form-select-sm w-auto">
+                        <option value="device" selected>WS 设备</option>
+                        <option value="server">Web 服务</option>
+                    </select>
+                    <select id="logHours" class="form-select form-select-sm w-auto" style="display:none">
+                        <option value="1">1小时</option>
+                        <option value="6">6小时</option>
+                        <option value="12">12小时</option>
+                        <option value="24" selected>24小时</option>
+                    </select>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshLogs()">刷新</button>
+                    <button class="btn btn-sm btn-outline-secondary" id="btnLiveToggle" onclick="toggleLive()">
+                        <span id="liveIcon">⏸</span> 实时
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="clearDeviceLogs()">清屏</button>
+                    <button class="btn btn-sm btn-primary" onclick="downloadLogs()">下载</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="log-container" id="logContainer">
+                    <div class="text-center text-muted py-5">请点击右侧在线设备查看实时日志</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card mb-0">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span>设备状态 <span id="deviceCountBadges"></span></span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshDevices()">刷新</button>
+            </div>
+            <div class="card-body">
+                <div id="wsDevicePanel" class="ws-device-panel mb-3">
+                    <div class="text-muted small py-2">加载 WS 设备…</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let selectedDeviceId = null;
+    let selectedDeviceName = '';
+    let liveEnabled = true;
+    let livePollTimer = null;
+    let deviceRefreshTimer = null;
+    let consoleSocket = null;
+    let lastConsoleSeq = 0;
+    const MAX_DOM_LINES = 2500;
+
+    function formatTime(timestamp) {
+        if (!timestamp) return '-';
+        const date = new Date(timestamp * 1000);
+        return date.toLocaleString('zh-CN');
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+    }
+
+    function logLineClass(line) {
+        const s = String(line || '');
+        if (/\bE\/| ERROR|Error:|FATAL|Exception/.test(s)) return 'log-error';
+        if (/\bW\/| WARN|Warning/.test(s)) return 'log-warn';
+        if (/\bI\/| INFO/.test(s)) return 'log-info';
+        return 'log-meta';
+    }
+
+    function renderLogLines(lines, append) {
+        const container = document.getElementById('logContainer');
+        if (!container) return;
+        if (!lines || !lines.length) {
+            if (!append) {
+                container.innerHTML = '<div class="text-muted py-5">暂无日志</div>';
+            }
+            return;
+        }
+        const html = lines.map(line =>
+            `<div class="log-line ${logLineClass(line)}">${escapeHtml(line)}</div>`
+        ).join('');
+        if (append) {
+            const placeholder = container.querySelector('.text-muted.py-5');
+            if (placeholder) container.innerHTML = '';
+            container.insertAdjacentHTML('beforeend', html);
+            while (container.children.length > MAX_DOM_LINES) {
+                container.removeChild(container.firstChild);
+            }
+        } else {
+            container.innerHTML = html;
+        }
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function updateSelectedLabel() {
+        const el = document.getElementById('selectedDeviceLabel');
+        if (!el) return;
+        if (document.getElementById('logSource').value === 'server') {
+            el.textContent = 'Web 服务日志 webserver.log';
+            return;
+        }
+        if (!selectedDeviceId) {
+            el.textContent = '未选择设备';
+            return;
+        }
+        el.textContent = (selectedDeviceName || selectedDeviceId) + ' · ' + selectedDeviceId;
+        el.title = selectedDeviceId;
+    }
+
+    function ensureConsoleSocket() {
+        if (consoleSocket || typeof io === 'undefined') return;
+        const opts = { transports: ['websocket', 'polling'] };
+        if (typeof window.guiEvalPath === 'function') {
+            opts.path = window.guiEvalPath('/socket.io');
+        }
+        consoleSocket = io(opts);
+        consoleSocket.on('device_console_log', function (payload) {
+            if (!liveEnabled) return;
+            if (!payload || payload.deviceId !== selectedDeviceId) return;
+            if (document.getElementById('logSource').value !== 'device') return;
+            const lines = payload.lines || [];
+            if (lines.length) renderLogLines(lines, true);
+            if (payload.seq) lastConsoleSeq = payload.seq;
+        });
+    }
+
+    function leaveConsoleRoom() {
+        if (consoleSocket && selectedDeviceId) {
+            consoleSocket.emit('leave_device_console', { deviceId: selectedDeviceId });
+        }
+    }
+
+    function joinConsoleRoom(deviceId) {
+        ensureConsoleSocket();
+        if (consoleSocket && deviceId) {
+            consoleSocket.emit('join_device_console', { deviceId: deviceId });
+        }
+        fetch('/api/devices/' + encodeURIComponent(deviceId) + '/console-logs/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enable: true })
+        }).catch(function () {});
+    }
+
+    function selectDevice(deviceId, deviceName) {
+        if (!deviceId) return;
+        const same = selectedDeviceId === deviceId;
+        if (!same) {
+            leaveConsoleRoom();
+            selectedDeviceId = deviceId;
+            selectedDeviceName = deviceName || deviceId;
+            lastConsoleSeq = 0;
+        } else {
+            selectedDeviceName = deviceName || selectedDeviceName || deviceId;
+        }
+        document.getElementById('logSource').value = 'device';
+        onLogSourceChange();
+        updateSelectedLabel();
+        document.querySelectorAll('.device-card[data-device-id]').forEach(function (card) {
+            card.classList.toggle('active-device', card.getAttribute('data-device-id') === deviceId);
+        });
+        joinConsoleRoom(deviceId);
+        if (!same) {
+            refreshDeviceConsole(false);
+        }
+        startLivePoll();
+    }
+
+    function refreshDeviceConsole(appendOnly) {
+        if (!selectedDeviceId) {
+            document.getElementById('logContainer').innerHTML =
+                '<div class="text-center text-muted py-5">请点击右侧在线设备查看实时日志</div>';
+            return;
+        }
+        const q = appendOnly && lastConsoleSeq
+            ? ('?since_seq=' + lastConsoleSeq + '&limit=800')
+            : '?limit=1500';
+        fetch('/api/devices/' + encodeURIComponent(selectedDeviceId) + '/console-logs' + q)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) return;
+                if (data.seq) lastConsoleSeq = data.seq;
+                if (appendOnly) {
+                    // 缓冲无精确 since：全量刷新尾部更稳
+                    renderLogLines(data.lines || [], false);
+                } else {
+                    renderLogLines(data.lines || [], false);
+                }
+            })
+            .catch(err => console.error('console logs', err));
+    }
+
+    function refreshServerLogs() {
+        const hours = document.getElementById('logHours').value;
+        fetch('/api/logs?hours=' + hours)
+            .then(res => res.json())
+            .then(data => {
+                renderLogLines(data.logs || [], false);
+            })
+            .catch(err => console.error('server logs', err));
+    }
+
+    function refreshLogs() {
+        if (document.getElementById('logSource').value === 'server') {
+            refreshServerLogs();
+        } else {
+            refreshDeviceConsole(false);
+        }
+    }
+
+    function onLogSourceChange() {
+        const src = document.getElementById('logSource').value;
+        document.getElementById('logHours').style.display = src === 'server' ? '' : 'none';
+        updateSelectedLabel();
+        refreshLogs();
+    }
+
+    function startLivePoll() {
+        stopLivePoll();
+        if (!liveEnabled) return;
+        if (document.getElementById('logSource').value !== 'device') return;
+        livePollTimer = setInterval(function () {
+            if (liveEnabled && selectedDeviceId) {
+                refreshDeviceConsole(true);
+            }
+        }, 2500);
+    }
+
+    function stopLivePoll() {
+        if (livePollTimer) {
+            clearInterval(livePollTimer);
+            livePollTimer = null;
+        }
+    }
+
+    function toggleLive() {
+        liveEnabled = !liveEnabled;
+        document.getElementById('liveIcon').textContent = liveEnabled ? '⏸' : '▶';
+        if (liveEnabled) startLivePoll();
+        else stopLivePoll();
+    }
+
+    function clearDeviceLogs() {
+        if (document.getElementById('logSource').value === 'server') {
+            document.getElementById('logContainer').innerHTML =
+                '<div class="text-muted py-5">服务端日志仅支持查看/下载，不支持远端清屏</div>';
+            return;
+        }
+        if (!selectedDeviceId) return;
+        fetch('/api/devices/' + encodeURIComponent(selectedDeviceId) + '/console-logs/clear', {
+            method: 'POST'
+        }).then(function () {
+            lastConsoleSeq = 0;
+            document.getElementById('logContainer').innerHTML =
+                '<div class="text-muted py-5">已清空</div>';
+        });
+    }
+
+    function downloadLogs() {
+        if (document.getElementById('logSource').value === 'server') {
+            window.location.href = '/api/logs/download';
+            return;
+        }
+        if (!selectedDeviceId) {
+            alert('请先选择一台在线设备');
+            return;
+        }
+        window.location.href = '/api/devices/' + encodeURIComponent(selectedDeviceId) + '/console-logs/download';
+    }
+
+    function wsBadgeHtml(d) {
+        if (d.kind === 'devicesdk' || d.client_app === 'devicesdkdemo') {
+            return '<span class="online-badge online-ws-demo"></span>';
+        }
+        if (d.kind === 'testapp') {
+            return '<span class="online-badge online-ws-testapp"></span>';
+        }
+        return '<span class="online-badge online"></span>';
+    }
+
+    function deviceCardHtml(d) {
+        const badge = wsBadgeHtml(d);
+        const kindClass = (d.kind === 'devicesdk' || d.client_app === 'devicesdkdemo')
+            ? 'bg-success'
+            : (d.kind === 'testapp' ? 'bg-primary' : 'bg-light text-dark border');
+        const kind = d.kind_label
+            ? `<span class="badge ${kindClass} ms-1" style="font-weight:500">${escapeHtml(d.kind_label)}</span>`
+            : '';
+        const channel = d.channel_label
+            ? `<br><span class="text-muted">${escapeHtml(d.channel_label)}</span>`
+            : '';
+        const busy = d.busy
+            ? `<br><span class="text-warning">任务中 ${escapeHtml(d.busy_task_id || '')} · ${escapeHtml(d.busy_status || '')}</span>`
+            : '';
+        const modelLine = [d.manufacturer, d.model].filter(Boolean).join(' ');
+        const title = d.device_name || d.model || d.device_id || '';
+        const showModel = modelLine && modelLine !== title;
+        const ver = d.android_version ? escapeHtml(d.android_version) : '';
+        const id = d.device_id || '';
+        const active = id && id === selectedDeviceId ? ' active-device' : '';
+        return `
+            <div class="card device-card mb-2${active}" data-device-id="${escapeHtml(id)}"
+                 data-device-name="${escapeHtml(title)}">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            ${badge}
+                            ${escapeHtml(title)}
+                            ${kind}
+                        </div>
+                        <small class="text-muted">${ver}</small>
+                    </div>
+                    <div class="mt-1">
+                        <small class="text-muted">
+                            ${showModel ? escapeHtml(modelLine) + '<br>' : ''}
+                            ID: <code>${escapeHtml(id)}</code>
+                            ${channel}${busy}
+                        </small>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    function renderWsDevicePanel(wsDevices) {
+        const panel = document.getElementById('wsDevicePanel');
+        if (!panel) return;
+        const items = wsDevices || [];
+        if (!items.length) {
+            panel.innerHTML = [
+                '<div class="d-flex justify-content-between align-items-baseline mb-1">',
+                '<strong style="font-size:0.9rem">WS 在线设备</strong>',
+                '<small class="text-muted">0 台 · /ws/device</small>',
+                '</div>',
+                '<div class="text-muted small py-2 border rounded px-2 bg-light">',
+                '暂无 WS 连接。DeviceSDK Demo 请在配置页开启 <strong>WebServer 直报</strong>，',
+                'URL 填 <code>http://124.71.69.102:9527</code> 后保存并重新打开 App。',
+                '</div>'
+            ].join('');
+            return;
+        }
+        panel.innerHTML = [
+            '<div class="d-flex justify-content-between align-items-baseline mb-1">',
+            '<strong style="font-size:0.9rem">WS 在线设备</strong>',
+            '<small class="text-muted">' + items.length + ' 台 · 点击切换设备日志 · /ws/device</small>',
+            '</div>',
+            items.map(deviceCardHtml).join('')
+        ].join('');
+
+        panel.querySelectorAll('.device-card[data-device-id]').forEach(function (card) {
+            card.addEventListener('click', function () {
+                selectDevice(card.getAttribute('data-device-id'), card.getAttribute('data-device-name') || '');
+            });
+        });
+
+        // 默认选中第一台；若当前选中已离线则切到第一台
+        const ids = items.map(function (d) { return d.device_id; }).filter(Boolean);
+        if (!selectedDeviceId || ids.indexOf(selectedDeviceId) < 0) {
+            const first = items[0];
+            if (first && first.device_id) {
+                selectDevice(first.device_id, first.device_name || first.model || first.device_id);
+            }
+        } else {
+            document.querySelectorAll('.device-card[data-device-id]').forEach(function (card) {
+                card.classList.toggle('active-device', card.getAttribute('data-device-id') === selectedDeviceId);
+            });
+        }
+    }
+
+    function updateDeviceCountBadges(wsCount) {
+        const el = document.getElementById('deviceCountBadges');
+        if (!el) return;
+        el.innerHTML = '<span class="device-count-badge ws">WS ' + wsCount + '</span>';
+    }
+
+    function refreshDevices() {
+        fetch('/api/devices')
+            .then(res => res.json())
+            .then(data => {
+                const wsDevices = data.devices || [];
+                renderWsDevicePanel(wsDevices);
+                updateDeviceCountBadges(wsDevices.length);
+            })
+            .catch(err => {
+                console.error('Error loading devices:', err);
+            });
+    }
+
+    function startDeviceAutoRefresh() {
+        if (deviceRefreshTimer) return;
+        deviceRefreshTimer = setInterval(refreshDevices, 5000);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.getElementById('logSource').addEventListener('change', onLogSourceChange);
+        ensureConsoleSocket();
+        refreshDevices();
+        startDeviceAutoRefresh();
+        updateSelectedLabel();
+    });
+</script>
+{% endblock %}

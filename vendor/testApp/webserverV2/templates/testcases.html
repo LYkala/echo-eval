@@ -1,0 +1,1474 @@
+{% extends "base.html" %}
+
+{% block title %}测试用例管理 - TestApp{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dataset-table {
+        table-layout: fixed;
+        min-width: 720px;
+    }
+    .dataset-table > :not(caption) > * > * {
+        vertical-align: middle;
+    }
+    .excel-upload-area {
+        border: 2px dashed #dcdfe6;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+        background: #fff;
+    }
+    .excel-upload-area:hover,
+    .excel-upload-area.dragover {
+        border-color: #409eff;
+        background: #ecf5ff;
+    }
+    .json-upload-area {
+        border: 2px dashed #dcdfe6;
+        border-radius: 8px;
+        padding: 24px;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+    }
+    .json-upload-area:hover,
+    .json-upload-area.dragover {
+        border-color: #409eff;
+        background: #ecf5ff;
+    }
+    .json-file-item {
+        padding: 8px 0;
+        border-bottom: 1px solid #ebeef5;
+    }
+    .json-file-item:last-child {
+        border-bottom: none;
+    }
+    #jsonManageEditView .json-editor {
+        font-family: Consolas, Monaco, 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.55;
+        min-height: 48vh;
+        resize: vertical;
+        tab-size: 2;
+    }
+    #jsonManageEditView { display: none; }
+    #jsonManageModal.is-editing #jsonManageListView { display: none; }
+    #jsonManageModal.is-editing #jsonManageEditView { display: block; }
+    #jsonManageModal.is-editing .json-manage-footer-list { display: none; }
+    #jsonManageModal.is-editing .json-manage-footer-edit { display: flex !important; }
+    .json-manage-footer-edit { display: none !important; }
+    #jsonManageModal .modal-content {
+        background: #fff;
+        border: 1px solid #ebeef5;
+    }
+    .excel-selected-name {
+        font-size: 13px;
+        color: #606266;
+    }
+    #editExcelModal .modal-dialog {
+        max-width: min(96vw, 1400px);
+        margin: 1.25rem auto;
+    }
+    #editExcelModal .modal-content {
+        max-height: calc(100vh - 2.5rem);
+    }
+    #editExcelModal .modal-header {
+        padding: 14px 18px 10px;
+        align-items: flex-start;
+    }
+    #editExcelModal .modal-header .excel-modal-heading {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    #editExcelModal .modal-header .excel-modal-sub {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 400;
+        color: #909399;
+    }
+    #editExcelModal .modal-header .excel-modal-sub strong {
+        color: #606266;
+        font-weight: 500;
+    }
+    #editExcelModal .modal-body {
+        padding: 12px 16px 16px;
+        background: #f5f7fa;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 0;
+    }
+    #editExcelModal .excel-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        flex-shrink: 0;
+        background: #fff;
+        border: 1px solid #ebeef5;
+        border-radius: 8px;
+        padding: 10px 12px;
+    }
+    #editExcelModal .excel-toolbar-meta {
+        font-size: 13px;
+        color: #909399;
+    }
+    #editExcelModal .excel-toolbar-meta b {
+        color: #303133;
+        font-weight: 500;
+    }
+    #editExcelModal .excel-sheet-wrap {
+        flex: 1;
+        min-height: 0;
+        max-height: none;
+        overflow: auto;
+        border: 1px solid #a6a6a6;
+        border-radius: 0;
+        background: #fff;
+        box-shadow: none;
+    }
+    #editExcelModal .excel-sheet-table {
+        margin-bottom: 0;
+        font-size: 12px;
+        font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+        min-width: 1680px;
+        border-collapse: collapse;
+        --bs-table-bg: #fff;
+    }
+    #editExcelModal .excel-sheet-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background: #e7e6e6 !important;
+        color: #000 !important;
+        font-weight: 600 !important;
+        font-size: 12px;
+        white-space: nowrap;
+        vertical-align: middle;
+        border: 1px solid #b4b4b4 !important;
+        padding: 3px 6px;
+        height: 24px;
+        line-height: 1.2;
+    }
+    #editExcelModal .excel-sheet-table tbody td {
+        vertical-align: middle;
+        padding: 0;
+        border: 1px solid #d0d0d0;
+        background: #fff;
+        height: 24px;
+    }
+    #editExcelModal .excel-sheet-table tbody tr:nth-child(even) td {
+        background: #fafafa;
+    }
+    #editExcelModal .excel-sheet-table tbody tr:hover td {
+        background: #e8f3ff;
+    }
+    #editExcelModal .excel-sheet-table .col-actions {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        min-width: 52px;
+        width: 52px;
+        background: #f3f3f3;
+        box-shadow: 1px 0 0 #b4b4b4;
+        text-align: center;
+        vertical-align: middle;
+        padding: 0 2px;
+    }
+    #editExcelModal .excel-sheet-table thead .col-actions {
+        z-index: 4;
+        background: #e7e6e6 !important;
+    }
+    #editExcelModal .excel-sheet-table tbody tr:hover .col-actions {
+        background: #e8f3ff;
+    }
+    #editExcelModal .excel-col-narrow { min-width: 100px; width: 110px; }
+    #editExcelModal .excel-col-mid { min-width: 120px; width: 140px; }
+    #editExcelModal .excel-col-name { min-width: 280px; width: 320px; }
+    #editExcelModal .excel-col-wide { min-width: 200px; width: 240px; }
+    #editExcelModal .excel-col-xwide { min-width: 280px; width: 360px; }
+    #editExcelModal .excel-cell-input,
+    #editExcelModal .excel-cell-textarea {
+        width: 100%;
+        min-width: 0;
+        border: 1px solid transparent;
+        background: transparent;
+        box-shadow: none !important;
+        border-radius: 0;
+        color: #000;
+        padding: 2px 4px;
+        outline: none;
+    }
+    #editExcelModal .excel-cell-input {
+        font-size: 12px;
+        height: 22px;
+        line-height: 18px;
+    }
+    #editExcelModal .excel-cell-textarea {
+        font-size: 12px;
+        line-height: 18px;
+        min-height: 22px;
+        max-height: 22px;
+        height: 22px;
+        resize: none;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    #editExcelModal .excel-cell-textarea:focus {
+        white-space: pre-wrap;
+        min-height: 72px;
+        max-height: 140px;
+        height: auto;
+        overflow: auto;
+        position: relative;
+        z-index: 6;
+        background: #fff;
+        border-color: #217346;
+        box-shadow: 0 0 0 1px #217346 !important;
+    }
+    #editExcelModal .excel-cell-input:hover,
+    #editExcelModal .excel-cell-textarea:hover {
+        background: transparent;
+    }
+    #editExcelModal .excel-cell-input:focus {
+        border-color: #217346;
+        background: #fff;
+        box-shadow: inset 0 0 0 1px #217346 !important;
+    }
+    #editExcelModal .excel-empty {
+        padding: 48px 16px;
+        text-align: center;
+        color: #909399;
+        font-size: 13px;
+    }
+    #editExcelModal .modal-footer {
+        background: #fff;
+    }
+    #editExcelModal .btn-delete-excel-row {
+        font-size: 12px;
+        padding: 0 4px;
+        line-height: 22px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head mb-3">
+    <h1 class="page-title">测试用例管理</h1>
+    <p class="page-sub">管理测试集与用例文件</p>
+</div>
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>Excel 数据集</span>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnJsonManage">
+                    JSON 用例管理
+                </button>
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                        data-bs-target="#newDatasetModal">新建数据集</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 dataset-table">
+                    <colgroup>
+                        <col style="width: 20%">
+                        <col style="width: 10%">
+                        <col style="width: 26%">
+                        <col style="width: 18%">
+                        <col style="width: 26%">
+                    </colgroup>
+                    <thead class="table-light">
+                        <tr>
+                            <th>数据集名称</th>
+                            <th>用例数量</th>
+                            <th>Excel 文件</th>
+                            <th>更新时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="datasetTableBody">
+                        {% if excel_datasets %}
+                        {% for ds in excel_datasets %}
+                        <tr>
+                            <td>{{ ds.name }}{% if ds.name == 'QA_Concurrent_50' %} <span class="badge text-bg-primary">50条并发</span>{% endif %}</td>
+                            <td>{% if ds.has_file %}{{ ds.case_count if ds.case_count is not none else 0 }}{% else %}-{% endif %}</td>
+                            <td>{% if ds.has_file %}{{ ds.filename or 'dataset.xlsx' }}{% else %}<span class="text-warning">未上传 Excel</span>{% endif %}</td>
+                            <td><small class="text-muted">-</small></td>
+                            <td>
+                                <div class="row-actions">
+                                    <button type="button" class="btn btn-sm btn-primary btn-dataset-download"
+                                            data-name="{{ ds.name }}" {% if not ds.has_file %}disabled{% endif %}>下载</button>
+                                    <button type="button" class="btn btn-sm btn-text btn-dataset-edit"
+                                            data-name="{{ ds.name }}">编辑内容</button>
+                                    <button type="button" class="btn btn-sm btn-text btn-text-danger btn-dataset-delete"
+                                            data-name="{{ ds.name }}">删除</button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">加载中...</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新建 Excel 数据集 -->
+<div class="modal fade" id="newDatasetModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建 Excel 数据集</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label" for="newDatasetName">数据集名称</label>
+                    <input type="text" class="form-control" id="newDatasetName" placeholder="例如：GUI、回归集">
+                </div>
+                <div class="mb-2 d-flex justify-content-between align-items-center">
+                    <label class="form-label mb-0">上传 Excel</label>
+                    <a href="#" class="small" id="excelTemplateLink">下载用例模板</a>
+                </div>
+                <div class="excel-upload-area" id="newDatasetUploadArea">
+                    <input type="file" id="newDatasetFileInput" accept=".xlsx,.xlsm" style="display: none;">
+                    <p class="mb-1">点击选择或拖拽 Excel 文件</p>
+                    <small class="text-muted">支持 .xlsx / .xlsm，仅保存 Excel，不转换为 JSON</small>
+                </div>
+                <div class="excel-selected-name mt-2" id="newDatasetFileName"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="createDatasetBtn">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑 Excel 数据集内容 -->
+<div class="modal fade" id="editExcelModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="excel-modal-heading">
+                    <h5 class="modal-title mb-0">编辑数据集内容</h5>
+                    <p class="excel-modal-sub">数据集：<strong id="editExcelDatasetName"></strong></p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div class="excel-toolbar">
+                    <div class="excel-toolbar-meta">
+                        共 <b id="editExcelRowCount">0</b> 行用例
+                        <span class="text-muted ms-2" id="editExcelPageMeta"></span>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="excelPrevPageBtn">上一页</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="excelNextPageBtn">下一页</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="importExcelReplaceBtn">从文件导入</button>
+                        <button type="button" class="btn btn-sm btn-primary" id="addExcelRowBtn">添加用例行</button>
+                    </div>
+                </div>
+                <input type="file" id="replaceExcelFileInput" accept=".xlsx,.xlsm" style="display: none;">
+                <div id="excelSheetLoading" class="text-center text-muted py-5">加载中...</div>
+                <div class="excel-sheet-wrap d-none" id="excelSheetWrap">
+                    <table class="table excel-sheet-table" id="excelSheetTable">
+                        <thead id="excelSheetHead"></thead>
+                        <tbody id="excelSheetBody"></tbody>
+                    </table>
+                </div>
+                <div class="text-danger small d-none" id="excelSheetError"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveExcelBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JSON 用例管理 -->
+<div class="modal fade" id="jsonManageModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="jsonManageTitle">JSON 用例管理</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div id="jsonManageListView">
+                    <div class="row g-3 mb-3 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label" for="jsonManageTestsetSelect">选择 JSON 用例集</label>
+                            <select class="form-select" id="jsonManageTestsetSelect">
+                                <option value="">请选择...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal"
+                                    data-bs-target="#newJsonTestsetModal">新建 JSON 用例集</button>
+                        </div>
+                    </div>
+
+                    <div class="json-upload-area mb-3" id="jsonUploadArea">
+                        <input type="file" id="jsonFileInput" accept=".json" multiple style="display: none;">
+                        <p class="mb-1">点击选择或拖拽 <strong>JSON</strong> 文件到此处上传</p>
+                        <small class="text-muted">上传到上方所选 JSON 用例集</small>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2" id="jsonFileActionBar" style="display: none;">
+                        <div>
+                            <input type="checkbox" id="jsonSelectAll" class="form-check-input">
+                            <label for="jsonSelectAll" class="form-check-label">全选</label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-text btn-text-danger" id="jsonDeleteSelectedBtn">删除选中</button>
+                    </div>
+
+                    <div id="jsonFileList" class="border rounded p-2 bg-light" style="min-height: 120px;">
+                        <div class="text-center text-muted py-3">请先选择 JSON 用例集</div>
+                    </div>
+                    <div class="mt-2" id="jsonFilePagination"></div>
+                </div>
+
+                <div id="jsonManageEditView">
+                    <div class="mb-2 text-muted small">
+                        <span id="editFileTestset"></span> / <span id="editFileName"></span>
+                    </div>
+                    <textarea class="form-control json-editor" id="jsonEditor" spellcheck="false"></textarea>
+                    <div class="text-danger small mt-2 d-none" id="jsonEditorError"></div>
+                </div>
+            </div>
+            <div class="modal-footer json-manage-footer-list">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+            <div class="modal-footer json-manage-footer-edit">
+                <button type="button" class="btn btn-outline-secondary" id="jsonEditBackBtn">返回列表</button>
+                <button type="button" class="btn btn-primary" id="saveFileBtn" onclick="saveFileContent()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新建 JSON 用例集 -->
+<div class="modal fade" id="newJsonTestsetModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建 JSON 用例集</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" class="form-control" id="newJsonTestsetName" placeholder="输入 JSON 用例集名称">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="createJsonTestset()">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let jsonManageModal = null;
+    let editExcelModal = null;
+    let jsonManageTestset = null;
+    let jsonFilePage = 1;
+    let jsonFileTotalPages = 1;
+    let editingFilename = null;
+    let editingExcelDataset = null;
+    let excelSheetHeaders = [];
+    let excelSheetRows = [];
+    let excelSheetPage = 1;
+    const EXCEL_PAGE_SIZE = 40;
+    let newDatasetPendingFile = null;
+
+    function apiUrl(path) {
+        const base = (window.guiEvalBasePath || '').replace(/\/$/, '');
+        return `${base}${path}`;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function escapeAttr(text) {
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;');
+    }
+
+    function formatSize(bytes) {
+        if (!bytes) return '-';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function formatTime(ts) {
+        if (!ts) return '-';
+        const d = new Date(ts * 1000);
+        if (Number.isNaN(d.getTime())) return '-';
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function loadDatasetTable() {
+        fetch(apiUrl('/api/excel-datasets?_=' + Date.now()), {cache: 'no-store'})
+            .then(res => res.json())
+            .then(data => {
+                const tbody = document.getElementById('datasetTableBody');
+                const list = (data.datasets || []).slice().sort((a, b) => {
+                    const ta = Number(a.last_modified || a.create_time || 0);
+                    const tb = Number(b.last_modified || b.create_time || 0);
+                    return tb - ta;
+                });
+                if (!list.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">暂无 Excel 数据集，请先新建</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = list.map(ds => {
+                    const fileLabel = ds.has_file
+                        ? `${escapeHtml(ds.filename || 'dataset.xlsx')} (${formatSize(ds.size)})`
+                        : '<span class="text-warning">未上传 Excel</span>';
+                    const updated = ds.last_modified || ds.create_time;
+                    const caseCount = ds.has_file ? (ds.case_count != null ? ds.case_count : 0) : '-';
+                    const nameHtml = ds.name === 'QA_Concurrent_50'
+                        ? `${escapeHtml(ds.name)} <span class="badge text-bg-primary">50条并发</span>`
+                        : escapeHtml(ds.name);
+                    return `
+                    <tr>
+                        <td>${nameHtml}</td>
+                        <td>${caseCount}</td>
+                        <td>${fileLabel}</td>
+                        <td><small class="text-muted">${formatTime(updated)}</small></td>
+                        <td>
+                            <div class="row-actions">
+                                <button type="button" class="btn btn-sm btn-primary btn-dataset-download"
+                                        data-name="${escapeAttr(ds.name)}" ${ds.has_file ? '' : 'disabled'}>下载</button>
+                                <button type="button" class="btn btn-sm btn-text btn-dataset-edit"
+                                        data-name="${escapeAttr(ds.name)}">编辑内容</button>
+                                <button type="button" class="btn btn-sm btn-text btn-text-danger btn-dataset-delete"
+                                        data-name="${escapeAttr(ds.name)}">删除</button>
+                            </div>
+                        </td>
+                    </tr>`;
+                }).join('');
+            })
+            .catch(() => {
+                document.getElementById('datasetTableBody').innerHTML =
+                    '<tr><td colspan="5" class="text-center text-danger py-4">加载失败</td></tr>';
+            });
+    }
+
+    function loadJsonTestsets() {
+        fetch(apiUrl('/api/testsets'))
+            .then(res => res.json())
+            .then(data => {
+                const list = data.testsets || [];
+                const sel = document.getElementById('jsonManageTestsetSelect');
+                const current = sel.value || jsonManageTestset || '';
+                sel.innerHTML = '<option value="">请选择...</option>' +
+                    list.map(ts => `<option value="${escapeAttr(ts.name)}">${escapeHtml(ts.name)} (${(ts.files || []).length} 个 JSON)</option>`).join('');
+                if (current && list.some(ts => ts.name === current)) {
+                    sel.value = current;
+                    jsonManageTestset = current;
+                }
+            });
+    }
+
+    function downloadDataset(name) {
+        window.location.href = apiUrl(`/api/excel-datasets/${encodeURIComponent(name)}/download`);
+    }
+
+    function deleteDataset(name) {
+        if (!confirm(`确定删除 Excel 数据集「${name}」吗？`)) return;
+        fetch(apiUrl(`/api/excel-datasets/${encodeURIComponent(name)}`), {method: 'DELETE'})
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) loadDatasetTable();
+                else alert(data.message || '删除失败');
+            });
+    }
+
+    function setNewDatasetFile(file) {
+        if (!file) {
+            newDatasetPendingFile = null;
+            document.getElementById('newDatasetFileName').textContent = '';
+            document.getElementById('newDatasetFileInput').value = '';
+            return;
+        }
+        if (!file.name.toLowerCase().match(/\.(xlsx|xlsm)$/)) {
+            alert('仅支持 .xlsx / .xlsm 文件');
+            return;
+        }
+        newDatasetPendingFile = file;
+        document.getElementById('newDatasetFileName').textContent = '已选择: ' + file.name;
+    }
+
+    function createDataset() {
+        const name = document.getElementById('newDatasetName').value.trim();
+        if (!name) {
+            alert('请输入数据集名称');
+            return;
+        }
+        const formData = new FormData();
+        formData.append('name', name);
+        if (newDatasetPendingFile) {
+            formData.append('file', newDatasetPendingFile);
+        }
+        const btn = document.getElementById('createDatasetBtn');
+        btn.disabled = true;
+        btn.classList.add('is-loading');
+        fetch(apiUrl('/api/excel-datasets'), {method: 'POST', body: formData})
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('newDatasetModal')).hide();
+                    document.getElementById('newDatasetName').value = '';
+                    setNewDatasetFile(null);
+                    loadDatasetTable();
+                } else {
+                    alert(data.message || '创建失败');
+                }
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.classList.remove('is-loading');
+            });
+    }
+
+    function isExcelMultilineColumn(header) {
+        // 含「名称」：与描述一样，点击展开看全，避免长标题被裁切
+        return /步骤|等待|预期|描述|澄清|单步|内容|指令|消息|名称/.test(header || '');
+    }
+
+    function excelColumnClass(header) {
+        const h = header || '';
+        if (/名称/.test(h)) return 'excel-col-name';
+        if (isExcelMultilineColumn(h)) {
+            if (/步骤|内容|指令/.test(h)) return 'excel-col-xwide';
+            return 'excel-col-wide';
+        }
+        if (/编号|类型|ID|id/.test(h)) return 'excel-col-narrow';
+        return 'excel-col-mid';
+    }
+
+    function showExcelSheetError(message) {
+        const el = document.getElementById('excelSheetError');
+        if (!message) {
+            el.textContent = '';
+            el.classList.add('d-none');
+            return;
+        }
+        el.textContent = message;
+        el.classList.remove('d-none');
+    }
+
+    function excelPageCount() {
+        return Math.max(1, Math.ceil(excelSheetRows.length / EXCEL_PAGE_SIZE) || 1);
+    }
+
+    function clampExcelPage() {
+        const pages = excelPageCount();
+        if (excelSheetPage > pages) excelSheetPage = pages;
+        if (excelSheetPage < 1) excelSheetPage = 1;
+    }
+
+    function flushExcelPageFromDom() {
+        document.querySelectorAll('#excelSheetBody .excel-cell').forEach(el => {
+            const rowIndex = parseInt(el.dataset.row, 10);
+            const colIndex = parseInt(el.dataset.col, 10);
+            if (!Number.isNaN(rowIndex) && !Number.isNaN(colIndex) && excelSheetRows[rowIndex]) {
+                excelSheetRows[rowIndex][colIndex] = el.value;
+            }
+        });
+    }
+
+    function collectExcelSheetRowsForSave() {
+        flushExcelPageFromDom();
+        return excelSheetRows
+            .map(row => (Array.isArray(row) ? row.slice() : []))
+            .filter(row => row.some(cell => String(cell || '').trim()));
+    }
+
+    function renderExcelSheetEditor() {
+        const head = document.getElementById('excelSheetHead');
+        const body = document.getElementById('excelSheetBody');
+        const rowCountEl = document.getElementById('editExcelRowCount');
+        const pageMetaEl = document.getElementById('editExcelPageMeta');
+        const prevBtn = document.getElementById('excelPrevPageBtn');
+        const nextBtn = document.getElementById('excelNextPageBtn');
+        clampExcelPage();
+        if (rowCountEl) rowCountEl.textContent = String(excelSheetRows.length);
+
+        const pages = excelPageCount();
+        const start = (excelSheetPage - 1) * EXCEL_PAGE_SIZE;
+        const end = Math.min(start + EXCEL_PAGE_SIZE, excelSheetRows.length);
+        if (pageMetaEl) {
+            pageMetaEl.textContent = excelSheetRows.length
+                ? `第 ${excelSheetPage}/${pages} 页（显示 ${start + 1}-${end}）`
+                : '';
+        }
+        if (prevBtn) prevBtn.disabled = excelSheetPage <= 1;
+        if (nextBtn) nextBtn.disabled = excelSheetPage >= pages;
+
+        head.innerHTML = `<tr>
+            <th class="col-actions">操作</th>
+            ${excelSheetHeaders.map(h => `<th class="${excelColumnClass(h)}" title="${escapeAttr(h)}">${escapeHtml(h)}</th>`).join('')}
+        </tr>`;
+
+        if (!excelSheetRows.length) {
+            body.innerHTML = `<tr><td colspan="${excelSheetHeaders.length + 1}"><div class="excel-empty">暂无用例行，点击右上角「添加用例行」开始编辑</div></td></tr>`;
+            return;
+        }
+
+        const pageRows = excelSheetRows.slice(start, end);
+        body.innerHTML = pageRows.map((row, offset) => {
+            const rowIndex = start + offset;
+            const cells = excelSheetHeaders.map((header, colIndex) => {
+                const value = row[colIndex] || '';
+                const colClass = excelColumnClass(header);
+                if (isExcelMultilineColumn(header)) {
+                    return `<td class="${colClass}"><textarea class="form-control excel-cell-textarea excel-cell" data-row="${rowIndex}" data-col="${colIndex}" title="${escapeAttr(value)}" placeholder="${escapeAttr(header)}">${escapeHtml(value)}</textarea></td>`;
+                }
+                return `<td class="${colClass}"><input type="text" class="form-control form-control-sm excel-cell-input excel-cell" data-row="${rowIndex}" data-col="${colIndex}" value="${escapeAttr(value)}" title="${escapeAttr(value)}" placeholder="${escapeAttr(header)}"></td>`;
+            }).join('');
+            return `<tr>
+                <td class="col-actions">
+                    <button type="button" class="btn btn-sm btn-text btn-text-danger btn-delete-excel-row" data-row="${rowIndex}" title="删除此行">删除</button>
+                </td>
+                ${cells}
+            </tr>`;
+        }).join('');
+    }
+
+    function openEditExcel(name) {
+        editingExcelDataset = name;
+        excelSheetHeaders = [];
+        excelSheetRows = [];
+        excelSheetPage = 1;
+        showExcelSheetError('');
+        document.getElementById('editExcelDatasetName').textContent = name;
+        document.getElementById('excelSheetLoading').classList.remove('d-none');
+        document.getElementById('excelSheetWrap').classList.add('d-none');
+        editExcelModal.show();
+
+        fetch(apiUrl(`/api/excel-datasets/${encodeURIComponent(name)}/content?_=${Date.now()}`), {cache: 'no-store'})
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    showExcelSheetError(data.message || '加载失败');
+                    return;
+                }
+                excelSheetHeaders = data.headers || [];
+                excelSheetRows = (data.rows || []).map(row => (Array.isArray(row) ? row.slice() : []));
+                excelSheetPage = 1;
+                document.getElementById('excelSheetLoading').classList.add('d-none');
+                document.getElementById('excelSheetWrap').classList.remove('d-none');
+                renderExcelSheetEditor();
+            })
+            .catch(() => showExcelSheetError('加载失败'));
+    }
+
+    function addExcelRow() {
+        flushExcelPageFromDom();
+        excelSheetRows.push(excelSheetHeaders.map(() => ''));
+        excelSheetPage = excelPageCount();
+        renderExcelSheetEditor();
+    }
+
+    function deleteExcelRow(rowIndex) {
+        flushExcelPageFromDom();
+        excelSheetRows.splice(rowIndex, 1);
+        clampExcelPage();
+        renderExcelSheetEditor();
+    }
+
+    function changeExcelPage(delta) {
+        flushExcelPageFromDom();
+        excelSheetPage += delta;
+        clampExcelPage();
+        renderExcelSheetEditor();
+    }
+
+    // ---- 浏览器端生成真实 xlsx（ZIP/STORE），绕过网关对 JSON 正文的拦截 ----
+    function crc32Table() {
+        if (window.__crc32Table) return window.__crc32Table;
+        const table = new Uint32Array(256);
+        for (let i = 0; i < 256; i++) {
+            let c = i;
+            for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+            table[i] = c >>> 0;
+        }
+        window.__crc32Table = table;
+        return table;
+    }
+
+    function crc32Bytes(bytes) {
+        const table = crc32Table();
+        let crc = 0 ^ (-1);
+        for (let i = 0; i < bytes.length; i++) {
+            crc = (crc >>> 8) ^ table[(crc ^ bytes[i]) & 0xFF];
+        }
+        return (crc ^ (-1)) >>> 0;
+    }
+
+    function utf8Encode(str) {
+        return new TextEncoder().encode(String(str ?? ''));
+    }
+
+    function concatBytes(parts) {
+        let len = 0;
+        for (const p of parts) len += p.length;
+        const out = new Uint8Array(len);
+        let off = 0;
+        for (const p of parts) {
+            out.set(p, off);
+            off += p.length;
+        }
+        return out;
+    }
+
+    function u16(n) {
+        const b = new Uint8Array(2);
+        b[0] = n & 0xff;
+        b[1] = (n >>> 8) & 0xff;
+        return b;
+    }
+
+    function u32(n) {
+        const b = new Uint8Array(4);
+        b[0] = n & 0xff;
+        b[1] = (n >>> 8) & 0xff;
+        b[2] = (n >>> 16) & 0xff;
+        b[3] = (n >>> 24) & 0xff;
+        return b;
+    }
+
+    function zipStore(files) {
+        // files: [{name, data: Uint8Array}]
+        const localParts = [];
+        const centralParts = [];
+        let offset = 0;
+        for (const f of files) {
+            const nameBytes = utf8Encode(f.name);
+            const data = f.data;
+            const crc = crc32Bytes(data);
+            const local = concatBytes([
+                u32(0x04034b50),
+                u16(20),
+                u16(0),
+                u16(0),
+                u16(0),
+                u16(0),
+                u32(crc),
+                u32(data.length),
+                u32(data.length),
+                u16(nameBytes.length),
+                u16(0),
+                nameBytes,
+                data,
+            ]);
+            const central = concatBytes([
+                u32(0x02014b50),
+                u16(20),
+                u16(20),
+                u16(0),
+                u16(0),
+                u16(0),
+                u16(0),
+                u32(crc),
+                u32(data.length),
+                u32(data.length),
+                u16(nameBytes.length),
+                u16(0),
+                u16(0),
+                u16(0),
+                u16(0),
+                u32(0),
+                u32(offset),
+                nameBytes,
+            ]);
+            localParts.push(local);
+            centralParts.push(central);
+            offset += local.length;
+        }
+        const centralDir = concatBytes(centralParts);
+        const end = concatBytes([
+            u32(0x06054b50),
+            u16(0),
+            u16(0),
+            u16(files.length),
+            u16(files.length),
+            u32(centralDir.length),
+            u32(offset),
+            u16(0),
+        ]);
+        return concatBytes([...localParts, centralDir, end]);
+    }
+
+    function colLetter(index) {
+        let n = index + 1;
+        let s = '';
+        while (n > 0) {
+            const m = (n - 1) % 26;
+            s = String.fromCharCode(65 + m) + s;
+            n = Math.floor((n - 1) / 26);
+        }
+        return s;
+    }
+
+    function xmlEscape(text) {
+        return String(text ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function buildDatasetXlsxBlob(headers, rows) {
+        const cols = headers.length;
+        const sheetRows = [];
+        const allRows = [headers, ...rows];
+        allRows.forEach((row, rIdx) => {
+            const cells = [];
+            for (let c = 0; c < cols; c++) {
+                const val = row[c] == null ? '' : String(row[c]);
+                if (!val) continue;
+                const ref = `${colLetter(c)}${rIdx + 1}`;
+                // 保留换行：xml:space="preserve"
+                cells.push(
+                    `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEscape(val)}</t></is></c>`
+                );
+            }
+            sheetRows.push(`<row r="${rIdx + 1}">${cells.join('')}</row>`);
+        });
+        const sheetXml =
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+            `<sheetData>${sheetRows.join('')}</sheetData></worksheet>`;
+        const workbookXml =
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ` +
+            `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+            `<sheets><sheet name="用例" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+        const relsXml =
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+            `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+            `</Relationships>`;
+        const wbRelsXml =
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+            `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+            `</Relationships>`;
+        const contentTypes =
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+            `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+            `<Default Extension="xml" ContentType="application/xml"/>` +
+            `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+            `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+            `</Types>`;
+        const zipBytes = zipStore([
+            {name: '[Content_Types].xml', data: utf8Encode(contentTypes)},
+            {name: '_rels/.rels', data: utf8Encode(relsXml)},
+            {name: 'xl/workbook.xml', data: utf8Encode(workbookXml)},
+            {name: 'xl/_rels/workbook.xml.rels', data: utf8Encode(wbRelsXml)},
+            {name: 'xl/worksheets/sheet1.xml', data: utf8Encode(sheetXml)},
+        ]);
+        return new Blob([zipBytes], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+    }
+
+    function saveExcelDataset() {
+        if (!editingExcelDataset) return;
+        const rows = collectExcelSheetRowsForSave();
+        showExcelSheetError('');
+        const btn = document.getElementById('saveExcelBtn');
+        btn.disabled = true;
+        btn.classList.add('is-loading');
+        const headers = Array.isArray(excelSheetHeaders) ? excelSheetHeaders : [];
+        const safeRows = Array.isArray(rows) ? rows : [];
+
+        // 公司代理只放行 /api/download/notepad：用记事本同款 JSON，content 分块传表
+        const sid = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+        const chunkSize = 10;
+        const chunks = [];
+        for (let i = 0; i < safeRows.length; i += chunkSize) {
+            chunks.push({offset: i, rows: safeRows.slice(i, i + chunkSize)});
+        }
+        const totalSteps = 2 + chunks.length; // begin + chunks + done
+        let step = 0;
+
+        function b64utf8(obj) {
+            const text = JSON.stringify(obj);
+            const bytes = new TextEncoder().encode(text);
+            let bin = '';
+            for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+            return btoa(bin);
+        }
+
+        function postNotepadContent(content) {
+            return fetch(apiUrl('/api/download/notepad'), {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({content}),
+                cache: 'no-store',
+            }).then(async res => {
+                let data = {};
+                let raw = '';
+                try {
+                    raw = await res.text();
+                    data = raw ? JSON.parse(raw) : {};
+                } catch (_) {
+                    data = {};
+                }
+                if (res.status === 403 || (raw && raw.trim().toLowerCase().startsWith('<!doctype'))) {
+                    const err = new Error('PROXY_403');
+                    err.code = 'PROXY_403';
+                    throw err;
+                }
+                if (!data.success) {
+                    throw new Error(data.message || `保存失败 (HTTP ${res.status})`);
+                }
+                return data;
+            });
+        }
+
+        function setProgress() {
+            step += 1;
+            const pct = Math.min(100, Math.round((step / totalSteps) * 100));
+            showExcelSheetError(`保存中… ${pct}%`);
+        }
+
+        Promise.resolve()
+            .then(() => {
+                setProgress();
+                return postNotepadContent(
+                    `DS1|begin|${sid}|${editingExcelDataset}|${safeRows.length}|${b64utf8(headers)}`
+                );
+            })
+            .then(() => chunks.reduce((p, chunk) => p.then(() => {
+                setProgress();
+                return postNotepadContent(
+                    `DS1|chunk|${sid}|${chunk.offset}|${b64utf8(chunk.rows)}`
+                );
+            }), Promise.resolve()))
+            .then(() => {
+                setProgress();
+                return postNotepadContent(`DS1|done|${sid}`);
+            })
+            .then(() => {
+                showExcelSheetError('');
+                editExcelModal.hide();
+                loadDatasetTable();
+            })
+            .catch(err => {
+                if (err && err.code === 'PROXY_403') {
+                    showExcelSheetError(
+                        '保存仍被公司代理拦截。请将 124.71.69.102 加入系统/浏览器代理例外后重试。'
+                    );
+                } else {
+                    showExcelSheetError((err && err.message) || '保存失败');
+                }
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.classList.remove('is-loading');
+            });
+    }
+
+    function importExcelReplace(file) {
+        if (!editingExcelDataset || !file) return;
+        if (!file.name.toLowerCase().match(/\.(xlsx|xlsm)$/)) {
+            alert('仅支持 .xlsx / .xlsm 文件');
+            return;
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+        fetch(apiUrl(`/api/excel-datasets/${encodeURIComponent(editingExcelDataset)}/upload`), {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                openEditExcel(editingExcelDataset);
+            } else {
+                alert(data.message || '导入失败');
+            }
+        });
+    }
+
+    function createJsonTestset() {
+        const name = document.getElementById('newJsonTestsetName').value.trim();
+        if (!name) {
+            alert('请输入用例集名称');
+            return;
+        }
+        fetch(apiUrl('/api/testsets'), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name})
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('newJsonTestsetModal')).hide();
+                document.getElementById('newJsonTestsetName').value = '';
+                loadJsonTestsets();
+            } else {
+                alert(data.message || '创建失败');
+            }
+        });
+    }
+
+    function openJsonManage(testsetName) {
+        loadJsonTestsets();
+        if (testsetName) {
+            document.getElementById('jsonManageTestsetSelect').value = testsetName;
+            jsonManageTestset = testsetName;
+            jsonFilePage = 1;
+            loadJsonFiles();
+        }
+        jsonManageModal.show();
+    }
+
+    function renderJsonFileListEmpty(msg) {
+        document.getElementById('jsonFileList').innerHTML =
+            `<div class="text-center text-muted py-3">${escapeHtml(msg)}</div>`;
+        document.getElementById('jsonFilePagination').innerHTML = '';
+        document.getElementById('jsonFileActionBar').style.display = 'none';
+    }
+
+    function loadJsonFiles() {
+        if (!jsonManageTestset) {
+            renderJsonFileListEmpty('请先选择 JSON 用例集');
+            return;
+        }
+        fetch(apiUrl(
+            `/api/testsets/${encodeURIComponent(jsonManageTestset)}/files?page=${jsonFilePage}&per_page=20`
+        ))
+        .then(res => res.json())
+        .then(data => {
+            const container = document.getElementById('jsonFileList');
+            if (!data.files || !data.files.length) {
+                renderJsonFileListEmpty('该用例集暂无 JSON 文件');
+                return;
+            }
+            jsonFileTotalPages = data.total_pages || 1;
+            document.getElementById('jsonFileActionBar').style.display = 'flex';
+            container.innerHTML = data.files.map(f => `
+                <div class="json-file-item d-flex align-items-center gap-2">
+                    <input type="checkbox" class="form-check-input json-file-checkbox"
+                           data-filename="${escapeAttr(f.name)}">
+                    <div class="flex-grow-1 min-width-0">
+                        <div class="text-truncate">${escapeHtml(f.name)}</div>
+                        <small class="text-muted">${formatSize(f.size)}</small>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-text flex-shrink-0 btn-edit-json"
+                            data-filename="${escapeAttr(f.name)}">编辑</button>
+                </div>
+            `).join('');
+            renderJsonFilePagination();
+        });
+    }
+
+    function renderJsonFilePagination() {
+        const container = document.getElementById('jsonFilePagination');
+        if (jsonFileTotalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+        let html = '<nav><ul class="pagination pagination-sm justify-content-center mb-0">';
+        html += `<li class="page-item ${jsonFilePage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-json-page="${jsonFilePage - 1}">上一页</a></li>`;
+        for (let i = 1; i <= jsonFileTotalPages; i++) {
+            if (i === 1 || i === jsonFileTotalPages || Math.abs(i - jsonFilePage) <= 1) {
+                html += `<li class="page-item ${i === jsonFilePage ? 'active' : ''}">
+                    <a class="page-link" href="#" data-json-page="${i}">${i}</a></li>`;
+            }
+        }
+        html += `<li class="page-item ${jsonFilePage === jsonFileTotalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-json-page="${jsonFilePage + 1}">下一页</a></li>`;
+        html += '</ul></nav>';
+        container.innerHTML = html;
+    }
+
+    function handleJsonUpload(files) {
+        if (!jsonManageTestset) {
+            alert('请先选择 JSON 用例集');
+            return;
+        }
+        Array.from(files).forEach(file => {
+            if (!file.name.endsWith('.json')) {
+                alert(`只支持 JSON 文件: ${file.name}`);
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('testset', jsonManageTestset);
+            fetch(apiUrl('/api/files/upload'), {method: 'POST', body: formData})
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        loadJsonFiles();
+                        loadJsonTestsets();
+                    } else {
+                        alert(data.message || '上传失败');
+                    }
+                });
+        });
+    }
+
+    function showJsonEditorError(message) {
+        const el = document.getElementById('jsonEditorError');
+        if (!message) {
+            el.textContent = '';
+            el.classList.add('d-none');
+            return;
+        }
+        el.textContent = message;
+        el.classList.remove('d-none');
+    }
+
+    function enterJsonEditView() {
+        const modalEl = document.getElementById('jsonManageModal');
+        modalEl.classList.add('is-editing');
+        document.getElementById('jsonManageTitle').textContent = '编辑用例 JSON';
+    }
+
+    function leaveJsonEditView() {
+        const modalEl = document.getElementById('jsonManageModal');
+        modalEl.classList.remove('is-editing');
+        document.getElementById('jsonManageTitle').textContent = 'JSON 用例管理';
+        editingFilename = null;
+        showJsonEditorError('');
+    }
+
+    function openFileEditor(filename) {
+        if (!jsonManageTestset) return;
+        editingFilename = filename;
+        showJsonEditorError('');
+        document.getElementById('editFileTestset').textContent = jsonManageTestset;
+        document.getElementById('editFileName').textContent = filename;
+        document.getElementById('jsonEditor').value = '加载中...';
+        enterJsonEditView();
+        fetch(apiUrl(
+            `/api/files/content?testset=${encodeURIComponent(jsonManageTestset)}&filename=${encodeURIComponent(filename)}`
+        ))
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) {
+                alert(data.message || '读取失败');
+                leaveJsonEditView();
+                return;
+            }
+            try {
+                document.getElementById('jsonEditor').value =
+                    JSON.stringify(JSON.parse(data.content), null, 2);
+            } catch (e) {
+                document.getElementById('jsonEditor').value = data.content;
+            }
+        })
+        .catch(() => {
+            alert('读取失败');
+            leaveJsonEditView();
+        });
+    }
+
+    function saveFileContent() {
+        if (!jsonManageTestset || !editingFilename) return;
+        const content = document.getElementById('jsonEditor').value;
+        showJsonEditorError('');
+        try {
+            JSON.parse(content);
+        } catch (e) {
+            showJsonEditorError(`JSON 格式错误: ${e.message}`);
+            return;
+        }
+        const saveBtn = document.getElementById('saveFileBtn');
+        saveBtn.disabled = true;
+        fetch(apiUrl('/api/files/content'), {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                testset: jsonManageTestset,
+                filename: editingFilename,
+                content
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                leaveJsonEditView();
+                loadJsonFiles();
+                loadJsonTestsets();
+            } else {
+                showJsonEditorError(data.message || '保存失败');
+            }
+        })
+        .finally(() => { saveBtn.disabled = false; });
+    }
+
+    function initExcelDropArea(areaId, inputId, onFile) {
+        const area = document.getElementById(areaId);
+        const input = document.getElementById(inputId);
+        area.addEventListener('click', () => input.click());
+        area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('dragover'); });
+        area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+        area.addEventListener('drop', e => {
+            e.preventDefault();
+            area.classList.remove('dragover');
+            if (e.dataTransfer.files.length) onFile(e.dataTransfer.files[0]);
+        });
+        input.addEventListener('change', () => {
+            if (input.files.length) onFile(input.files[0]);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        jsonManageModal = new bootstrap.Modal(document.getElementById('jsonManageModal'));
+        editExcelModal = new bootstrap.Modal(document.getElementById('editExcelModal'));
+
+        document.getElementById('jsonEditBackBtn').addEventListener('click', leaveJsonEditView);
+        document.getElementById('jsonManageModal').addEventListener('hidden.bs.modal', leaveJsonEditView);
+        document.getElementById('excelTemplateLink').href = apiUrl('/api/files/excel-template');
+        document.getElementById('createDatasetBtn').addEventListener('click', createDataset);
+        document.getElementById('saveExcelBtn').addEventListener('click', saveExcelDataset);
+        document.getElementById('addExcelRowBtn').addEventListener('click', addExcelRow);
+        document.getElementById('excelPrevPageBtn').addEventListener('click', () => changeExcelPage(-1));
+        document.getElementById('excelNextPageBtn').addEventListener('click', () => changeExcelPage(1));
+        document.getElementById('importExcelReplaceBtn').addEventListener('click', () => {
+            document.getElementById('replaceExcelFileInput').click();
+        });
+        document.getElementById('replaceExcelFileInput').addEventListener('change', function() {
+            if (this.files.length) {
+                importExcelReplace(this.files[0]);
+                this.value = '';
+            }
+        });
+        document.getElementById('excelSheetBody').addEventListener('input', function(e) {
+            const el = e.target.closest('.excel-cell');
+            if (!el) return;
+            const rowIndex = parseInt(el.dataset.row, 10);
+            const colIndex = parseInt(el.dataset.col, 10);
+            if (!Number.isNaN(rowIndex) && !Number.isNaN(colIndex) && excelSheetRows[rowIndex]) {
+                excelSheetRows[rowIndex][colIndex] = el.value;
+            }
+        });
+        document.getElementById('excelSheetBody').addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-delete-excel-row');
+            if (btn) {
+                deleteExcelRow(parseInt(btn.dataset.row, 10));
+            }
+        });
+
+        initExcelDropArea('newDatasetUploadArea', 'newDatasetFileInput', setNewDatasetFile);
+
+        loadDatasetTable();
+
+        document.getElementById('btnJsonManage').addEventListener('click', () => openJsonManage(null));
+
+        document.getElementById('datasetTableBody').addEventListener('click', function(e) {
+            const dl = e.target.closest('.btn-dataset-download');
+            if (dl && dl.dataset.name) { downloadDataset(dl.dataset.name); return; }
+            const ed = e.target.closest('.btn-dataset-edit');
+            if (ed && ed.dataset.name) { openEditExcel(ed.dataset.name); return; }
+            const del = e.target.closest('.btn-dataset-delete');
+            if (del && del.dataset.name) { deleteDataset(del.dataset.name); }
+        });
+
+        document.getElementById('jsonManageTestsetSelect').addEventListener('change', function() {
+            jsonManageTestset = this.value || null;
+            jsonFilePage = 1;
+            loadJsonFiles();
+        });
+
+        const jsonUploadArea = document.getElementById('jsonUploadArea');
+        const jsonFileInput = document.getElementById('jsonFileInput');
+        jsonUploadArea.addEventListener('click', () => jsonFileInput.click());
+        jsonUploadArea.addEventListener('dragover', e => { e.preventDefault(); jsonUploadArea.classList.add('dragover'); });
+        jsonUploadArea.addEventListener('dragleave', () => jsonUploadArea.classList.remove('dragover'));
+        jsonUploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            jsonUploadArea.classList.remove('dragover');
+            handleJsonUpload(e.dataTransfer.files);
+        });
+        jsonFileInput.addEventListener('change', () => handleJsonUpload(jsonFileInput.files));
+
+        document.getElementById('jsonFileList').addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-edit-json');
+            if (btn && btn.dataset.filename) openFileEditor(btn.dataset.filename);
+        });
+
+        document.getElementById('jsonSelectAll').addEventListener('change', function() {
+            document.querySelectorAll('.json-file-checkbox').forEach(cb => { cb.checked = this.checked; });
+        });
+
+        document.getElementById('jsonDeleteSelectedBtn').addEventListener('click', function() {
+            const checked = document.querySelectorAll('.json-file-checkbox:checked');
+            if (!checked.length) { alert('请选择要删除的文件'); return; }
+            if (!confirm(`确定删除选中的 ${checked.length} 个文件吗？`)) return;
+            const files = Array.from(checked).map(cb => ({
+                testset: jsonManageTestset,
+                filename: cb.dataset.filename
+            }));
+            fetch(apiUrl('/api/files/delete'), {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({files})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    loadJsonFiles();
+                    loadJsonTestsets();
+                } else {
+                    alert(data.message || '删除失败');
+                }
+            });
+        });
+
+        document.getElementById('jsonFilePagination').addEventListener('click', function(e) {
+            const link = e.target.closest('[data-json-page]');
+            if (!link) return;
+            e.preventDefault();
+            const page = parseInt(link.dataset.jsonPage, 10);
+            if (page >= 1 && page <= jsonFileTotalPages) {
+                jsonFilePage = page;
+                loadJsonFiles();
+            }
+        });
+
+        document.getElementById('newDatasetModal').addEventListener('hidden.bs.modal', () => {
+            document.getElementById('newDatasetName').value = '';
+            setNewDatasetFile(null);
+        });
+    });
+</script>
+{% endblock %}

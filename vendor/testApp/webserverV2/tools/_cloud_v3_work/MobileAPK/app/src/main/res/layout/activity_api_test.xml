@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- 标题栏：返回按钮 + 标题 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="24dp">
+
+        <Button
+            android:id="@+id/btn_back"
+            android:layout_width="60dp"
+            android:layout_height="40dp"
+            android:text="←"
+            android:textSize="18sp"
+            android:padding="0dp"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="单功能测试"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:gravity="center"/>
+
+        <!-- 占位保持居中 -->
+        <View
+            android:layout_width="60dp"
+            android:layout_height="40dp"/>
+    </LinearLayout>
+
+    <!-- 按钮网格区域（可滚动） -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fadeScrollbars="false">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- 行1: 日志 + 记忆 -->
+        <android.widget.Button
+            android:id="@+id/btn_log"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:text="日志"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_square_rounded"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/btn_memory"/>
+
+        <android.widget.Button
+            android:id="@+id/btn_memory"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:text="记忆"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_square_rounded"
+            android:layout_marginStart="8dp"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toEndOf="@id/btn_log"
+            app:layout_constraintEnd_toEndOf="parent"/>
+
+        <!-- 行2: 技能 + 定时任务 -->
+        <android.widget.Button
+            android:id="@+id/btn_skill"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:text="技能"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_square_rounded"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintTop_toBottomOf="@id/btn_log"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/btn_imitate"/>
+
+        <android.widget.Button
+            android:id="@+id/btn_imitate"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:text="定时任务"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_square_rounded"
+            android:layout_marginTop="16dp"
+            android:layout_marginStart="8dp"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintTop_toBottomOf="@id/btn_memory"
+            app:layout_constraintStart_toEndOf="@id/btn_skill"
+            app:layout_constraintEnd_toEndOf="parent"/>
+
+        <!-- 行3: Location + 通通任务 -->
+        <android.widget.Button
+            android:id="@+id/btn_location"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:text="地理位置"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_square_rounded"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintTop_toBottomOf="@id/btn_skill"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/btn_tongtong_task"/>
+
+        <android.widget.Button
+            android:id="@+id/btn_tongtong_task"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:text="通通任务"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_square_rounded"
+            android:layout_marginTop="16dp"
+            android:layout_marginStart="8dp"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintTop_toBottomOf="@id/btn_imitate"
+            app:layout_constraintStart_toEndOf="@id/btn_location"
+            app:layout_constraintEnd_toEndOf="parent"/>
+
+        <!-- 行4: 会话管理 -->
+        <androidx.constraintlayout.widget.Guideline
+            android:id="@+id/guideline_center"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            app:layout_constraintGuide_percent="0.5"/>
+
+        <android.widget.Button
+            android:id="@+id/btn_session"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:text="会话管理"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_square_rounded"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintTop_toBottomOf="@id/btn_location"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/guideline_center"/>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </ScrollView>
+
+</LinearLayout>

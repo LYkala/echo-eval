@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}豆包小艺QA自动化测试平台{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --vx-sidebar: #1a1a2e;
+            --vx-sidebar-line: #2a2a4a;
+            --vx-sidebar-text: #c0c4cc;
+            --vx-sidebar-active: #409eff;
+            --vx-bg: #f0f2f5;
+            --vx-surface: #fff;
+            --vx-ink: #303133;
+            --vx-regular: #606266;
+            --vx-muted: #909399;
+            --vx-border: #dcdfe6;
+            --vx-border-light: #ebeef5;
+            --vx-fill: #f5f7fa;
+            --vx-primary: #409eff;
+            --vx-primary-dark: #337ecc;
+            --vx-primary-light: #ecf5ff;
+            --vx-success: #67c23a;
+            --vx-success-light: #f0f9eb;
+            --vx-warning: #e6a23c;
+            --vx-danger: #f56c6c;
+            --vx-danger-light: #fef0f0;
+            --vx-sidebar-w: 220px;
+            --vx-font: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+            --bs-primary: #409eff;
+            --bs-primary-rgb: 64, 158, 255;
+            --bs-body-font-family: var(--vx-font);
+            --bs-body-color: var(--vx-ink);
+            --bs-body-bg: var(--vx-bg);
+        }
+        body { margin: 0; font-family: var(--vx-font); font-size: 14px; background: var(--vx-bg); color: var(--vx-ink); }
+        a { color: var(--vx-primary); text-decoration: none; }
+        a:hover { color: var(--vx-primary-dark); }
+        .sidebar { position: fixed; left: 0; top: 0; width: var(--vx-sidebar-w); height: 100vh; background: var(--vx-sidebar); display: flex; flex-direction: column; z-index: 20; }
+        .sidebar-logo { color: #fff; font-size: 16px; font-weight: 700; text-align: center; padding: 20px 12px; letter-spacing: 0; border-bottom: 1px solid var(--vx-sidebar-line); line-height: 1.35; }
+        .sidebar-logo small { display: block; margin-top: 6px; font-size: 11px; font-weight: 500; letter-spacing: 1px; color: var(--vx-sidebar-text); }
+        .sidebar-nav { list-style: none; margin: 0; padding: 12px 0; }
+        .sidebar-nav a { display: flex; align-items: center; gap: 10px; padding: 12px 20px; color: var(--vx-sidebar-text); border-left: 3px solid transparent; }
+        .sidebar-nav a:hover { background: rgba(64, 158, 255, 0.12); color: #fff; }
+        .sidebar-nav a.active { background: rgba(64, 158, 255, 0.18); color: #fff; border-left-color: var(--vx-sidebar-active); }
+        .sidebar-footer { margin-top: auto; padding: 12px 16px 16px; border-top: 1px solid var(--vx-sidebar-line); color: var(--vx-sidebar-text); font-size: 12px; }
+        .main-content { margin-left: var(--vx-sidebar-w); min-height: 100vh; }
+        .page-content { padding: 20px; max-width: 1400px; margin: 0 auto; }
+        .page-title { font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0 0 4px; }
+        .page-sub { color: var(--vx-muted); font-size: 13px; margin: 0 0 16px; }
+        .card { background: #fff; border: 1px solid var(--vx-border-light); border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+        .card-header { padding: 12px 16px; border-bottom: 1px solid var(--vx-border-light); font-weight: 600; background: #fff; border-radius: 8px 8px 0 0; }
+        .card-body { padding: 16px; }
+        .table { margin-bottom: 0; font-size: 13px; }
+        .table thead th { background: var(--vx-fill); color: var(--vx-regular); font-weight: 500; border-bottom: 1px solid var(--vx-border-light); white-space: nowrap; }
+        .table td { color: var(--vx-ink); vertical-align: middle; border-color: var(--vx-border-light); }
+        .btn-primary { background: var(--vx-primary); border-color: var(--vx-primary); }
+        .btn-primary:hover { background: var(--vx-primary-dark); border-color: var(--vx-primary-dark); }
+        .btn-outline-primary { color: var(--vx-primary); border-color: #b3d8ff; }
+        .btn-outline-primary:hover { background: var(--vx-primary); border-color: var(--vx-primary); }
+        .form-control, .form-select { border-color: var(--vx-border); font-size: 13px; }
+        .form-control:focus, .form-select:focus { border-color: var(--vx-primary); box-shadow: 0 0 0 2px rgba(64,158,255,.15); }
+        .badge-prod { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+        .badge-xiaoyi { background: #ecf5ff; color: #409eff; }
+        .badge-doubao { background: #f0f9eb; color: #67c23a; }
+        .badge-ok { background: #f0f9eb; color: #67c23a; }
+        .badge-no { background: #fef0f0; color: #f56c6c; }
+        .badge-wait { background: #fdf6ec; color: #e6a23c; }
+        .stat { background: #fff; border: 1px solid var(--vx-border-light); border-radius: 8px; padding: 16px 18px; }
+        .stat b { display: block; font-size: 26px; color: #1a1a2e; line-height: 1.2; }
+        .stat span { color: var(--vx-muted); font-size: 13px; }
+        .pager a, .pager span { display: inline-block; min-width: 32px; text-align: center; padding: 4px 8px; border: 1px solid var(--vx-border); border-radius: 4px; margin-right: 4px; color: var(--vx-regular); background: #fff; }
+        .pager .on { background: var(--vx-primary); color: #fff; border-color: var(--vx-primary); }
+        .clip { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .flash { background: #ecf5ff; color: #337ecc; border: 1px solid #d9ecff; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
+        .qa-block { white-space: pre-wrap; word-break: break-word; background: var(--vx-fill); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
+        .qa-block strong { display: block; color: var(--vx-muted); font-size: 12px; font-weight: 500; margin-bottom: 4px; }
+        .row-actions { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 2px; white-space: nowrap; }
+        .btn-text { border: 1px solid transparent; background: transparent; box-shadow: none; padding: 4px 8px; color: var(--vx-primary); font-size: 13px; font-weight: 500; border-radius: 4px; }
+        .btn-text:hover { color: var(--vx-primary-dark); background: var(--vx-primary-light); }
+        .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; line-height: 1.4; }
+        .status-completed { background: #f0f9eb; color: #529b2e; }
+        .status-pending { background: #fdf6ec; color: #b88230; }
+        .cell-id { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: #606266; }
+        .cell-muted { color: #909399; font-size: 12px; }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+<aside class="sidebar">
+    <a class="sidebar-logo" href="/">豆包小艺QA<small>自动化测试平台</small></a>
+    <ul class="sidebar-nav">
+        <li><a class="{% if page == 'home' %}active{% endif %}" href="/">首页</a></li>
+        <li><a class="{% if page == 'cases' %}active{% endif %}" href="/cases">测试用例管理</a></li>
+        <li><a class="{% if page == 'tasks' %}active{% endif %}" href="/tasks">测试任务管理</a></li>
+    </ul>
+    <div class="sidebar-footer">豆包小艺QA自动化测试平台</div>
+</aside>
+<main class="main-content">
+    <div class="page-content">
+        {% with messages = get_flashed_messages() %}
+            {% for msg in messages %}<div class="flash">{{ msg }}</div>{% endfor %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

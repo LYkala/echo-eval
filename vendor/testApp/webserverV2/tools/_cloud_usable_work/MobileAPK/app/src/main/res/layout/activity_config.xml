@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- 标题栏 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="DeviceSDK V2 配置"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- 服务器配置（可折叠，默认展开） -->
+        <LinearLayout
+            android:id="@+id/item_server_config"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#F5F5F5"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:id="@+id/title_server_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="▼ 服务器配置"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:padding="12dp"
+                android:background="#E0E0E0"
+                android:clickable="true"
+                android:focusable="true"/>
+
+            <LinearLayout
+                android:id="@+id/content_server_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="服务器环境"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="2dp"/>
+                <Spinner
+                    android:id="@+id/spinner_env"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="认证模式"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="2dp"/>
+                <Spinner
+                    android:id="@+id/spinner_auth_mode"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="设备证书认证（服务端开启双向认证必须打开）"
+                        android:textSize="13sp"/>
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switch_device_cert"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false"/>
+                </LinearLayout>
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 客户端配置（可折叠，默认展开） -->
+        <LinearLayout
+            android:id="@+id/item_client_config"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#F5F5F5"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:id="@+id/title_client_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="▼ 客户端配置"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:padding="12dp"
+                android:background="#E0E0E0"
+                android:clickable="true"
+                android:focusable="true"/>
+
+            <LinearLayout
+                android:id="@+id/content_client_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="CA认证（客户端认证服务端）"
+                        android:textSize="13sp"/>
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switch_ca_cert"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false"/>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Ticket认证"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="2dp"/>
+                <Spinner
+                    android:id="@+id/spinner_ticket"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"/>
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 登录配置（可折叠，默认展开） -->
+        <LinearLayout
+            android:id="@+id/item_login_config"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#F5F5F5"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:id="@+id/title_login_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="▼ 用户配置"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:padding="12dp"
+                android:background="#E0E0E0"
+                android:clickable="true"
+                android:focusable="true"/>
+
+            <LinearLayout
+                android:id="@+id/content_login_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="用户名"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="2dp"/>
+                <EditText
+                    android:id="@+id/et_username"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text"
+                    android:hint="用户名"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp"/>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="密码"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="2dp"/>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+                    <EditText
+                        android:id="@+id/et_password"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:inputType="textPassword"
+                        android:hint="密码"
+                        android:textSize="14sp"/>
+                    <TextView
+                        android:id="@+id/btn_show_password"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="👁"
+                        android:textSize="18sp"
+                        android:padding="8dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="?attr/selectableItemBackground"/>
+                </LinearLayout>
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 其他配置（可折叠，默认展开） -->
+        <LinearLayout
+            android:id="@+id/item_other_config"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#F5F5F5"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:id="@+id/title_other_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="▼ 其他配置"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:padding="12dp"
+                android:background="#E0E0E0"
+                android:clickable="true"
+                android:focusable="true"/>
+
+            <LinearLayout
+                android:id="@+id/content_other_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="设备类型"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="2dp"/>
+                <Spinner
+                    android:id="@+id/spinner_device_type"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="GUI确认弹窗（START_GUI/STOP_GUI）"
+                        android:textSize="13sp"/>
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switch_gui_confirm"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"/>
+                </LinearLayout>
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btn_confirm"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="确认，进入测试页面"
+            android:layout_marginBottom="12dp"/>
+
+    </LinearLayout>
+</ScrollView>

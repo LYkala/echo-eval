@@ -1,0 +1,42 @@
+# 模型注册表
+# 各服务通过标签（label）引用；当前工程外部大模型统一走火山 AI 网关（OpenAI 兼容）。
+# vl_eval 同时用于文本评判与截图 VL（doubao-seed-2.1-pro 支持多模态）。
+
+models:
+  default: &doubao
+    api_format: "openai"
+    base_url: "https://st8tp3ajl0df3n8b8l8qu.apigateway-cn-beijing.volceapi.com/v1"
+    api_key: "a6599a5a-ce8e-4110-812b-ee76d765e696"
+    model_id: "doubao-seed-2.1-pro"
+    temperature: 1
+    timeout: 120
+    max_retries: 3
+
+  local:
+    <<: *doubao
+
+  vl_eval:
+    <<: *doubao
+
+  kimi25:
+    <<: *doubao
+
+  # 以下标签保留原名，便于旧配置引用；实际均指向豆包网关
+  qwen122B:
+    <<: *doubao
+
+  qwen3.6-plus:
+    <<: *doubao
+
+  qwen27B:
+    <<: *doubao
+
+  qwen3_8B:
+    <<: *doubao
+
+  sili_qwen122B:
+    <<: *doubao
+
+  sili_qwen27B:
+    <<: *doubao
+    max_tokens: 4096

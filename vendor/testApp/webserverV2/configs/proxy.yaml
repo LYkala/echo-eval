@@ -1,0 +1,13 @@
+enabled: auto
+
+proxy:
+  scheme: http
+  address: proxyhk.huawei.com
+  port: 8080
+  user_id: h30055616
+  user_password: "hao123#$"
+  no_proxy: localhost,127.0.0.1,*.huawei.com,*.huawei.net
+
+  adaptive:
+    probe_direct_url: https://st8tp3ajl0df3n8b8l8qu.apigateway-cn-beijing.volceapi.com/v1/models
+    probe_timeout_sec: 5

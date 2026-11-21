@@ -1,0 +1,22 @@
+DeviceSDK Demo — 云上基础工程（严格 v25 底座 + TestReply）
+========================================================
+Date: 2026-08-30
+versionCode: 30
+versionName: 1.0-v25cloud-testreply-only
+APK: DeviceSDK-Demo-cloud.apk
+
+底座（不得混入增强 Demo）
+----
+- SDK：_cloud_usable_work/aisfsdk（v25 assume-ready）
+- Demo UI/配置：从 _orig_mobile_work（v25）整树拷贝
+- 仅追加：testreply-sdk 挂钩（回复广播 / case_start / 澄清 / 强制结束接管 / GUI 截图请求）
+- 不含：无人值守自动确认、WebServer 直报、增强 Config 开关
+
+对接
+----
+AIS 回复：Demo TestReplySdk → TestApp → WebServer
+截图：TestApp 自截 / MediaProjection 请求 Demo
+
+重建
+----
+  powershell -File rebuild.ps1

@@ -1,0 +1,35 @@
+# HTTP/HTTPS 出站代理配置
+# 复制为 proxy.yaml 后按需修改
+#
+# 配置文件查找顺序（优先级从高到低）：
+#   1. 环境变量 PROXY_CONFIG 指定的路径
+#   2. testApp/configs/proxy.yaml
+#   3. webserverV2/configs/proxy.yaml
+#
+# 环境变量覆盖：
+#   PROXY_ENABLED=true|false|auto   覆盖 enabled 开关
+#   PROXY_USER_ID                   覆盖 user_id
+#   PROXY_USER_PASSWORD             覆盖 user_password
+#   NO_PROXY                        覆盖 no_proxy
+#   PROXY_PROBE_URL                 自适应探测 URL
+#   PROXY_PROBE_TIMEOUT             自适应探测超时（秒）
+
+# 是否启用代理（默认 auto）：
+#   false  - 关闭，始终直连
+#   true   - 强制开启代理
+#   auto   - 自适应：启动时探测外网，直连可达则不用代理，否则自动启用代理
+enabled: auto
+
+proxy:
+  scheme: http
+  address: proxyhk.huawei.com
+  port: 8080
+  user_id: ""        # w3 账号
+  user_password: ""  # w3 密码
+  no_proxy: localhost,127.0.0.1,*.huawei.com,*.huawei.net
+
+  # 自适应模式（enabled: auto）专用
+  adaptive:
+    # 用于判断是否需要代理的外网探测地址（收到 HTTP 响应即视为可达）
+    probe_direct_url: https://dashscope.aliyuncs.com/compatible-mode/v1/models
+    probe_timeout_sec: 5

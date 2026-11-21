@@ -1,0 +1,21 @@
+# 复制到 EulerOS 前的离线包清单
+#
+# 在一台能联网的机器执行 download_deps.sh 后，打包这些目录上传到 EulerOS：
+#   aisf-voice-lab/
+#   aisf-voice-lab/sdk/
+#   aisf-voice-lab/apk/
+#   aisf-voice-lab/downloads/
+#   ../audio_samples/weather_question.wav
+#
+# 上传后在 EulerOS 上：
+#   cd aisf-voice-lab
+#   source ./env.sh
+#   python3 check_setup.py
+#   bash remote_deploy.sh          # 或分步: download_deps + create_avd_offline
+#
+# 还需手动下载 ARM64 模拟器 zip (~150MB) 放到:
+#   downloads/emulator-linux_aarch64.zip
+# 下载页(浏览器):
+#   https://ci.android.com/builds/submitted/12964465/emulator-linux_aarch64_gfxstream/latest/sdk-repo-linux_aarch64-emulator-12964465.zip
+# 然后:
+#   bash finish_after_emulator.sh

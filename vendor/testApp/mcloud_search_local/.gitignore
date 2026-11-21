@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+dist/
+results/run_*.xlsx
+results/run_*.json
+data/*.bak*
+tools/platform-tools/
+*.zip

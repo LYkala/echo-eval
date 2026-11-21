@@ -1,0 +1,144 @@
+{
+  "version": "1.0.0",
+  "testId": "TC-LIST-001",
+  "testName": "列表滑动测试",
+  "description": "测试列表滑动功能",
+  "exitBackCount": 6,
+  "targetApp": {
+    "packageName": "com.example.appforfunction"
+  },
+  "steps": [
+    {
+      "stepId": "launch",
+      "description": "启动目标应用",
+      "action": "launchApp"
+    },
+    {
+      "stepId": "wait-home",
+      "description": "等待首页加载",
+      "action": "wait",
+      "params": {
+        "duration": 1000
+      }
+    },
+    {
+      "stepId": "click-list-entry",
+      "description": "点击进入列表按钮",
+      "action": "click",
+      "target": {
+        "strategy": "text",
+        "value": "进入列表"
+      }
+    },
+    {
+      "stepId": "wait-list-page",
+      "description": "等待列表页面加载",
+      "action": "wait",
+      "params": {
+        "duration": 500
+      }
+    },
+    {
+      "stepId": "screenshot-top",
+      "description": "截图列表顶部",
+      "action": "screenshot",
+      "params": {
+        "saveName": "list_top"
+      }
+    },
+    {
+      "stepId": "scroll-down-1",
+      "description": "向下滑动列表",
+      "action": "scroll",
+      "params": {
+        "direction": "down"
+      }
+    },
+    {
+      "stepId": "wait-scroll",
+      "description": "等待滑动完成",
+      "action": "wait",
+      "params": {
+        "duration": 500
+      }
+    },
+    {
+      "stepId": "screenshot-middle",
+      "description": "截图列表中部",
+      "action": "screenshot",
+      "params": {
+        "saveName": "list_middle"
+      }
+    },
+    {
+      "stepId": "scroll-down-2",
+      "description": "继续向下滑动",
+      "action": "scroll",
+      "params": {
+        "direction": "down"
+      }
+    },
+    {
+      "stepId": "wait-scroll-2",
+      "description": "等待滑动完成",
+      "action": "wait",
+      "params": {
+        "duration": 500
+      }
+    },
+    {
+      "stepId": "scroll-up",
+      "description": "向上滑动回到顶部",
+      "action": "scroll",
+      "params": {
+        "direction": "up"
+      }
+    },
+    {
+      "stepId": "wait-scroll-3",
+      "description": "等待滑动完成",
+      "action": "wait",
+      "params": {
+        "duration": 500
+      }
+    },
+    {
+      "stepId": "screenshot-back-top",
+      "description": "截图回到顶部",
+      "action": "screenshot",
+      "params": {
+        "saveName": "list_back_top"
+      }
+    },
+    {
+      "stepId": "exit-back-1",
+      "description": "返回第1次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-2",
+      "description": "返回第2次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-3",
+      "description": "返回第3次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-4",
+      "description": "返回第4次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-5",
+      "description": "返回第5次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-6",
+      "description": "返回第6次",
+      "action": "press_back"
+    }
+  ]
+}

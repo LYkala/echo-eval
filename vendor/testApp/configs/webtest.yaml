@@ -1,0 +1,124 @@
+server:
+  port: 8001
+  host: "0.0.0.0"
+
+systemagent:
+  base_url: "http://localhost:8081"
+  # 可选：WebSocket 协议的新版 SysAgent 后端列表（支持多后端）
+  # 每个后端会被拼成 ws://ip:port/sysa/ws/v1/ai
+  backends:
+    - name: "local-ws-1"
+      ip: "121.37.53.201"
+      port: 40069
+    # - name: "remote-ws-2"
+    #   ip: "10.0.0.2"
+    #   port: 40069
+
+# 联通 Agent：火山智能体会话 API（sysagent_mode=unicom_volc；两阶段：意图 + 联网/工具答复）
+unicom_volc:
+  # 意图识别单独模型：
+  intent_model: "kimi25"
+
+
+# 模型配置（填写 model.yaml 中定义的标签），评审模型
+model: "kimi25"
+
+evaluation:
+  enabled: true # 设为 false 可跳过模型评分，只做对话测试
+  log_thinking: false # 设为 true 时，把模型返回的思考段打印到日志中
+  max_tokens: 8192 # 评审/聊天请求输出上限
+  thinking_budget: 1024 # 可选：限制百炼/Qwen 思考 token；0 表示不限制
+  concurrency: 200
+  # 端到端黑盒评测场景权重，需保证总和为 1
+  e2e_scenario_case_level_weights:
+    L1: 0.5
+    L2: 0.3
+    L3: 0.2
+  timeout_seconds: 600
+  model_retry: 4
+  model_retry_backoff_ms: 2000
+  thresholds:
+    e2e:
+      pass_rate_min: 0.65
+    node_parse:
+      pass_rate_min: 0.8
+      arg_match_min: 0.8
+      objective_weight: 0.7
+      subjective_weight: 0.3
+      subjective_pass_rate_min: 0.8
+    tool_exec:
+      pass_rate_min: 0.8
+      p95_ms_max: 5000
+    dm_recall:
+      pass_rate_min: 0.6
+      weights:
+        context_utilization: 0.3333
+        answer_completeness: 0.3333
+        answer_accuracy: 0.3333
+    context_effect_compare:
+      pass_rate_min: 0.6
+      weights:
+        context_utilization: 0.3333
+        answer_completeness: 0.3333
+        answer_accuracy: 0.3333
+    graybox_info:
+      pass_rate_min: 0.8
+      weights:
+        gate_accuracy: 0.30
+        arg_parse_accuracy: 0.25
+        latency: 0.20
+        tool_output_quality: 0.25
+  weights:
+    task_completion: 0.25
+    correctness: 0.25
+    relevance: 0.25
+    contextual_coherence: 0.25
+    first_token_latency: 0
+  fact_check:
+    enabled: true
+    enable_thinking: false # 设为 true 时，LangSearch/ReAct 事实核验模型单独开启思考
+    # 联网搜索提供方：langsearch（评测侧预采集结构化来源） / api_builtin（由评审模型内置联网搜索完成）
+    search_provider: "langsearch"
+    # 当 search_provider=api_builtin 时生效；首版仅支持 aliyun_bailian
+    builtin_provider: "aliyun_bailian"
+    # LangSearch 多 key：轮询起点，失败重试依次换 key（仅 search_provider=langsearch 时使用）
+    langsearch_api_keys:
+      - "sk-e0e938273e9b4e0dbf91fb2fe48936fe"
+      - "sk-d679347b359c4ab19addfcf1b7fb55c8"
+      - "sk-b4f4150fb2ec4e1282083218b4338676"
+    langsearch_base_url: "https://api.langsearch.com/v1/web-search"
+    timeout_seconds: 30
+    # LangSearch：首次请求失败后，最多再重试次数（总 HTTP 次数 = 1 + max_retries）
+    max_retries: 3
+    # 每一轮「User—Agent」最多几次独立 LangSearch；全用例上限 = 问答轮数 × 本值（如 5 轮×3=15；HTTP 重试同 query 不计入）
+    max_tool_calls: 10
+    max_results: 10
+    call_strategy: "react"
+    builtin_search_options:
+      # 仅 api_builtin 生效；当前对接阿里云百炼 OpenAI 兼容搜索参数
+      search_strategy: "turbo"
+
+storage:
+  data_dir: "../user_data/webtest"
+  session_dir: "../log/webtest/sessions"
+
+
+# 数据库配置
+# 方式一（推荐）：填写 host、user、password、dbname，密码可含 @、! 等，无需 URL 编码
+# 方式二：仅填 dsn 字符串（密码中的特殊字符须按 MySQL 驱动要求做 URL 编码）
+# 二者同时存在时优先使用 dsn
+database:
+  driver: "mysql"
+  dsn: ""
+  host: "127.0.0.1"
+  port: 3306
+  user: "root"
+  password: "huawei12!@"
+  dbname: "aisf_eval"
+  max_open_conns: 25
+  max_idle_conns: 5
+
+auth:
+  default_user:
+    username: "admin"
+    password: "admin123"

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.huawei.aisf</groupId>
+    <artifactId>devicesdk</artifactId>
+    <version>ARTIFACTID_VERSION</version>
+    <packaging>pom</packaging>
+    <name>devicesdk</name>
+    <description>devicesdk</description>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-all</artifactId>
+                <version>4.1.137.Final</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk15to18</artifactId>
+                <version>1.85</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+    <distributionManagement>
+        <repository>
+            <id>CloudArtifact-central</id>
+            <name>CloudArtifact central</name>
+            <url>https://maven.cloudartifact.dgg-y.dragon.tools.huawei.com/artifactory/product-cloudnsp</url>
+        </repository>
+        <snapshotRepository>
+            <id>CloudArtifact-snapshots</id>
+            <name>CloudArtifact snapshots</name>
+            <url>https://maven.cloudartifact.dgg-y.dragon.tools.huawei.com/artifactory/product-cloudnsp</url>
+        </snapshotRepository>
+    </distributionManagement>
+</project>

@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 悬浮窗权限 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- 后台启动Activity权限 (Android 10+) -->
+    <uses-permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- 全屏通知权限 (用于从后台启动Activity) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- 任务重排序权限（用于moveTaskToFront） -->
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
+
+    <!-- 前台服务权限 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
+        tools:ignore="ForegroundServicePermission" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+    <!-- 读取外部存储 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <!-- 网络权限 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- 查询所有包（Android 11+） -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <application
+        android:name=".TestApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.TestApp"
+        android:networkSecurityConfig="@xml/network_security_config"
+        tools:targetApi="31">
+
+        <!-- 主Activity -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.TestApp">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 文件管理Activity -->
+        <activity
+            android:name=".FileManagerActivity"
+            android:exported="false"
+            android:label="文件管理" />
+
+        <!-- 日志查看Activity -->
+        <activity
+            android:name=".LogViewerActivity"
+            android:exported="false"
+            android:label="日志查看" />
+
+        <!-- 测试用例查看Activity -->
+        <activity
+            android:name=".TestCaseViewerActivity"
+            android:exported="false"
+            android:label="测试用例" />
+
+        <!-- 录屏授权透明 Activity -->
+        <activity
+            android:name=".MediaProjectionPermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.TestApp.Transparent" />
+
+        <!-- MediaProjection 截屏服务（9526 ws_shot） -->
+        <service
+            android:name=".service.MediaCaptureService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <!-- 测试执行服务 -->
+        <service
+            android:name=".service.TestExecuteService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="test_automation" />
+        </service>
+
+        <!-- 悬浮窗服务 -->
+        <service
+            android:name=".service.FloatingWindowService"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- WebServer客户端服务 -->
+        <service
+            android:name=".service.WebServerClientService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="webserver_client" />
+        </service>
+
+        <!-- 无障碍服务 -->
+        <service
+            android:name=".service.TestAccessibilityService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- 小米 Greezer 会拦 cached 广播；用 Provider.call 投递回复 -->
+        <provider
+            android:name=".provider.TestReplyProvider"
+            android:authorities="com.example.testapp.testreply"
+            android:exported="true"
+            android:enabled="true" />
+
+        <!-- DeviceSDK TestReply 跨应用广播入口（显式组件，作兼容兜底） -->
+        <receiver
+            android:name=".receiver.TestReplyBridgeReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.example.testreply.ACTION_SESSION_REPLY" />
+                <action android:name="com.example.testreply.ACTION_GUI_STEP_LATENCY" />
+                <action android:name="com.example.testreply.ACTION_GUI_POLL_AFTER_CONTROL" />
+            </intent-filter>
+        </receiver>
+
+        <!-- FileProvider for sharing files -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

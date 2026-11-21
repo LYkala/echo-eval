@@ -1,0 +1,898 @@
+{% extends "base.html" %}
+{% block title %}安卓模拟器管理 - TestApp{% endblock %}
+{% block extra_css %}
+<style>
+  /* 变量挂在页面根上，弹窗在 .emu-manage-wrap 外也能用到 */
+  body:has(.emu-manage-wrap),
+  .emu-manage-wrap,
+  #emuModal,
+  #emuStopModal,
+  #emuVisualModal {
+    --em-ink: #303133;
+    --em-muted: #909399;
+    --em-line: #ebeef5;
+    --em-surface: #ffffff;
+    --em-soft: #f8f9fb;
+    --em-accent: #409eff;
+    --em-accent-soft: #ecf5ff;
+    --em-ok: #67c23a;
+    --em-ok-bg: #f0f9eb;
+    --em-idle: #909399;
+    --em-idle-bg: #f4f4f5;
+  }
+  .emu-manage-wrap {
+    font-family: var(--vx-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+    color: var(--em-ink);
+  }
+  .emu-btn-primary {
+    background: #409eff !important;
+    color: #fff !important;
+    box-shadow: none;
+  }
+  .emu-btn-primary:hover { background: #79bbff !important; color: #fff !important; }
+  .emu-btn-ghost {
+    background: #fff !important;
+    border-color: #ebeef5 !important;
+    color: #303133 !important;
+  }
+  .emu-btn-ghost:hover { background: #f8f9fb !important; border-color: #e4e7ed !important; }
+  .emu-btn-warn {
+    background: #fff !important;
+    border-color: #f3d19e !important;
+    color: #b88230 !important;
+  }
+  .emu-btn-warn:hover { background: #fdf6ec !important; }
+  .emu-btn-danger {
+    background: #fff !important;
+    border-color: #fde2e2 !important;
+    color: #f56c6c !important;
+  }
+  .emu-btn-danger:hover { background: #fef0f0 !important; }
+  .emu-btn-soft {
+    background: #ecf5ff !important;
+    color: #409eff !important;
+    border-color: #d9ecff !important;
+  }
+  .emu-btn-soft:hover { background: #d9ecff !important; }
+  .emu-manage-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+  .emu-manage-head h3 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: #1a1a2e;
+  }
+  .emu-manage-sub {
+    margin: 6px 0 0;
+    color: var(--em-muted);
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+  .emu-host-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    background: var(--em-surface);
+    border: 1px solid var(--em-line);
+    color: var(--em-muted);
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .emu-host-chip i {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #67c23a; box-shadow: 0 0 0 3px rgba(34,197,94,.18);
+  }
+  .emu-panel {
+    background: var(--em-surface);
+    border: 1px solid var(--em-line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .emu-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 14px 16px;
+    background: linear-gradient(180deg, #fafcff 0%, #f8f9fb 100%);
+    border-bottom: 1px solid var(--em-line);
+  }
+  .emu-toolbar .spacer { flex: 1; min-width: 8px; }
+  .emu-btn {
+    appearance: none;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    padding: 8px 14px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    font-family: inherit;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+  }
+  .emu-btn:disabled { opacity: .55; cursor: not-allowed; }
+  .emu-btn-sm { padding: 6px 11px; font-size: 0.8rem; min-width: 64px; }
+
+  /* 状态行始终占位，有无进度都不改变白底面板高度，避免跳动 */
+  .emu-status-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 40px;
+    height: 40px;
+    padding: 0 16px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .emu-status-row .status-text {
+    flex: 0 1 auto;
+    font-size: 0.86rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 50%;
+  }
+  .emu-status-row .busy-track {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+    visibility: hidden;
+  }
+  .emu-status-row.is-busy .busy-track { visibility: visible; }
+  .emu-status-row .progress {
+    width: 280px;
+    height: 8px;
+    margin: 0;
+    border-radius: 4px;
+    background: #ebeef5;
+  }
+  .emu-status-row .progress-bar {
+    background: #409eff;
+  }
+  .emu-status-row .busy-pct {
+    min-width: 3.2em;
+    text-align: right;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: #303133;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .emu-table-wrap { padding: 4px 0 0; }
+  .emu-table {
+    width: 100%;
+    margin: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .emu-table thead th {
+    position: sticky; top: 0;
+    background: var(--em-soft);
+    color: #606266;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--em-line);
+    padding: 12px 16px;
+    white-space: nowrap;
+  }
+  .emu-table tbody td {
+    padding: 14px 16px;
+    vertical-align: middle;
+    border-bottom: 1px solid #ebeef5;
+    font-size: 0.9rem;
+  }
+  .emu-table tbody tr:last-child td { border-bottom: none; }
+  .emu-table tbody tr:hover td { background: #fafcff; }
+  .emu-name {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--em-ink);
+    background: var(--em-soft);
+    border: 1px solid var(--em-line);
+    border-radius: 6px;
+    padding: 3px 8px;
+  }
+  .emu-display { font-weight: 400; color: #303133; }
+  .emu-meta { color: var(--em-muted); font-size: 0.84rem; }
+  .emu-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .emu-status::before {
+    content: '';
+    width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor;
+  }
+  .emu-status.run { background: var(--em-ok-bg); color: var(--em-ok); }
+  .emu-status.stop { background: var(--em-idle-bg); color: var(--em-idle); }
+  .emu-qos {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.84rem;
+    font-weight: 600;
+  }
+  .emu-qos.good { color: #67c23a; }
+  .emu-qos.warn { color: #e6a23c; }
+  .emu-qos.bad { color: #f56c6c; }
+  .emu-qos.mute { color: var(--em-muted); font-weight: 500; }
+  .emu-actions { display: inline-flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+  .emu-empty {
+    text-align: center;
+    padding: 48px 20px !important;
+    color: var(--em-muted);
+  }
+  .form-hint { font-size: 0.8rem; color: #909399; }
+  .create-mode {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .create-mode label {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 12px;
+    border: 1px solid var(--em-line);
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+  }
+  .create-mode label:hover { border-color: #d9ecff; }
+  .create-mode label.active {
+    border-color: #79bbff;
+    background: var(--em-accent-soft);
+    box-shadow: 0 0 0 3px rgba(15,108,189,.12);
+  }
+  .create-mode input { margin-top: 3px; }
+  .create-mode .title { font-weight: 700; font-size: 0.9rem; color: var(--em-ink); }
+  .create-mode .desc { font-size: 0.78rem; color: var(--em-muted); margin-top: 2px; line-height: 1.35; }
+  #cloneFromWrap { display: none; }
+  #cloneFromWrap.show { display: block; }
+  #blankHwWrap.hide { display: none; }
+  #cloneHint { display: none; margin-top: 8px; }
+  #cloneHint.show { display: block; }
+  #emuStopModal .modal-content {
+    border: none; border-radius: 14px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, .18);
+  }
+  #emuStopModal .modal-header { border-bottom: 1px solid var(--em-line); }
+  #emuStopModal .modal-footer { border-top: 1px solid var(--em-line); }
+  #emuStopModal .stop-name {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-weight: 600;
+  }
+  #emuVisualModal .modal-dialog {
+    max-width: min(1400px, calc(100vw - 24px));
+    margin: 12px auto;
+  }
+  #emuVisualModal .modal-content {
+    border: none;
+    border-radius: 14px;
+    overflow: hidden;
+    height: calc(100vh - 24px);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, .28);
+  }
+  #emuVisualModal .modal-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid #ebeef5;
+    background: #f8f9fb;
+  }
+  #emuVisualModal .modal-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+  #emuVisualModal .modal-body {
+    padding: 0;
+    height: calc(100% - 48px);
+    background: #303133;
+  }
+  #emuVisualFrame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    background: #303133;
+  }
+  #emuModal .modal-content {
+    border: none; border-radius: 14px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, .18);
+  }
+  #emuModal .modal-header {
+    border-bottom: 1px solid var(--em-line);
+    padding: 16px 20px;
+  }
+  #emuModal .modal-title { font-weight: 700; }
+  #emuModal .modal-body { padding: 18px 20px; }
+  #emuModal .modal-footer {
+    border-top: 1px solid var(--em-line);
+    padding: 12px 20px;
+  }
+  #emuModal .form-control {
+    border-radius: 9px; border-color: #e4e7ed;
+  }
+  #emuModal .form-control:focus {
+    border-color: #79bbff;
+    box-shadow: 0 0 0 3px rgba(15,108,189,.15);
+  }
+
+  @media (max-width: 768px) {
+    .emu-manage-head { align-items: flex-start; }
+    .emu-actions { max-width: none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid emu-manage-wrap">
+  <div class="emu-manage-head">
+    <div>
+      <h3>安卓模拟器管理</h3>
+      <p class="emu-manage-sub">在 ARM 主机上创建、修改、启停与删除 AVD。</p>
+    </div>
+    <div class="emu-host-chip" id="hostHint"><i></i>主机：ARM 模拟器节点</div>
+  </div>
+
+  <div class="emu-panel">
+    <div class="emu-toolbar">
+      <button class="btn btn-primary" id="btnCreate" type="button">新建模拟器</button>
+      <button class="btn btn-outline-secondary" id="btnRefresh" type="button">刷新</button>
+      <div class="spacer"></div>
+    </div>
+    <div class="emu-status-row" id="emuStatusRow">
+      <span class="status-text text-muted" id="msgBox">&nbsp;</span>
+      <div class="busy-track" id="busyTrack">
+        <div class="progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" id="busyPctBar" style="width:0%"></div>
+        </div>
+        <span class="busy-pct" id="busyPct">0%</span>
+      </div>
+    </div>
+    <div class="table-responsive emu-table-wrap">
+      <table class="emu-table">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>显示名</th>
+            <th>配置</th>
+            <th>端口</th>
+            <th>网络延迟</th>
+            <th>流畅度</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="emuBody">
+          <tr><td colspan="8" class="emu-empty">加载中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Create / Edit modal -->
+<div class="modal fade" id="emuModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="emuModalTitle">新建模拟器</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editMode" value="create">
+        <div id="createModeWrap" class="create-mode">
+          <label class="active" id="modeBlankLabel">
+            <input type="radio" name="createMode" id="modeBlank" value="blank" checked>
+            <span>
+              <div class="title">新建空白</div>
+              <div class="desc">仅创建空 AVD，需自行安装应用</div>
+            </span>
+          </label>
+          <label id="modeCloneLabel">
+            <input type="radio" name="createMode" id="modeClone" value="clone">
+            <span>
+              <div class="title">整机克隆</div>
+              <div class="desc">复制某台已有机的应用与数据</div>
+            </span>
+          </label>
+        </div>
+        <div class="mb-3" id="cloneFromWrap">
+          <label class="form-label">克隆来源</label>
+          <select class="form-select" id="fCloneFrom"></select>
+          <div class="form-hint" id="cloneHint">源机须先停止；会复制约数 GB 数据到 /home/android-avds。</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">AVD 名称</label>
+          <input class="form-control" id="fName" placeholder="例如 AISF_ARM64_2" pattern="[A-Za-z0-9_.-]+">
+          <div class="form-hint">仅字母数字下划线/点/横线；新建后不可改名</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">显示名称</label>
+          <input class="form-control" id="fDisplay" placeholder="可选，默认与 AVD 名称相同">
+        </div>
+        <div class="row g-2" id="blankHwWrap">
+          <div class="col-4">
+            <label class="form-label">内存 MB</label>
+            <input class="form-control" id="fRam" type="number" value="8192" min="2048" step="512">
+          </div>
+          <div class="col-4">
+            <label class="form-label">CPU 核数</label>
+            <input class="form-control" id="fCores" type="number" value="4" min="2" max="16">
+          </div>
+          <div class="col-4">
+            <label class="form-label">磁盘</label>
+            <input class="form-control" id="fDisk" value="15G" placeholder="15G">
+          </div>
+        </div>
+        <div class="form-hint mt-2" id="createPathHint">新建 AVD 默认落在主机 /home/android-avds，避免占满系统盘。</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="btnSave">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Stop-before-clone confirm -->
+<div class="modal fade" id="emuStopModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">源模拟器正在运行</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">整机克隆前需要先停止源模拟器 <span class="stop-name" id="stopCloneName"></span>，否则可能拷贝到不一致的数据。</p>
+        <p class="form-hint mb-0">停止后将自动继续克隆到新名称。</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-warning" id="btnStopThenClone">停止并继续克隆</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- In-page visual modal -->
+<div class="modal fade" id="emuVisualModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen-lg-down">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">虚拟机画面 <span class="text-muted fw-normal" id="visualModalSub"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <iframe id="emuVisualFrame" title="虚拟机画面" src="about:blank"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const body = document.getElementById('emuBody');
+  const msgBox = document.getElementById('msgBox');
+  const statusRow = document.getElementById('emuStatusRow');
+  const busyPct = document.getElementById('busyPct');
+  const busyPctBar = document.getElementById('busyPctBar');
+  const modalEl = document.getElementById('emuModal');
+  const modal = new bootstrap.Modal(modalEl);
+  const stopModal = new bootstrap.Modal(document.getElementById('emuStopModal'));
+  const visualModalEl = document.getElementById('emuVisualModal');
+  const visualModal = new bootstrap.Modal(visualModalEl);
+  const visualFrame = document.getElementById('emuVisualFrame');
+  let pollTimer = null;
+  let lastEmus = [];
+  let pendingClonePayload = null;
+
+  function setMsg(text, ok) {
+    const t = (text || '').trim();
+    msgBox.textContent = t || '\u00a0';
+    msgBox.className = 'status-text ' + (!t ? 'text-muted' : (ok === false ? 'text-danger' : (ok === true ? 'text-success' : 'text-muted')));
+  }
+
+  function setBusy(busy, msg, pct) {
+    if (busy) {
+      statusRow.classList.add('is-busy');
+      setMsg(msg || '处理中…');
+      const p = Math.max(0, Math.min(100, Number(pct) || 0));
+      busyPct.textContent = p + '%';
+      busyPctBar.style.width = p + '%';
+    } else {
+      if (statusRow.classList.contains('is-busy')) setMsg('');
+      statusRow.classList.remove('is-busy');
+      busyPctBar.style.width = '0%';
+      busyPct.textContent = '0%';
+    }
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function openVisualPopup(url, name) {
+    const u = window.guiEvalPath(url || '/emulator');
+    const sep = u.includes('?') ? '&' : '?';
+    visualFrame.src = u + sep + 'popup=1';
+    document.getElementById('visualModalSub').textContent = name ? `· ${name}` : '';
+    visualModal.show();
+  }
+
+  visualModalEl.addEventListener('hidden.bs.modal', () => {
+    visualFrame.src = 'about:blank';
+    document.getElementById('visualModalSub').textContent = '';
+  });
+
+  async function submitClone(payload) {
+    await postAction(
+      '/api/emulator-manage/create',
+      payload,
+      `整机克隆 ${payload.clone_from} → ${payload.name}`,
+    );
+    setTimeout(refresh, 800);
+  }
+
+  function syncCreateModeUI() {
+    const isCreate = document.getElementById('editMode').value === 'create';
+    const createModeWrap = document.getElementById('createModeWrap');
+    createModeWrap.style.display = isCreate ? 'grid' : 'none';
+    const isClone = isCreate && document.getElementById('modeClone').checked;
+    document.getElementById('modeBlankLabel').classList.toggle('active', !isClone && isCreate);
+    document.getElementById('modeCloneLabel').classList.toggle('active', isClone);
+    document.getElementById('cloneFromWrap').classList.toggle('show', isClone);
+    document.getElementById('cloneHint').classList.toggle('show', isClone);
+    document.getElementById('blankHwWrap').classList.toggle('hide', isClone);
+    const hint = document.getElementById('createPathHint');
+    if (!isCreate) {
+      hint.textContent = '修改内存/核数后需重启模拟器才会生效；磁盘扩容仅更新配置项。';
+    } else if (isClone) {
+      hint.textContent = '整机克隆会复制源机全部用户数据与已装应用，落盘到 /home/android-avds。';
+    } else {
+      hint.textContent = '新建空白 AVD 默认落在主机 /home/android-avds，避免占满系统盘。';
+    }
+    if (isClone) fillCloneOptions();
+  }
+
+  function fillCloneOptions() {
+    const sel = document.getElementById('fCloneFrom');
+    const cur = sel.value;
+    sel.innerHTML = (lastEmus || []).map((e) => {
+      const mark = e.running ? '（运行中）' : '';
+      return `<option value="${esc(e.name)}" ${e.running ? 'data-running="1"' : ''}>${esc(e.display_name || e.name)} — ${esc(e.name)}${mark}</option>`;
+    }).join('');
+    if (!lastEmus.length) {
+      sel.innerHTML = '<option value="">暂无可克隆的模拟器</option>';
+    } else if (cur && [...sel.options].some((o) => o.value === cur)) {
+      sel.value = cur;
+    }
+  }
+
+  function sortByNameAsc(list) {
+    const key = (name) => String(name || '').toLowerCase().split(/(\d+)/).map((p) => (/\d+/.test(p) ? Number(p) : p));
+    return [...(list || [])].sort((a, b) => {
+      const ka = key(a.name);
+      const kb = key(b.name);
+      const n = Math.max(ka.length, kb.length);
+      for (let i = 0; i < n; i++) {
+        const x = ka[i];
+        const y = kb[i];
+        if (x === undefined) return -1;
+        if (y === undefined) return 1;
+        if (x === y) continue;
+        if (typeof x === 'number' && typeof y === 'number') return x - y;
+        return String(x).localeCompare(String(y));
+      }
+      return 0;
+    });
+  }
+
+  function qosLatencyClass(ms) {
+    if (ms == null || ms === '' || Number.isNaN(Number(ms))) return 'mute';
+    const n = Number(ms);
+    if (n <= 60) return 'good';
+    if (n <= 120) return 'warn';
+    return 'bad';
+  }
+  function qosSmoothClass(score) {
+    if (score == null || score === '' || Number.isNaN(Number(score))) return 'mute';
+    const n = Number(score);
+    if (n >= 75) return 'good';
+    if (n >= 50) return 'warn';
+    return 'bad';
+  }
+  function fmtLatency(ms) {
+    if (ms == null || ms === '' || Number.isNaN(Number(ms))) return '—';
+    const n = Number(ms);
+    // Sub-ms / few-ms values must keep a decimal — toFixed(0) turned 0.2 into "0 ms".
+    if (n > 0 && n < 10) return n.toFixed(1) + ' ms';
+    return Math.round(n) + ' ms';
+  }
+  function fmtSmooth(score) {
+    if (score == null || score === '' || Number.isNaN(Number(score))) return '—';
+    return String(Math.round(Number(score)));
+  }
+
+  function renderRows(list) {
+    list = sortByNameAsc(list);
+    lastEmus = list;
+    if (!list || !list.length) {
+      body.innerHTML = '<tr><td colspan="8" class="emu-empty">暂无模拟器，点击「新建模拟器」创建</td></tr>';
+      return;
+    }
+    body.innerHTML = list.map((e) => {
+      const running = !!e.running;
+      const status = running
+        ? '<span class="emu-status run">运行中</span>'
+        : '<span class="emu-status stop">已停止</span>';
+      const ports = running
+        ? `ADB ${esc(e.adb_port || '-')} / ${esc(e.serial || '')}`
+        : '—';
+      const cfg = `${esc(e.ram_mb || '-')}MB · ${esc(e.cores || '-')}核 · ${esc(e.disk || '-')}`;
+      const lat = running ? e.latency_ms : null;
+      const sm = running ? e.smoothness_score : null;
+      const latHtml = running
+        ? `<span class="emu-qos ${qosLatencyClass(lat)}" title="公网优先，否则 Hub/隧道 RTT（不含 qemu 网关假 0ms）">${esc(fmtLatency(lat))}</span>`
+        : '<span class="emu-qos mute">—</span>';
+      const smHtml = running
+        ? `<span class="emu-qos ${qosSmoothClass(sm)}" title="流畅度 0卡～100顺">${esc(fmtSmooth(sm))}</span>`
+        : '<span class="emu-qos mute">—</span>';
+      return `<tr data-name="${esc(e.name)}">
+        <td><span class="emu-name">${esc(e.name)}</span></td>
+        <td class="emu-display">${esc(e.display_name || e.name)}</td>
+        <td class="emu-meta">${cfg}</td>
+        <td class="emu-meta">${ports}</td>
+        <td>${latHtml}</td>
+        <td>${smHtml}</td>
+        <td>${status}</td>
+        <td>
+          <div class="emu-actions">
+            ${running
+              ? `<button class="btn btn-sm btn-text" data-act="visualize">可视化</button>
+                 <button class="btn btn-sm btn-text btn-text-warning" data-act="stop">停止</button>`
+              : `<button class="btn btn-sm btn-primary" data-act="start">启动</button>`}
+            <button class="btn btn-sm btn-text btn-text-muted" data-act="edit">修改</button>
+            <button class="btn btn-sm btn-text btn-text-danger" data-act="delete">删除</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function refresh() {
+    try {
+      const r = await fetch('/api/emulator-manage/list');
+      const d = await r.json();
+      if (!d.ok) {
+        setMsg(d.error || '加载失败', false);
+        body.innerHTML = `<tr><td colspan="8" class="emu-empty text-danger">${esc(d.error || '加载失败')}</td></tr>`;
+        return;
+      }
+      renderRows(d.emulators || []);
+      setBusy(!!d.busy, d.busy_msg, d.progress_pct);
+      const hasRunning = (d.emulators || []).some((e) => e.running);
+      const wantPoll = !!d.busy || hasRunning;
+      if (wantPoll && !pollTimer) {
+        pollTimer = setInterval(refresh, d.busy ? 3000 : 8000);
+      } else if (!wantPoll && pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      if (!d.busy && d.error) setMsg(d.error, false);
+      else if (!d.busy && d.busy_msg && /完成/.test(d.busy_msg)) setMsg(d.busy_msg, true);
+      if (document.getElementById('modeClone').checked) fillCloneOptions();
+    } catch (ex) {
+      setMsg(String(ex), false);
+    }
+  }
+
+  async function postAction(url, payload, waitMsg) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {}),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) {
+      setMsg(d.error || waitMsg + '失败', false);
+      return null;
+    }
+    if (d.started) {
+      setBusy(true, d.message || waitMsg, 5);
+      if (!pollTimer) pollTimer = setInterval(refresh, 3000);
+    } else if (d.message) {
+      setMsg(d.message, true);
+    } else {
+      setMsg('');
+    }
+    return d;
+  }
+
+  async function waitUntilIdle(maxMs) {
+    const start = Date.now();
+    while (Date.now() - start < maxMs) {
+      await refresh();
+      const r = await fetch('/api/emulator-manage/list');
+      const d = await r.json().catch(() => ({}));
+      if (d && d.ok && !d.busy) return d;
+      await new Promise((res) => setTimeout(res, 1200));
+    }
+    return null;
+  }
+
+  document.getElementById('modeBlank').addEventListener('change', syncCreateModeUI);
+  document.getElementById('modeClone').addEventListener('change', syncCreateModeUI);
+
+  document.getElementById('btnRefresh').addEventListener('click', refresh);
+  document.getElementById('btnCreate').addEventListener('click', () => {
+    document.getElementById('editMode').value = 'create';
+    document.getElementById('emuModalTitle').textContent = '新建模拟器';
+    document.getElementById('fName').disabled = false;
+    document.getElementById('fName').value = '';
+    document.getElementById('fDisplay').value = '';
+    document.getElementById('fRam').value = '8192';
+    document.getElementById('fCores').value = '4';
+    document.getElementById('fDisk').value = '15G';
+    document.getElementById('modeBlank').checked = true;
+    syncCreateModeUI();
+    modal.show();
+  });
+
+  document.getElementById('btnSave').addEventListener('click', async () => {
+    const mode = document.getElementById('editMode').value;
+    const name = document.getElementById('fName').value.trim();
+    if (!name) {
+      setMsg('请填写 AVD 名称', false);
+      return;
+    }
+    if (mode === 'edit') {
+      const payload = {
+        name,
+        display_name: document.getElementById('fDisplay').value.trim() || name,
+        ram_mb: Number(document.getElementById('fRam').value || 8192),
+        cores: Number(document.getElementById('fCores').value || 4),
+        disk: document.getElementById('fDisk').value.trim() || '15G',
+      };
+      modal.hide();
+      await postAction('/api/emulator-manage/update', payload, '更新模拟器');
+      setTimeout(refresh, 800);
+      return;
+    }
+
+    const isClone = document.getElementById('modeClone').checked;
+    const payload = {
+      name,
+      display_name: document.getElementById('fDisplay').value.trim() || name,
+      mode: isClone ? 'clone' : 'blank',
+    };
+    if (isClone) {
+      const src = document.getElementById('fCloneFrom').value.trim();
+      if (!src) {
+        setMsg('请选择要克隆的源模拟器', false);
+        return;
+      }
+      payload.clone_from = src;
+      const srcEmu = (lastEmus || []).find((e) => e.name === src);
+      if (srcEmu && srcEmu.running) {
+        pendingClonePayload = payload;
+        document.getElementById('stopCloneName').textContent = src;
+        modal.hide();
+        stopModal.show();
+        return;
+      }
+    } else {
+      payload.ram_mb = Number(document.getElementById('fRam').value || 8192);
+      payload.cores = Number(document.getElementById('fCores').value || 4);
+      payload.disk = document.getElementById('fDisk').value.trim() || '15G';
+    }
+    modal.hide();
+    if (isClone) await submitClone(payload);
+    else {
+      await postAction('/api/emulator-manage/create', payload, '创建模拟器');
+      setTimeout(refresh, 800);
+    }
+  });
+
+  document.getElementById('btnStopThenClone').addEventListener('click', async () => {
+    const payload = pendingClonePayload;
+    if (!payload || !payload.clone_from) {
+      stopModal.hide();
+      return;
+    }
+    stopModal.hide();
+    const src = payload.clone_from;
+    const stopRes = await postAction('/api/emulator-manage/stop', { name: src }, `停止模拟器 ${src}`);
+    if (!stopRes) return;
+    const idle = await waitUntilIdle(120000);
+    if (!idle) {
+      setMsg('等待停止超时，请稍后重试克隆', false);
+      return;
+    }
+    const still = (idle.emulators || []).find((e) => e.name === src);
+    if (still && still.running) {
+      setMsg(`源模拟器 ${src} 仍在运行，无法继续克隆`, false);
+      return;
+    }
+    pendingClonePayload = null;
+    await submitClone(payload);
+  });
+
+  body.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('button[data-act]');
+    if (!btn) return;
+    const tr = btn.closest('tr[data-name]');
+    const name = tr && tr.getAttribute('data-name');
+    const act = btn.getAttribute('data-act');
+    if (!name) return;
+
+    if (act === 'edit') {
+      document.getElementById('editMode').value = 'edit';
+      document.getElementById('emuModalTitle').textContent = '修改模拟器';
+      document.getElementById('fName').value = name;
+      document.getElementById('fName').disabled = true;
+      const cells = tr.children;
+      document.getElementById('fDisplay').value = cells[1].textContent.trim();
+      const cfg = cells[2].textContent.trim();
+      const m = cfg.match(/(\d+)MB\s*·\s*(\d+)核\s*·\s*(\S+)/);
+      if (m) {
+        document.getElementById('fRam').value = m[1];
+        document.getElementById('fCores').value = m[2];
+        document.getElementById('fDisk').value = m[3];
+      }
+      document.getElementById('blankHwWrap').classList.remove('hide');
+      syncCreateModeUI();
+      modal.show();
+      return;
+    }
+    if (act === 'start') {
+      await postAction('/api/emulator-manage/start', { name }, '启动模拟器');
+      setTimeout(refresh, 1000);
+      return;
+    }
+    if (act === 'stop') {
+      if (!confirm(`停止模拟器 ${name}？`)) return;
+      await postAction('/api/emulator-manage/stop', { name }, '停止模拟器');
+      setTimeout(refresh, 800);
+      return;
+    }
+    if (act === 'delete') {
+      if (!confirm(`删除模拟器 ${name}？此操作会停止进程并删除 AVD 文件。`)) return;
+      await postAction('/api/emulator-manage/delete', { name }, '删除模拟器');
+      setTimeout(refresh, 800);
+      return;
+    }
+    if (act === 'visualize') {
+      const d = await postAction('/api/emulator-manage/visualize', { name }, '切换画面目标');
+      if (d && d.ok) {
+        openVisualPopup(d.url || '/emulator', name);
+      }
+    }
+  });
+
+  refresh();
+})();
+</script>
+{% endblock %}

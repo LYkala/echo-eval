@@ -1,0 +1,122 @@
+{
+  "version": "1.0.0",
+  "testId": "TC-LOGIN-001",
+  "testName": "登录功能测试",
+  "description": "测试用户登录流程",
+  "exitBackCount": 6,
+  "targetApp": {
+    "packageName": "com.example.appforfunction"
+  },
+  "steps": [
+    {
+      "stepId": "launch",
+      "description": "启动目标应用",
+      "action": "launchApp"
+    },
+    {
+      "stepId": "wait-home",
+      "description": "等待首页加载",
+      "action": "wait",
+      "params": {
+        "duration": 1000
+      }
+    },
+    {
+      "stepId": "click-login-entry",
+      "description": "点击进入登录按钮",
+      "action": "click",
+      "target": {
+        "strategy": "text",
+        "value": "进入登录"
+      }
+    },
+    {
+      "stepId": "wait-login-page",
+      "description": "等待登录页面加载",
+      "action": "wait",
+      "params": {
+        "duration": 500
+      }
+    },
+    {
+      "stepId": "input-username",
+      "description": "输入用户名",
+      "action": "input",
+      "target": {
+        "strategy": "id",
+        "value": "com.example.appforfunction:id/etUsername"
+      },
+      "params": {
+        "text": "testuser",
+        "clearFirst": true
+      }
+    },
+    {
+      "stepId": "input-password",
+      "description": "输入密码",
+      "action": "input",
+      "target": {
+        "strategy": "id",
+        "value": "com.example.appforfunction:id/etPassword"
+      },
+      "params": {
+        "text": "123456"
+      }
+    },
+    {
+      "stepId": "click-login-btn",
+      "description": "点击登录按钮",
+      "action": "click",
+      "target": {
+        "strategy": "text",
+        "value": "登录"
+      }
+    },
+    {
+      "stepId": "wait-result",
+      "description": "等待登录结果",
+      "action": "wait",
+      "params": {
+        "duration": 1000
+      }
+    },
+    {
+      "stepId": "screenshot-result",
+      "description": "截图保存结果",
+      "action": "screenshot",
+      "params": {
+        "saveName": "login_result"
+      }
+    },
+    {
+      "stepId": "exit-back-1",
+      "description": "返回第1次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-2",
+      "description": "返回第2次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-3",
+      "description": "返回第3次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-4",
+      "description": "返回第4次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-5",
+      "description": "返回第5次",
+      "action": "press_back"
+    },
+    {
+      "stepId": "exit-back-6",
+      "description": "返回第6次",
+      "action": "press_back"
+    }
+  ]
+}

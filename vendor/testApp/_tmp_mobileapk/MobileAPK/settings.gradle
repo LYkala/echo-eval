@@ -1,0 +1,26 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+def aisfsdkMavenDir = new File(settingsDir, 'vendor/DeviceSDK/maven')
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        // aisfsdk 本地 Maven（来自 旧代码/maven.rar）
+        if (aisfsdkMavenDir.exists()) {
+            maven { url aisfsdkMavenDir }
+        }
+    }
+}
+
+rootProject.name = "DeviceSDKDemo"
+include ':app'
+include ':testreply-sdk'
+project(':testreply-sdk').projectDir = new File(settingsDir, '../../code/testreply-sdk')

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path
+        name="testapp_capture"
+        path="testapp_capture/" />
+    <cache-path
+        name="log_export"
+        path="log_export/" />
+</paths>

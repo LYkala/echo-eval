@@ -1,0 +1,583 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- 标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="12dp">
+
+        <Button
+            android:id="@+id/btn_back"
+            android:layout_width="60dp"
+            android:layout_height="40dp"
+            android:text="←"
+            android:textSize="18sp"
+            android:padding="0dp"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="记忆接口测试"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:gravity="center"/>
+
+        <!-- 占位保持居中 -->
+        <View
+            android:layout_width="60dp"
+            android:layout_height="40dp"/>
+    </LinearLayout>
+
+    <!-- 折叠项1: 测试 getMemoryList -->
+    <LinearLayout
+        android:id="@+id/item_get_memory_list"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:layout_marginBottom="8dp">
+
+        <!-- 标题栏（可点击） -->
+        <TextView
+            android:id="@+id/title_get_memory_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ 测试 getMemoryList"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="#E0E0E0"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <!-- 展开内容 -->
+        <LinearLayout
+            android:id="@+id/content_get_memory_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <!-- 输入区 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输入"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="category (分类)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <Spinner
+                android:id="@+id/spinner_category"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- 测试按钮 -->
+            <Button
+                android:id="@+id/btn_test_get_memory_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="执行测试"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- 输出区 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输出"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:background="#FFFFFF"
+                android:padding="8dp">
+
+                <TextView
+                    android:id="@+id/tv_output_get_memory_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="点击执行测试..."
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"/>
+            </ScrollView>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 折叠项2: 测试 getMemoryListWithPage -->
+    <LinearLayout
+        android:id="@+id/item_get_memory_list_with_page"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:layout_marginBottom="8dp">
+
+        <!-- 标题栏（可点击） -->
+        <TextView
+            android:id="@+id/title_get_memory_list_with_page"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ 测试 getMemoryListWithPage"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="#E0E0E0"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <!-- 展开内容 -->
+        <LinearLayout
+            android:id="@+id/content_get_memory_list_with_page"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <!-- 输入区 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输入"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="category (分类)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <Spinner
+                android:id="@+id/spinner_category_page"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="page (页码，从1开始)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <EditText
+                android:id="@+id/et_page"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="1"
+                android:text="1"
+                android:inputType="number"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="pageSize (每页数量)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <EditText
+                android:id="@+id/et_page_size"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="10"
+                android:text="10"
+                android:inputType="number"
+                android:textSize="14sp"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- 测试按钮 -->
+            <Button
+                android:id="@+id/btn_test_get_memory_list_with_page"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="执行测试"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- 输出区 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输出"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:background="#FFFFFF"
+                android:padding="8dp">
+
+                <TextView
+                    android:id="@+id/tv_output_get_memory_list_with_page"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="点击执行测试..."
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"/>
+            </ScrollView>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 折叠项3: 测试 getClassifyMemory -->
+    <LinearLayout
+        android:id="@+id/item_get_classify_memory"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:layout_marginBottom="8dp">
+
+        <!-- 标题栏（可点击） -->
+        <TextView
+            android:id="@+id/title_get_classify_memory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ 测试 getClassifyMemory"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="#E0E0E0"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <!-- 展开内容 -->
+        <LinearLayout
+            android:id="@+id/content_get_classify_memory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <!-- 输入区 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输入"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="无参数"
+                android:textSize="13sp"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- 测试按钮 -->
+            <Button
+                android:id="@+id/btn_test_get_classify_memory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="执行测试"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- 输出区 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输出"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:background="#FFFFFF"
+                android:padding="8dp">
+
+                <TextView
+                    android:id="@+id/tv_output_get_classify_memory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="点击执行测试..."
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"/>
+            </ScrollView>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 折叠项4: 测试 isMemoryEnabled -->
+    <LinearLayout
+        android:id="@+id/item_is_memory_enabled"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/title_is_memory_enabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ 测试 isMemoryEnabled"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="#E0E0E0"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <LinearLayout
+            android:id="@+id/content_is_memory_enabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输入"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="无参数"
+                android:textSize="13sp"
+                android:layout_marginBottom="12dp"/>
+
+            <Button
+                android:id="@+id/btn_test_is_memory_enabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="执行测试"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输出"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:background="#FFFFFF"
+                android:padding="8dp">
+
+                <TextView
+                    android:id="@+id/tv_output_is_memory_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="点击执行测试..."
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"/>
+            </ScrollView>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 折叠项5: 测试 setMemoryEnabled -->
+    <LinearLayout
+        android:id="@+id/item_set_memory_enabled"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/title_set_memory_enabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ 测试 setMemoryEnabled"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="#E0E0E0"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <LinearLayout
+            android:id="@+id/content_set_memory_enabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输入"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="enabled (是否开启)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <Spinner
+                android:id="@+id/spinner_memory_enabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"/>
+
+            <Button
+                android:id="@+id/btn_test_set_memory_enabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="执行测试"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输出"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:background="#FFFFFF"
+                android:padding="8dp">
+
+                <TextView
+                    android:id="@+id/tv_output_set_memory_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="点击执行测试..."
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"/>
+            </ScrollView>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 折叠项6: 测试 deleteMemory -->
+    <LinearLayout
+        android:id="@+id/item_delete_memory"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/title_delete_memory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ 测试 deleteMemory"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="#E0E0E0"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <LinearLayout
+            android:id="@+id/content_delete_memory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输入"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="category (分类)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <Spinner
+                android:id="@+id/spinner_category_delete"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="memoryId (记忆ID)"
+                android:textSize="13sp"
+                android:layout_marginBottom="2dp"/>
+
+            <EditText
+                android:id="@+id/et_memory_id"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="请输入要删除的记忆ID"
+                android:textSize="14sp"
+                android:layout_marginBottom="12dp"/>
+
+            <Button
+                android:id="@+id/btn_test_delete_memory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="执行测试"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="输出"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:background="#FFFFFF"
+                android:padding="8dp">
+
+                <TextView
+                    android:id="@+id/tv_output_delete_memory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="点击执行测试..."
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"/>
+            </ScrollView>
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>

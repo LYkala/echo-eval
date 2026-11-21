@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>移动网盘搜索 · 本地USB</title>
+  <link rel="stylesheet" href="/static/app.css?v=1" />
+</head>
+<body>
+  <header class="top">
+    <div>
+      <div class="brand">移动网盘搜索 · 本地USB</div>
+      <div class="sub">本机 ADB 直连 · E2E 用例 · 填充实际 fid（独立于 9526）</div>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="btn" id="btnRefreshAll" title="刷新设备、数据与状态">刷新</button>
+      <div id="runBadge" class="badge idle">空闲</div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel">
+      <h2>设备</h2>
+      <div class="row">
+        <button type="button" class="btn" id="btnDev">刷新设备</button>
+      </div>
+      <label class="field field-serial">手机设备（USB）
+        <select id="serial"></select>
+      </label>
+      <div class="row">
+        <button type="button" class="btn shot" id="btnShot" title="抓取当前手机画面并弹窗显示">截取屏幕</button>
+      </div>
+      <div id="devHint" class="muted">请用 USB 连接手机并打开调试；点「刷新设备」</div>
+
+      <h2>执行</h2>
+      <div id="selectedHint" class="muted">已选 0 条用例（在数据集预览中勾选）</div>
+      <p class="hint-exec">已「完成」默认跳过（勾选了也不会重跑）。只有勾选下方「强制重跑已完成」才会重跑。</p>
+      <label class="field">用例数量上限（空=不限制；有勾选时仅跑勾选里未完成的）
+        <input id="limit" type="number" min="1" placeholder="可空" value="" />
+      </label>
+      <label class="field">指定用例编号（可空；勾选优先）
+        <input id="caseIds" type="text" placeholder="也可手动填写 TC0001,TC0002" value="" />
+      </label>
+      <label class="field">单用例最多采图数
+        <input id="maxImages" type="number" min="1" value="60" />
+      </label>
+      <label class="inline" style="margin:6px 0 10px;display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="forceRerun" />
+        强制重跑已完成
+      </label>
+      <div class="row">
+        <button type="button" class="btn primary" id="btnStart">开始</button>
+        <button type="button" class="btn danger" id="btnStop">停止</button>
+        <a class="btn" id="btnDl" href="/api/mcloud/results/download">下载结果 xlsx</a>
+      </div>
+      <div class="row">
+        <button type="button" class="btn" id="btnClearSel">清空勾选</button>
+        <button type="button" class="btn" id="btnUseSelected">勾选填入编号框</button>
+      </div>
+      <div id="progress" class="muted">进度 —</div>
+    </section>
+
+    <section class="panel grow">
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="dataset">数据集预览</button>
+        <button type="button" class="tab" data-tab="results">结果预览</button>
+        <button type="button" class="tab" data-tab="logs">运行日志</button>
+        <button type="button" class="tab" data-tab="cases">本轮明细</button>
+      </div>
+
+      <div id="pane-dataset" class="pane active">
+        <p class="hint-expand">勾选用例后点「开始」执行；已完成默认跳过；可直接改「执行状态」下拉；点其它单元格看全文。</p>
+        <div class="row">
+          <input id="qDataset" type="search" placeholder="搜索用例编号 / 原始输入" />
+          <label class="inline">预期数量
+            <input id="countMin" type="number" min="0" placeholder="最小" style="width:72px" />
+            <span>—</span>
+            <input id="countMax" type="number" min="0" placeholder="最大" style="width:72px" />
+          </label>
+          <span class="inline">执行状态</span>
+          <div id="statusFilter" class="ms-menu">
+            <button type="button" class="ms-btn" id="statusFilterBtn" aria-haspopup="true" aria-expanded="false" title="可多选执行状态">全部</button>
+            <div class="ms-panel">
+              <label class="ms-item"><input type="checkbox" value="未跑" />未跑</label>
+              <label class="ms-item"><input type="checkbox" value="完成" />完成</label>
+              <label class="ms-item"><input type="checkbox" value="中断" />中断</label>
+              <label class="ms-item"><input type="checkbox" value="失败" />失败</label>
+              <label class="ms-item"><input type="checkbox" value="无结果" />无结果</label>
+            </div>
+          </div>
+          <button type="button" class="btn" id="btnSelectAll" title="勾选当前筛选结果的全部用例，不限本页">全部选中</button>
+          <button type="button" class="btn" id="btnUnselectAll" title="取消所有已勾选的用例">取消全选</button>
+          <button type="button" class="btn" id="btnDataset">筛选/刷新</button>
+          <button type="button" class="btn" id="btnClearFilter">清除筛选</button>
+          <button type="button" class="btn" id="btnPrevD">上一页</button>
+          <button type="button" class="btn" id="btnNextD">下一页</button>
+          <label class="inline">每页
+            <select id="pageSizeD" class="page-size">
+              <option value="30" selected>30</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+          <span id="datasetMeta" class="muted"></span>
+        </div>
+        <div class="table-wrap"><table id="tblDataset"></table></div>
+      </div>
+
+      <div id="pane-results" class="pane">
+        <p class="hint-expand">可按用例编号 / 原始输入搜索；点单元格看全文。</p>
+        <div class="row">
+          <input id="qResults" type="search" placeholder="搜索用例编号 / 原始输入，如：火烈鸟" />
+          <button type="button" class="btn" id="btnResults">筛选/刷新</button>
+          <button type="button" class="btn" id="btnClearResultsQ">清除搜索</button>
+          <button type="button" class="btn" id="btnPrevR">上一页</button>
+          <button type="button" class="btn" id="btnNextR">下一页</button>
+          <label class="inline">每页
+            <select id="pageSizeR" class="page-size">
+              <option value="30" selected>30</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+          <span id="resultsMeta" class="muted"></span>
+        </div>
+        <div class="table-wrap"><table id="tblResults"></table></div>
+      </div>
+
+      <div id="pane-logs" class="pane">
+        <pre id="logs" class="logs"></pre>
+      </div>
+
+      <div id="pane-cases" class="pane">
+        <div class="table-wrap"><table id="tblCases"></table></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="shotModal" class="modal-mask" role="dialog" aria-modal="true">
+    <div class="modal screen-modal">
+      <div class="modal-head">
+        <span id="shotTitle">当前手机画面</span>
+        <div class="row" style="margin:0">
+          <button type="button" class="btn" id="btnShotAgain">再截一张</button>
+          <button type="button" class="btn" id="btnCloseShot">关闭</button>
+        </div>
+      </div>
+      <div class="screen-modal-body">
+        <div id="shotStatus" class="muted">正在截取…</div>
+        <img id="screenImg" alt="手机当前屏幕" hidden />
+      </div>
+    </div>
+  </div>
+
+  <div id="cellModal" class="modal-mask" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <span id="modalTitle">单元格全文</span>
+        <div class="row" style="margin:0">
+          <button type="button" class="btn" id="btnCopyCell">复制</button>
+          <button type="button" class="btn" id="btnCloseModal">关闭</button>
+        </div>
+      </div>
+      <pre id="modalBody" class="modal-body"></pre>
+    </div>
+  </div>
+
+  <script>
+    window.NETDISK_API_BASE = "/api/mcloud";
+    window.EXTRA_STATUSES = ["无结果"];
+    window.LOCAL_USB = true;
+  </script>
+  <script src="/static/app.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<!-- res/xml/accessibility_service_config.xml  -->
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:canRetrieveWindowContent="true"
+    android:accessibilityFlags="flagIncludeNotImportantViews|flagReportViewIds|flagRequestFilterKeyEvents|flagRetrieveInteractiveWindows"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackAllMask"
+    android:canRequestEnhancedWebAccessibility="true"
+    android:canControlMagnification="true"
+    android:canPerformGestures="true"
+    android:canTakeScreenshot="true" />

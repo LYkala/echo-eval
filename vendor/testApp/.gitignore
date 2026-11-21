@@ -1,0 +1,10 @@
+webserverV2/logs/
+webserverV2/__pycache__/
+webserverV2/local_adb_runner/__pycache__/
+webserverV2/tools/_cloud_v3_work/dist/
+webserverV2/apks/**/*.apk
+!webserverV2/apks/devicesdkdemo/devicesdkdemo.apk
+!webserverV2/apks/adbkeyboard/ADBKeyboard.apk
+build/
+input/
+tools/output/
