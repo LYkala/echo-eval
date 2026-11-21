@@ -1,0 +1,16 @@
+# 复制为 device.yaml 后按环境修改。
+
+adb:
+  host: "192.168.0.100"
+  port: 5555
+  # serial: "192.168.0.100:5555"
+  adb_path: ""
+  connect_timeout_sec: 15
+
+capture:
+  duration_sec: 15
+  remote_dir: "/sdcard/echo_eval"
+  remote_filename: "capture.mp4"
+  local_dir: "artifacts"
+  fps: 1
+  ffmpeg_path: ""

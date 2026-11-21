@@ -1,0 +1,25 @@
+# 设备与采集配置（可按本机环境修改）
+# 修改后无需改代码；CLI 默认读取本文件。
+
+adb:
+  # 无线调试地址。可写 "IP" 或 "IP:端口"；省略端口时用 port。
+  host: "192.168.43.244"
+  port: 5555
+  # 若填写 serial，则优先使用（可含端口），忽略上面的 host/port 拼接结果。
+  # serial: "192.168.43.244:5555"
+  # 本机 adb 可执行文件；留空则从 PATH 查找。
+  adb_path: ""
+  connect_timeout_sec: 15
+
+capture:
+  # 录制时长（秒）。部分设备 screenrecord 最长约 180 秒。
+  duration_sec: 15
+  # 设备端输出路径（POSIX）。代码会处理 Git Bash/MSYS 路径误转换。
+  remote_dir: "/sdcard/echo_eval"
+  remote_filename: "capture.mp4"
+  # 本机产物根目录（相对仓库根或绝对路径）
+  local_dir: "artifacts"
+  # 抽帧：每秒帧数；0 表示不抽帧
+  fps: 1
+  # 本机 ffmpeg；留空则从 PATH 查找
+  ffmpeg_path: ""

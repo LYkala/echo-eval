@@ -5,8 +5,13 @@ __pycache__/
 venv/
 .env
 *.egg-info/
+dist/
+build/
+.pytest_cache/
 
 # Secrets — keep example only
 vendor/testApp/configs/model.yaml
 **/configs/model.yaml
 !**/configs/model.yaml.example
+!configs/device.yaml
+!configs/device.yaml.example
