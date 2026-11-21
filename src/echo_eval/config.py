@@ -1,6 +1,12 @@
-"""Load editable YAML config for device / capture / stimulus."""
+"""Load editable YAML/JSON config for device / capture / stimulus.
+
+Zero third-party dependency: uses a small YAML subset parser when PyYAML
+is unavailable (common when pip/proxy is broken on Windows).
+"""
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,16 +15,74 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "device.yaml"
 
 
-def _load_yaml(text: str) -> Any:
+def _parse_scalar(raw: str) -> Any:
+    s = raw.strip()
+    if not s:
+        return ""
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        return s[1:-1]
+    low = s.lower()
+    if low in ("true", "yes", "on"):
+        return True
+    if low in ("false", "no", "off"):
+        return False
+    if low in ("null", "~", "none"):
+        return None
+    if re.fullmatch(r"-?\d+", s):
+        return int(s)
+    if re.fullmatch(r"-?\d+\.\d+", s):
+        return float(s)
+    return s
+
+
+def _load_simple_yaml(text: str) -> dict[str, Any]:
+    """Parse the nested mapping subset used by configs/device.yaml."""
+    root: dict[str, Any] = {}
+    stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
+
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        # strip inline comments when not inside quotes
+        stripped = line.split("#", 1)[0].rstrip()
+        if not stripped.strip():
+            continue
+        indent = len(stripped) - len(stripped.lstrip(" "))
+        if "\t" in line[:indent]:
+            raise ValueError(f"YAML 不支持 tab 缩进 (line {lineno})")
+        content = stripped.lstrip(" ")
+        if ":" not in content:
+            raise ValueError(f"无法解析配置行 {lineno}: {line}")
+        key, _, rest = content.partition(":")
+        key = key.strip()
+        if not key:
+            raise ValueError(f"空键名 (line {lineno})")
+
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        if not stack:
+            raise ValueError(f"缩进错误 (line {lineno})")
+        parent = stack[-1][1]
+
+        value_raw = rest.strip()
+        if value_raw == "":
+            child: dict[str, Any] = {}
+            parent[key] = child
+            stack.append((indent, child))
+        else:
+            parent[key] = _parse_scalar(value_raw)
+    return root
+
+
+def _load_config_text(path: Path, text: str) -> Any:
+    if path.suffix.lower() == ".json":
+        return json.loads(text)
     try:
-        import yaml
-    except ImportError as e:
-        raise ImportError(
-            "缺少 PyYAML。代理/SSL 导致 pip 失败时，可改用国内镜像安装：\n"
-            "  python -m pip install pyyaml -i https://pypi.tuna.tsinghua.edu.cn/simple\n"
-            "或先执行: export PYTHONPATH=src"
-        ) from e
-    return yaml.safe_load(text)
+        import yaml  # type: ignore
+
+        return yaml.safe_load(text)
+    except ImportError:
+        return _load_simple_yaml(text)
 
 
 @dataclass
@@ -101,7 +165,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         hint = f" 可复制 {example} 为 {cfg_path.name}。" if example.is_file() else ""
         raise FileNotFoundError(f"未找到配置文件: {cfg_path}.{hint}")
 
-    raw = _load_yaml(cfg_path.read_text(encoding="utf-8")) or {}
+    raw = _load_config_text(cfg_path, cfg_path.read_text(encoding="utf-8")) or {}
     adb_raw = _as_dict(raw.get("adb"))
     cap_raw = _as_dict(raw.get("capture"))
     stim_raw = _as_dict(raw.get("stimulus"))

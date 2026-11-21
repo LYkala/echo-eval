@@ -39,16 +39,15 @@ git fetch origin
 git checkout cursor/phase2-audio-stimulus-4bfa
 git pull origin cursor/phase2-audio-stimulus-4bfa
 
-# 方式 A：免安装（推荐；pip 代理/SSL 失败时用这个）
+# 免安装、零第三方依赖（pip 坏掉也能跑）
 export PYTHONPATH=src
-python -m pip install pyyaml -i https://pypi.tuna.tsinghua.edu.cn/simple
 python -m echo_eval doctor
 python -m echo_eval connect
 # 或: bash scripts/run.sh doctor
 
-# 方式 B：editable 安装（需能访问 PyPI；可先关代理或换镜像）
-# python -m pip install -U pip setuptools wheel -i https://pypi.tuna.tsinghua.edu.cn/simple
-# python -m pip install -e ".[dev]" -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 若 Windows Python 找不到 adb/ffmpeg，在 configs/device.yaml 写绝对路径，例如：
+#   adb.adb_path: "C:/platform-tools/adb.exe"
+#   capture.ffmpeg_path: "C:/ffmpeg/bin/ffmpeg.exe"
 
 # 只录屏抽帧
 python -m echo_eval record
