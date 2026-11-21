@@ -6,9 +6,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const result = runEnvCheck();
-  if (!result.ok) {
-    ensureDemoJob();
+  try {
+    const result = runEnvCheck();
+    if (!result.ok) {
+      ensureDemoJob();
+    }
+    return NextResponse.json(result);
+  } catch (e) {
+    return NextResponse.json(
+      {
+        ok: false,
+        demoMode: true,
+        items: [],
+        checkedAt: new Date().toISOString(),
+        error: String(e),
+      },
+      { status: 500 }
+    );
   }
-  return NextResponse.json(result);
 }

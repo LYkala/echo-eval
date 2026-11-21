@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type EnvItem = { key: string; label: string; ok: boolean; detail: string; required: boolean };
-type EnvResult = { ok: boolean; demoMode: boolean; items: EnvItem[]; serial?: string; checkedAt: string };
+type EnvResult = {
+  ok: boolean;
+  demoMode: boolean;
+  items: EnvItem[];
+  serial?: string;
+  checkedAt: string;
+  error?: string;
+};
 type Dataset = { id: string; name: string; size: number; builtin?: boolean };
 type Job = {
   id: string;
@@ -26,8 +33,30 @@ type Job = {
   note?: string;
 };
 
+type StepRow = {
+  id: string;
+  label: string;
+  state: "pending" | "running" | "ok" | "fail";
+  detail?: string;
+};
+
+const INITIAL_STEPS: StepRow[] = [
+  { id: "config", label: "读取设备配置", state: "pending" },
+  { id: "python", label: "检查 echo-eval 源码", state: "pending" },
+  { id: "adb", label: "检查 ADB", state: "pending" },
+  { id: "device", label: "连接设备（短超时）", state: "pending" },
+  { id: "ffmpeg", label: "检查 FFmpeg", state: "pending" },
+  { id: "audio", label: "检查音频播放", state: "pending" },
+  { id: "tts", label: "检查 TTS", state: "pending" },
+  { id: "vl", label: "检查 VL 配置", state: "pending" },
+];
+
 export function ConsoleClient() {
   const [env, setEnv] = useState<EnvResult | null>(null);
+  const [steps, setSteps] = useState<StepRow[]>(INITIAL_STEPS);
+  const [envChecking, setEnvChecking] = useState(false);
+  const [envProgress, setEnvProgress] = useState("尚未检查");
+  const [envError, setEnvError] = useState("");
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [datasetId, setDatasetId] = useState("__builtin_sample__");
   const [caseId, setCaseId] = useState("demo_weather_001");
@@ -35,22 +64,128 @@ export function ConsoleClient() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [active, setActive] = useState<Job | null>(null);
-
-  const refreshEnv = useCallback(async () => {
-    const res = await fetch("/api/env", { cache: "no-store" });
-    const data = (await res.json()) as EnvResult;
-    setEnv(data);
-  }, []);
+  const abortRef = useRef<AbortController | null>(null);
 
   const refreshDatasets = useCallback(async () => {
-    const res = await fetch("/api/datasets", { cache: "no-store" });
-    const data = (await res.json()) as { items: Dataset[] };
-    setDatasets(data.items || []);
+    try {
+      const res = await fetch("/api/datasets", { cache: "no-store" });
+      const data = (await res.json()) as { items: Dataset[] };
+      setDatasets(data.items || []);
+    } catch (e) {
+      setMsg(`加载数据集失败: ${String(e)}`);
+    }
+  }, []);
+
+  const refreshEnv = useCallback(async () => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    setEnvChecking(true);
+    setEnvError("");
+    setEnvProgress("开始环境检查…");
+    setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending", detail: undefined })));
+
+    const timeout = window.setTimeout(() => ac.abort(), 45000);
+
+    try {
+      const res = await fetch("/api/env/stream", {
+        cache: "no-store",
+        signal: ac.signal,
+        headers: { Accept: "text/event-stream" },
+      });
+      if (!res.ok || !res.body) {
+        throw new Error(`环境检查接口失败 HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() || "";
+        for (const chunk of chunks) {
+          const line = chunk
+            .split("\n")
+            .map((l) => l.trim())
+            .find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const payload = JSON.parse(line.slice(5).trim()) as {
+            type: string;
+            step?: string;
+            label?: string;
+            index?: number;
+            total?: number;
+            item?: EnvItem;
+            result?: EnvResult;
+            message?: string;
+          };
+
+          if (payload.type === "step_start") {
+            setEnvProgress(`(${payload.index}/${payload.total}) ${payload.label}…`);
+            setSteps((prev) =>
+              prev.map((s) =>
+                s.id === payload.step ? { ...s, state: "running", detail: "检查中…" } : s
+              )
+            );
+          } else if (payload.type === "step_done" && payload.item) {
+            setEnvProgress(
+              `(${payload.index}/${payload.total}) ${payload.label}: ${payload.item.ok ? "OK" : "失败"}`
+            );
+            setSteps((prev) =>
+              prev.map((s) =>
+                s.id === payload.step
+                  ? {
+                      ...s,
+                      state: payload.item!.ok ? "ok" : "fail",
+                      detail: payload.item!.detail,
+                    }
+                  : s
+              )
+            );
+          } else if (payload.type === "done" && payload.result) {
+            setEnv(payload.result);
+            setEnvProgress(
+              payload.result.ok
+                ? "环境检查完成：就绪"
+                : "环境检查完成：未就绪（仍可打开演示任务）"
+            );
+            if (payload.result.error) setEnvError(payload.result.error);
+          } else if (payload.type === "error") {
+            throw new Error(payload.message || "环境检查出错");
+          }
+        }
+      }
+    } catch (e) {
+      const aborted = ac.signal.aborted;
+      const message = aborted
+        ? "环境检查超时或已取消（45s）。请确认 python / adb 可用后重试。"
+        : String(e);
+      setEnvError(message);
+      setEnvProgress("检查中断");
+      setEnv((prev) =>
+        prev || {
+          ok: false,
+          demoMode: true,
+          items: [],
+          checkedAt: new Date().toISOString(),
+          error: message,
+        }
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      setEnvChecking(false);
+    }
   }, []);
 
   useEffect(() => {
     void refreshEnv();
     void refreshDatasets();
+    return () => abortRef.current?.abort();
   }, [refreshEnv, refreshDatasets]);
 
   useEffect(() => {
@@ -91,11 +226,7 @@ export function ConsoleClient() {
       const res = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          demo
-            ? { demo: true }
-            : { datasetId, caseId: caseId || null, backend }
-        ),
+        body: JSON.stringify(demo ? { demo: true } : { datasetId, caseId: caseId || null, backend }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "启动失败");
@@ -127,6 +258,20 @@ export function ConsoleClient() {
     return <Badge variant="secondary">{s}</Badge>;
   };
 
+  const stepTone = (state: StepRow["state"]) => {
+    if (state === "ok") return "text-emerald-700";
+    if (state === "fail") return "text-rose-700";
+    if (state === "running") return "text-amber-800";
+    return "text-muted-foreground";
+  };
+
+  const stepMark = (state: StepRow["state"]) => {
+    if (state === "ok") return "OK";
+    if (state === "fail") return "失败";
+    if (state === "running") return "…";
+    return "等待";
+  };
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
       <section className="animate-rise space-y-6" style={{ animationDelay: "60ms" }}>
@@ -134,43 +279,53 @@ export function ConsoleClient() {
           <CardHeader>
             <CardTitle className="font-[family-name:var(--font-display)] text-2xl">环境检查</CardTitle>
             <CardDescription>
-              开测前确认 ADB、设备、FFmpeg 等就绪。当前方案全部在 PC1 完成。
+              分步检查会显示进度。设备连接使用短超时，避免一直卡住。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
-              <Button type="button" variant="outline" onClick={() => void refreshEnv()} disabled={busy}>
-                重新检查
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void refreshEnv()}
+                disabled={envChecking}
+              >
+                {envChecking ? "检查中…" : "重新检查"}
               </Button>
-              {env ? (
+              {envChecking ? (
+                <Badge variant="running">进行中</Badge>
+              ) : env ? (
                 env.ok ? (
                   <Badge variant="pass">环境就绪</Badge>
                 ) : (
-                  <Badge variant="fail">未就绪（可用演示预览）</Badge>
+                  <Badge variant="fail">未就绪</Badge>
                 )
               ) : (
-                <span className="text-sm text-muted-foreground">检查中…</span>
+                <Badge variant="secondary">未开始</Badge>
               )}
               {env?.serial ? (
                 <span className="text-xs text-muted-foreground">serial: {env.serial}</span>
               ) : null}
             </div>
+
+            <p className="text-sm text-muted-foreground">
+              <span className={envChecking ? "animate-pulse-dot" : ""}>{envProgress}</span>
+            </p>
+            {envError ? <p className="text-sm text-rose-700">{envError}</p> : null}
+
             <ul className="space-y-2">
-              {(env?.items || []).map((it) => (
+              {steps.map((s) => (
                 <li
-                  key={it.key}
+                  key={s.id}
                   className="flex items-start justify-between gap-3 border-b border-border/60 py-2 text-sm last:border-0"
                 >
-                  <div>
-                    <div className="font-medium">
-                      {it.label}
-                      {!it.required ? (
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">可选</span>
-                      ) : null}
-                    </div>
-                    <div className="break-all text-xs text-muted-foreground">{it.detail}</div>
+                  <div className="min-w-0">
+                    <div className="font-medium">{s.label}</div>
+                    {s.detail ? (
+                      <div className="break-all text-xs text-muted-foreground">{s.detail}</div>
+                    ) : null}
                   </div>
-                  <span className={it.ok ? "text-emerald-700" : "text-rose-700"}>{it.ok ? "OK" : "缺"}</span>
+                  <span className={`shrink-0 font-medium ${stepTone(s.state)}`}>{stepMark(s.state)}</span>
                 </li>
               ))}
             </ul>
@@ -211,7 +366,12 @@ export function ConsoleClient() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="case">用例编号（可空=全部）</Label>
-                <Input id="case" value={caseId} onChange={(e) => setCaseId(e.target.value)} placeholder="demo_weather_001" />
+                <Input
+                  id="case"
+                  value={caseId}
+                  onChange={(e) => setCaseId(e.target.value)}
+                  placeholder="demo_weather_001"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="backend">评判后端</Label>
