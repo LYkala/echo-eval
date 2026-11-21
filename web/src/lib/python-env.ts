@@ -2,7 +2,9 @@ import path from "path";
 import { repoRoot } from "./paths";
 
 /** Env for spawning Python on Windows without GBK mojibake. */
-export function pythonChildEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+export function pythonChildEnv(
+  extra: Record<string, string | undefined> = {}
+): NodeJS.ProcessEnv {
   const root = repoRoot();
   return {
     ...process.env,
