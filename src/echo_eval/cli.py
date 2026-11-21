@@ -16,7 +16,9 @@ from echo_eval.config import DEFAULT_CONFIG_PATH, REPO_ROOT, load_config
 from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.judge.model_config import find_model_config_path
 from echo_eval.judge.service import JudgeError, judge_images, resolve_backend
+from echo_eval.runner.excel_runner import run_excel
 from echo_eval.stimulus.audio import AudioPlayError, _resolve_ffplay
+from echo_eval.stimulus.tts import TtsError
 
 
 def _add_config_arg(p: argparse.ArgumentParser) -> None:
@@ -177,6 +179,52 @@ def cmd_spike(args: argparse.Namespace) -> int:
     return _run_record(args, force_play=True)
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    print(
+        f"run excel={args.excel} case_id={args.case_id or '*'} "
+        f"backend={args.backend} fail_fast={args.fail_fast}"
+    )
+    try:
+        summary = run_excel(
+            args.excel,
+            config_path=args.config,
+            case_id=args.case_id,
+            judge_backend=args.backend,
+            fail_fast=args.fail_fast,
+            extract_frames_flag=not args.no_frames,
+        )
+    except (FileNotFoundError, ValueError, ImportError, AdbError, TtsError, JudgeError) as e:
+        print(f"run: FAIL\n{e}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"run: FAIL\n{e}", file=sys.stderr)
+        return 2
+
+    for r in summary.results:
+        status = (
+            "PASS"
+            if r.passed is True
+            else ("FAIL" if r.passed is False else "ERROR")
+        )
+        extra = f" err={r.error}" if r.error else ""
+        print(f"[{status}] {r.case_id} {r.name} dir={r.run_dir or '-'}{extra}")
+    print(
+        f"summary: passed={summary.passed_count} failed={summary.failed_count} "
+        f"errors={summary.error_count}"
+    )
+    if summary.summary_path:
+        print(f"summary_path: {summary.summary_path}")
+
+    if summary.error_count:
+        print("run: ERROR")
+        return 2
+    if summary.failed_count:
+        print("run: FAIL")
+        return 1
+    print("run: OK")
+    return 0
+
+
 def cmd_judge(args: argparse.Namespace) -> int:
     expects: list[str] = []
     if args.expect:
@@ -316,6 +364,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="不写 evaluation.json（仅打印）",
     )
     p_judge.set_defaults(func=cmd_judge)
+
+    p_run = sub.add_parser(
+        "run",
+        help="Phase4：Excel/CSV → TTS → 录屏 → 评判 → 报告（可单条或批量）",
+    )
+    _add_config_arg(p_run)
+    p_run.add_argument(
+        "--excel",
+        required=True,
+        help="TestApp 风格用例表（.xlsx/.csv；xlsx 需 openpyxl）",
+    )
+    p_run.add_argument("--case-id", default=None, help="只跑指定用例编号")
+    p_run.add_argument(
+        "--backend",
+        choices=["auto", "vl", "mock"],
+        default="auto",
+        help="评判后端（默认 auto）",
+    )
+    p_run.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="遇失败或错误即停止批量",
+    )
+    p_run.add_argument(
+        "--no-frames",
+        action="store_true",
+        help="不抽帧（仍会录屏；评判需要帧时不要加）",
+    )
+    p_run.set_defaults(func=cmd_run)
 
     return parser
 

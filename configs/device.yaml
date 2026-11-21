@@ -34,3 +34,18 @@ stimulus:
   play_device: host
   # 开录后再延迟播放，给 screenrecord 启动留时间
   start_delay_sec: 1.0
+
+tts:
+  # sapi=Windows 系统语音（默认）；file=预生成 wav；edge/http 预留
+  backend: sapi
+  voice: ""
+  rate: 0
+  lookup_dir: ""
+
+run:
+  # Excel 步骤默认等待（表内「等待时间」列可覆盖）
+  step_wait_sec: 3
+  # 开录后稍等再播第一句
+  head_delay_sec: 1
+  # 说完后再多录几秒，便于界面出结果
+  tail_sec: 5

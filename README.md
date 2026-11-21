@@ -9,7 +9,7 @@
 | Phase 0–1 | 环境检查、无线连接、录屏、pull、抽帧 | `doctor` / `connect` / `record` |
 | Phase 2 | 录屏同时本机播放 wav（设备麦克拾音） | `spike` / `record --audio ...` |
 | Phase 3 | 多帧截图 + 预期结果 → VL/Mock 评判 | `judge` |
-| 后续 | Excel 用例 → 采集 → 评判 → 报告 | 计划中的 `run --case` |
+| Phase 4 | Excel/CSV → TTS → 录屏 → 评判 → 报告 | `run --excel` |
 
 这些命令是测评的**采集层**；完整 `run` 会复用同一套 `device/`、`capture/`、`stimulus/` 代码。
 
@@ -58,6 +58,10 @@ python -m echo_eval judge --run-dir artifacts/capture_xxx \
 # 无网关联调
 python -m echo_eval judge --run-dir artifacts/capture_xxx \
   --expect "界面出现天气相关结果" --backend mock
+
+# Phase 4：Excel/CSV 端到端（步骤文本 → SAPI TTS → 录屏 → 评判）
+python -m echo_eval run --excel cases/examples/sample_weather.csv \
+  --case-id demo_weather_001 --backend mock
 ```
 
 产物：`artifacts/capture_<时间戳>/`
@@ -71,5 +75,7 @@ python -m echo_eval judge --run-dir artifacts/capture_xxx \
 ## 文档
 
 - [`docs/SETUP_WINDOWS.md`](docs/SETUP_WINDOWS.md) — Windows 安装 ADB / FFmpeg  
+- [`docs/JUDGE.md`](docs/JUDGE.md) — Phase 3 评判  
+- [`docs/PHASE4_RUN.md`](docs/PHASE4_RUN.md) — Phase 4 Excel 编排  
 - [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md) — 开发计划  
 - [`docs/TESTAPP_JUDGE_MAPPING.md`](docs/TESTAPP_JUDGE_MAPPING.md) — TestAppGUI 评判对照  

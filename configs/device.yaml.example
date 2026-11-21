@@ -21,3 +21,14 @@ stimulus:
   path: assets/audio/beep_1s.wav
   play_device: host
   start_delay_sec: 1.0
+
+tts:
+  backend: sapi
+  voice: ""
+  rate: 0
+  lookup_dir: ""
+
+run:
+  step_wait_sec: 3
+  head_delay_sec: 1
+  tail_sec: 5

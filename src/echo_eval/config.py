@@ -191,10 +191,27 @@ class StimulusConfig:
 
 
 @dataclass
+class TtsConfig:
+    backend: str  # sapi | file | edge | http
+    voice: str
+    rate: int
+    lookup_dir: str
+
+
+@dataclass
+class RunConfig:
+    step_wait_sec: float
+    head_delay_sec: float
+    tail_sec: float
+
+
+@dataclass
 class AppConfig:
     adb: AdbConfig
     capture: CaptureConfig
     stimulus: StimulusConfig
+    tts: TtsConfig
+    run: RunConfig
     path: Path
 
 
@@ -213,6 +230,8 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     adb_raw = _as_dict(raw.get("adb"))
     cap_raw = _as_dict(raw.get("capture"))
     stim_raw = _as_dict(raw.get("stimulus"))
+    tts_raw = _as_dict(raw.get("tts"))
+    run_raw = _as_dict(raw.get("run"))
 
     adb = AdbConfig(
         host=str(adb_raw.get("host") or ""),
@@ -240,6 +259,26 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             else 1.0
         ),
     )
+    tts = TtsConfig(
+        backend=str(tts_raw.get("backend") or "sapi").strip().lower(),
+        voice=str(tts_raw.get("voice") or "").strip(),
+        rate=int(tts_raw.get("rate") or 0),
+        lookup_dir=str(tts_raw.get("lookup_dir") or "").strip(),
+    )
+    run = RunConfig(
+        step_wait_sec=float(
+            run_raw.get("step_wait_sec") if run_raw.get("step_wait_sec") is not None else 3.0
+        ),
+        head_delay_sec=float(
+            run_raw.get("head_delay_sec") if run_raw.get("head_delay_sec") is not None else 1.0
+        ),
+        tail_sec=float(run_raw.get("tail_sec") if run_raw.get("tail_sec") is not None else 5.0),
+    )
     return AppConfig(
-        adb=adb, capture=capture, stimulus=stimulus, path=cfg_path.resolve()
+        adb=adb,
+        capture=capture,
+        stimulus=stimulus,
+        tts=tts,
+        run=run,
+        path=cfg_path.resolve(),
     )
