@@ -144,13 +144,41 @@ class AdbClient:
     def screenrecord(self, remote_path: str, duration_sec: int) -> None:
         if duration_sec < 1:
             raise AdbError("duration_sec 必须 >= 1")
-        # Cap soft reminder; device may hard-cap near 180s.
         dur = int(duration_sec)
-        rpath = remote_path
-        # Quote path inside remote shell; use POSIX path as-is.
-        cmd = f'screenrecord --time-limit {dur} "{rpath}"'
-        # Allow a little slack over time-limit for process teardown.
+        cmd = f'screenrecord --time-limit {dur} "{remote_path}"'
         self.shell(cmd, check=True, timeout=dur + 30)
+
+    def screenrecord_start(
+        self, remote_path: str, duration_sec: int
+    ) -> subprocess.Popen[str]:
+        """Start screenrecord in the background so host audio can play during capture."""
+        if duration_sec < 1:
+            raise AdbError("duration_sec 必须 >= 1")
+        dur = int(duration_sec)
+        remote_cmd = f'screenrecord --time-limit {dur} "{remote_path}"'
+        cmd = [self.adb_bin, "-s", self.serial, "shell", remote_cmd]
+        try:
+            return subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=_adb_env(),
+            )
+        except OSError as e:
+            raise AdbError(f"无法启动 screenrecord: {e}") from e
+
+    def screenrecord_wait(
+        self, proc: subprocess.Popen[str], *, duration_sec: int
+    ) -> None:
+        try:
+            stdout, stderr = proc.communicate(timeout=int(duration_sec) + 30)
+        except subprocess.TimeoutExpired as e:
+            proc.kill()
+            raise AdbError("screenrecord 等待超时") from e
+        if proc.returncode != 0:
+            err = (stderr or stdout or "").strip()
+            raise AdbError(f"screenrecord 失败 ({proc.returncode}): {err}")
 
     def pull(self, remote_path: str, local_path: Path) -> Path:
         local_path = Path(local_path)

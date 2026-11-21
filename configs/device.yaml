@@ -23,3 +23,14 @@ capture:
   fps: 1
   # 本机 ffmpeg；留空则从 PATH 查找
   ffmpeg_path: ""
+
+stimulus:
+  # true 时，record/spike 会在录屏开始后播放本机音频（设备麦克拾音）
+  enabled: false
+  type: audio_file
+  # 相对仓库根或绝对路径；可换成你的唤醒词 wav
+  path: assets/audio/beep_1s.wav
+  # 目前仅支持 host（电脑外放）
+  play_device: host
+  # 开录后再延迟播放，给 screenrecord 启动留时间
+  start_delay_sec: 1.0

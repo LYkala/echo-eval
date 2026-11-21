@@ -1,4 +1,4 @@
-"""Record device screen via adb screenrecord, pull, optional frame extract."""
+"""Record device screen via adb screenrecord, optional host audio, pull, frames."""
 from __future__ import annotations
 
 import json
@@ -6,10 +6,12 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
-from echo_eval.config import AppConfig
 from echo_eval.capture.frames import extract_frames
+from echo_eval.config import AppConfig, REPO_ROOT
 from echo_eval.device.adb import AdbClient, AdbError
+from echo_eval.stimulus.audio import AudioPlayError, play_audio_file
 
 
 @dataclass
@@ -23,6 +25,7 @@ class CaptureResult:
     started_at: str = ""
     finished_at: str = ""
     run_dir: str = ""
+    timeline: dict[str, Any] = field(default_factory=dict)
 
     def write_meta(self, path: Path) -> None:
         path.write_text(
@@ -36,10 +39,8 @@ def _run_id() -> str:
 
 
 def _device_posix(path: str) -> str:
-    """Normalize to a path that survives MSYS conversion when embedded in adb args."""
     if not path.startswith("/"):
         path = "/" + path
-    # Double-slash form: Git Bash won't rewrite; Android treats //sdcard as /sdcard.
     if not path.startswith("//"):
         path = "/" + path
     return path
@@ -51,6 +52,8 @@ def record_session(
     client: AdbClient | None = None,
     extract: bool = True,
     keep_remote: bool = False,
+    play_audio: bool | None = None,
+    audio_path: str | Path | None = None,
 ) -> CaptureResult:
     serial = cfg.adb.resolved_serial
     adb = client or AdbClient(serial=serial, adb_path=cfg.adb.adb_path)
@@ -65,9 +68,14 @@ def record_session(
             "请换机或后续启用 screencap 降级方案。"
         )
 
+    do_play = cfg.stimulus.enabled if play_audio is None else bool(play_audio)
+    if do_play and cfg.stimulus.play_device != "host":
+        raise AdbError(
+            f"暂不支持 stimulus.play_device={cfg.stimulus.play_device!r}，请使用 host"
+        )
+
     remote_dir = cfg.capture.remote_dir.rstrip("/")
     remote_file = f"{remote_dir}/{cfg.capture.remote_filename.lstrip('/')}"
-    # Inside `adb shell "..."` the command runs on device — use single-slash POSIX.
     remote_on_device = remote_file if remote_file.startswith("/") else f"/{remote_file}"
 
     run_dir = cfg.capture.local_root() / f"capture_{_run_id()}"
@@ -78,13 +86,55 @@ def record_session(
     adb.ensure_remote_dir(remote_dir)
     adb.rm_remote(remote_on_device)
 
+    timeline: dict[str, Any] = {
+        "record_started_at": None,
+        "play_started_at": None,
+        "play_finished_at": None,
+        "play_offset_sec": None,
+        "audio_path": None,
+        "audio_backend": None,
+    }
+
     started = datetime.now(timezone.utc).isoformat()
+    timeline["record_started_at"] = started
     t0 = time.time()
-    adb.screenrecord(remote_on_device, cfg.capture.duration_sec)
+
+    if do_play:
+        audio = (
+            Path(audio_path)
+            if audio_path
+            else cfg.stimulus.resolved_path(REPO_ROOT)
+        )
+        if not audio.is_file():
+            raise AudioPlayError(
+                f"刺激音频不存在: {audio}。请修改 configs/device.yaml 的 stimulus.path"
+            )
+
+        proc = adb.screenrecord_start(remote_on_device, cfg.capture.duration_sec)
+        delay = max(0.0, float(cfg.stimulus.start_delay_sec))
+        if delay:
+            time.sleep(delay)
+        timeline["play_offset_sec"] = round(time.time() - t0, 3)
+        try:
+            play = play_audio_file(audio, ffmpeg_path=cfg.capture.ffmpeg_path)
+        except AudioPlayError:
+            # Still wait for recorder so device file is finalized.
+            try:
+                adb.screenrecord_wait(proc, duration_sec=cfg.capture.duration_sec)
+            except AdbError:
+                pass
+            raise
+        timeline["play_started_at"] = play.started_at
+        timeline["play_finished_at"] = play.finished_at
+        timeline["audio_path"] = play.path
+        timeline["audio_backend"] = play.backend
+        adb.screenrecord_wait(proc, duration_sec=cfg.capture.duration_sec)
+    else:
+        adb.screenrecord(remote_on_device, cfg.capture.duration_sec)
+
     elapsed = time.time() - t0
     finished = datetime.now(timezone.utc).isoformat()
 
-    # pull: use // form for the adb.exe argument
     adb.pull(_device_posix(remote_on_device), local_video)
 
     if not keep_remote:
@@ -111,10 +161,14 @@ def record_session(
         started_at=started,
         finished_at=finished,
         run_dir=str(run_dir),
+        timeline=timeline,
     )
-    # attach timing hint for debugging wireless lag
-    meta_extra = run_dir / "capture_meta.json"
     payload = asdict(result)
     payload["elapsed_wall_sec"] = round(elapsed, 2)
-    meta_extra.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "capture_meta.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (run_dir / "timeline.json").write_text(
+        json.dumps(timeline, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return result

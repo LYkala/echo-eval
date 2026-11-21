@@ -18,6 +18,11 @@ def test_load_device_yaml(tmp_path: Path):
                     "local_dir": "artifacts",
                     "fps": 1,
                 },
+                "stimulus": {
+                    "enabled": True,
+                    "path": "assets/audio/beep_1s.wav",
+                    "start_delay_sec": 1.5,
+                },
             }
         ),
         encoding="utf-8",
@@ -26,6 +31,9 @@ def test_load_device_yaml(tmp_path: Path):
     assert cfg.adb.resolved_serial == "10.0.0.2:5555"
     assert cfg.capture.remote_path == "/sdcard/echo_eval/a.mp4"
     assert cfg.capture.duration_sec == 8
+    assert cfg.stimulus.enabled is True
+    assert cfg.stimulus.start_delay_sec == 1.5
+
 
 
 def test_serial_override(tmp_path: Path):

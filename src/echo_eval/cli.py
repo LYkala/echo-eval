@@ -1,7 +1,8 @@
-"""CLI for Phase 0–1: doctor / connect / record.
+"""CLI: doctor / connect / record / spike.
 
-These commands are the device-capture foundation of automated evaluation.
-Later `run --case` will call the same modules after audio stimulus + judge.
+Phase 0–2 foundation of automated evaluation:
+connect + screenrecord (+ optional host audio) + pull + frames.
+Later `run --case` will add case loading and LLM judge on top.
 """
 from __future__ import annotations
 
@@ -13,8 +14,9 @@ from pathlib import Path
 from echo_eval import __version__
 from echo_eval.capture.frames import FrameExtractError, resolve_ffmpeg
 from echo_eval.capture.screenrecord import record_session
-from echo_eval.config import DEFAULT_CONFIG_PATH, load_config
+from echo_eval.config import DEFAULT_CONFIG_PATH, REPO_ROOT, load_config
 from echo_eval.device.adb import AdbClient, AdbError
+from echo_eval.stimulus.audio import AudioPlayError, _resolve_ffplay
 
 
 def _add_config_arg(p: argparse.ArgumentParser) -> None:
@@ -26,6 +28,23 @@ def _add_config_arg(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _print_capture_result(result, *, extract: bool) -> None:
+    print(f"run_dir: {result.run_dir}")
+    print(f"video:   {result.local_video}")
+    if result.timeline.get("audio_path"):
+        print(
+            f"audio:   {result.timeline.get('audio_path')} "
+            f"(offset={result.timeline.get('play_offset_sec')}s, "
+            f"backend={result.timeline.get('audio_backend')})"
+        )
+    if result.frame_paths:
+        print(f"frames:  {len(result.frame_paths)} -> {result.frames_dir}")
+    elif extract:
+        print("frames:  (none)")
+    else:
+        print("frames:  skipped (--no-frames)")
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     print(f"echo-eval {__version__}")
     cfg_path = Path(args.config)
@@ -33,7 +52,6 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     problems: list[str] = []
 
-    adb_bin = ""
     try:
         cfg = load_config(cfg_path) if cfg_path.is_file() else None
     except Exception as e:
@@ -48,7 +66,6 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if adb_bin:
         print(f"adb: {adb_bin}")
         try:
-            # serial not required for version
             serial = cfg.adb.resolved_serial if cfg else "emulator-5554"
             ver = AdbClient(serial=serial, adb_path=adb_bin).version()
             print(f"adb version: {ver}")
@@ -57,12 +74,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     else:
         problems.append("未找到 adb（PATH 或 adb.adb_path）")
 
-    ff = ""
     try:
         ff = resolve_ffmpeg(cfg.capture.ffmpeg_path if cfg else "")
         print(f"ffmpeg: {ff}")
     except FrameExtractError as e:
         problems.append(str(e))
+
+    ffplay = _resolve_ffplay(cfg.capture.ffmpeg_path if cfg else "")
+    if ffplay:
+        print(f"ffplay: {ffplay}")
+    else:
+        print("ffplay: (missing — spike/host 播放可用 Windows winsound 播 wav，或安装 ffmpeg)")
 
     if cfg:
         try:
@@ -71,6 +93,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             print(f"capture.remote_path: {cfg.capture.remote_path}")
             print(f"capture.local_dir: {cfg.capture.local_root()}")
             print(f"capture.fps: {cfg.capture.fps}")
+            print(f"stimulus.enabled: {cfg.stimulus.enabled}")
+            print(f"stimulus.path: {cfg.stimulus.resolved_path(REPO_ROOT)}")
         except ValueError as e:
             problems.append(str(e))
 
@@ -101,7 +125,7 @@ def cmd_connect(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_record(args: argparse.Namespace) -> int:
+def _run_record(args: argparse.Namespace, *, force_play: bool | None) -> int:
     cfg = load_config(args.config)
     if args.seconds is not None:
         cfg.capture.duration_sec = int(args.seconds)
@@ -109,41 +133,75 @@ def cmd_record(args: argparse.Namespace) -> int:
         cfg.capture.fps = float(args.fps)
 
     extract = not args.no_frames
+    audio_path = getattr(args, "audio", None)
+    play_audio = force_play
+    if play_audio is None and audio_path:
+        play_audio = True
+
     print(
         f"record serial={cfg.adb.resolved_serial} "
         f"duration={cfg.capture.duration_sec}s fps={cfg.capture.fps} "
-        f"extract_frames={extract}"
+        f"extract_frames={extract} play_audio={play_audio if play_audio is not None else cfg.stimulus.enabled}"
     )
     try:
-        result = record_session(cfg, extract=extract, keep_remote=args.keep_remote)
-    except (AdbError, FrameExtractError, FileNotFoundError, ValueError) as e:
+        result = record_session(
+            cfg,
+            extract=extract,
+            keep_remote=args.keep_remote,
+            play_audio=play_audio,
+            audio_path=audio_path,
+        )
+    except (AdbError, FrameExtractError, AudioPlayError, FileNotFoundError, ValueError) as e:
         print(f"record: FAIL\n{e}", file=sys.stderr)
         return 1
 
-    print(f"run_dir: {result.run_dir}")
-    print(f"video:   {result.local_video}")
-    if result.frame_paths:
-        print(f"frames:  {len(result.frame_paths)} -> {result.frames_dir}")
-    elif extract:
-        print("frames:  (none)")
-    else:
-        print("frames:  skipped (--no-frames)")
+    _print_capture_result(result, extract=extract)
     print("record: OK")
     return 0
+
+
+def cmd_record(args: argparse.Namespace) -> int:
+    return _run_record(args, force_play=None)
+
+
+def cmd_spike(args: argparse.Namespace) -> int:
+    """End-to-end puncture: connect + record with host audio playback."""
+    return _run_record(args, force_play=True)
+
+
+def _add_record_args(p: argparse.ArgumentParser) -> None:
+    _add_config_arg(p)
+    p.add_argument("--seconds", type=int, default=None, help="覆盖配置中的录制秒数")
+    p.add_argument("--fps", type=float, default=None, help="覆盖抽帧 fps；0 表示不抽帧")
+    p.add_argument(
+        "--no-frames",
+        action="store_true",
+        help="只拉视频，不抽帧（无 ffmpeg 时可用）",
+    )
+    p.add_argument(
+        "--keep-remote",
+        action="store_true",
+        help="pull 后保留设备上的视频文件",
+    )
+    p.add_argument(
+        "--audio",
+        default=None,
+        help="本机播放的音频路径（覆盖 stimulus.path；隐含开启播放）",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="echo-eval",
         description=(
-            "语音助手无线 ADB 采集工具（Phase 0–1）。"
-            "完整测评流水线将复用 connect/record，并在后续阶段加入播放与评判。"
+            "语音助手无线 ADB 采集工具（Phase 0–2）。"
+            "自动化测评将复用这些能力，并继续加入用例与 LLM 评判。"
         ),
     )
     parser.add_argument("--version", action="version", version=f"echo-eval {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_doc = sub.add_parser("doctor", help="检查 adb / ffmpeg / 配置是否可用")
+    p_doc = sub.add_parser("doctor", help="检查 adb / ffmpeg / ffplay / 配置")
     _add_config_arg(p_doc)
     p_doc.set_defaults(func=cmd_doctor)
 
@@ -153,22 +211,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_rec = sub.add_parser(
         "record",
-        help="连接（如需要）→ screenrecord → pull → 抽帧；产物写入 artifacts/",
+        help="录屏→pull→抽帧；若配置 stimulus.enabled 或传 --audio 则边录边播",
     )
-    _add_config_arg(p_rec)
-    p_rec.add_argument("--seconds", type=int, default=None, help="覆盖配置中的录制秒数")
-    p_rec.add_argument("--fps", type=float, default=None, help="覆盖抽帧 fps；0 表示不抽帧")
-    p_rec.add_argument(
-        "--no-frames",
-        action="store_true",
-        help="只拉视频，不抽帧（无 ffmpeg 时可用）",
-    )
-    p_rec.add_argument(
-        "--keep-remote",
-        action="store_true",
-        help="pull 后保留设备上的视频文件",
-    )
+    _add_record_args(p_rec)
     p_rec.set_defaults(func=cmd_record)
+
+    p_spike = sub.add_parser(
+        "spike",
+        help="穿刺：强制本机播放刺激音频 + 录屏抽帧（测评采集链路联调）",
+    )
+    _add_record_args(p_spike)
+    p_spike.set_defaults(func=cmd_spike)
 
     return parser
 

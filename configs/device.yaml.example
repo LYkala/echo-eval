@@ -14,3 +14,10 @@ capture:
   local_dir: "artifacts"
   fps: 1
   ffmpeg_path: ""
+
+stimulus:
+  enabled: false
+  type: audio_file
+  path: assets/audio/beep_1s.wav
+  play_device: host
+  start_delay_sec: 1.0

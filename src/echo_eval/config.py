@@ -1,4 +1,4 @@
-"""Load editable YAML config for device / capture."""
+"""Load editable YAML config for device / capture / stimulus."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -57,9 +57,26 @@ class CaptureConfig:
 
 
 @dataclass
+class StimulusConfig:
+    enabled: bool
+    type: str
+    path: str
+    play_device: str
+    start_delay_sec: float
+
+    def resolved_path(self, repo_root: Path | None = None) -> Path:
+        root = repo_root or REPO_ROOT
+        p = Path(self.path)
+        if not p.is_absolute():
+            p = root / p
+        return p.resolve()
+
+
+@dataclass
 class AppConfig:
     adb: AdbConfig
     capture: CaptureConfig
+    stimulus: StimulusConfig
     path: Path
 
 
@@ -77,6 +94,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
     adb_raw = _as_dict(raw.get("adb"))
     cap_raw = _as_dict(raw.get("capture"))
+    stim_raw = _as_dict(raw.get("stimulus"))
 
     adb = AdbConfig(
         host=str(adb_raw.get("host") or ""),
@@ -93,4 +111,17 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         fps=float(cap_raw.get("fps") if cap_raw.get("fps") is not None else 1),
         ffmpeg_path=str(cap_raw.get("ffmpeg_path") or "").strip(),
     )
-    return AppConfig(adb=adb, capture=capture, path=cfg_path.resolve())
+    stimulus = StimulusConfig(
+        enabled=bool(stim_raw.get("enabled", False)),
+        type=str(stim_raw.get("type") or "audio_file"),
+        path=str(stim_raw.get("path") or "assets/audio/beep_1s.wav"),
+        play_device=str(stim_raw.get("play_device") or "host"),
+        start_delay_sec=float(
+            stim_raw.get("start_delay_sec")
+            if stim_raw.get("start_delay_sec") is not None
+            else 1.0
+        ),
+    )
+    return AppConfig(
+        adb=adb, capture=capture, stimulus=stimulus, path=cfg_path.resolve()
+    )
