@@ -39,6 +39,8 @@ git fetch origin
 git checkout cursor/phase2-audio-stimulus-4bfa
 git pull origin cursor/phase2-audio-stimulus-4bfa
 
+# 建议先升级 pip（Windows / 旧 pip 装 editable 常需要）
+python -m pip install -U pip setuptools wheel
 python -m pip install -e ".[dev]"
 
 python -m echo_eval doctor
@@ -51,6 +53,13 @@ python -m echo_eval record
 python -m echo_eval spike
 # 或指定音频
 python -m echo_eval spike --audio assets/audio/beep_1s.wav --seconds 15
+```
+
+若 `pip install -e` 仍失败，可临时用（不安装）：
+
+```bash
+export PYTHONPATH=src   # Git Bash / UCRT64
+python -m echo_eval doctor
 ```
 
 产物：`artifacts/capture_<时间戳>/`
