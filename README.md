@@ -7,10 +7,14 @@
 | 阶段 | 能力 | 命令 |
 |------|------|------|
 | Phase 0–1 | 环境检查、无线连接、录屏、pull、抽帧 | `doctor` / `connect` / `record` |
-| Phase 2（当前） | 录屏同时本机播放 wav（设备麦克拾音） | `spike` / `record --audio ...` |
+| Phase 2 | 录屏同时本机播放 wav（设备麦克拾音） | `spike` / `record --audio ...` |
 | 后续 | 用例 → 播放 → 录屏 → LLM 评判 → 报告 | 计划中的 `run --case` |
 
 这些命令是测评的**采集层**；完整 `run` 会复用同一套 `device/`、`capture/`、`stimulus/` 代码。
+
+## 环境准备（ADB / FFmpeg）
+
+Windows 安装与排查见 **[`docs/SETUP_WINDOWS.md`](docs/SETUP_WINDOWS.md)**（含确认是否已装、winget/手动安装、写入 `device.yaml` 绝对路径）。
 
 ## 配置
 
@@ -20,9 +24,11 @@
 adb:
   host: "192.168.43.244"
   port: 5555
+  adb_path: "D:/software/platform-tools/adb.exe"  # 按本机修改
 capture:
   duration_sec: 15
   fps: 1
+  ffmpeg_path: ""  # doctor 找不到时填写 where ffmpeg 的路径
 stimulus:
   enabled: false
   path: assets/audio/beep_1s.wav
@@ -30,39 +36,19 @@ stimulus:
   start_delay_sec: 1.0
 ```
 
-把 `path` 换成你的唤醒词/问句 wav 即可。
-
-## 安装与使用
+## 使用
 
 ```bash
-git fetch origin
-git checkout cursor/phase2-audio-stimulus-4bfa
-git pull origin cursor/phase2-audio-stimulus-4bfa
+git checkout main
+git pull origin main
 
 # 免安装、零第三方依赖（pip 坏掉也能跑）
 export PYTHONPATH=src
 python -m echo_eval doctor
 python -m echo_eval connect
-# 或: bash scripts/run.sh doctor
-
-# 若 Windows Python 找不到 adb/ffmpeg，在 configs/device.yaml 写绝对路径，例如：
-#   adb.adb_path: "C:/platform-tools/adb.exe"
-#   capture.ffmpeg_path: "C:/ffmpeg/bin/ffmpeg.exe"
-
-# 只录屏抽帧
 python -m echo_eval record
-
-# 穿刺：强制边录边播（电脑外放，设备拾音）
-python -m echo_eval spike
-# 或指定音频
 python -m echo_eval spike --audio assets/audio/beep_1s.wav --seconds 15
-```
-
-若 `pip install -e` 仍失败，可临时用（不安装）：
-
-```bash
-export PYTHONPATH=src   # Git Bash / UCRT64
-python -m echo_eval doctor
+# 或: bash scripts/run.sh doctor
 ```
 
 产物：`artifacts/capture_<时间戳>/`
@@ -74,5 +60,6 @@ python -m echo_eval doctor
 
 ## 文档
 
-- [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md)
-- [`docs/TESTAPP_JUDGE_MAPPING.md`](docs/TESTAPP_JUDGE_MAPPING.md)
+- [`docs/SETUP_WINDOWS.md`](docs/SETUP_WINDOWS.md) — Windows 安装 ADB / FFmpeg  
+- [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md) — 开发计划  
+- [`docs/TESTAPP_JUDGE_MAPPING.md`](docs/TESTAPP_JUDGE_MAPPING.md) — TestAppGUI 评判对照  
