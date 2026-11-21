@@ -5,10 +5,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "device.yaml"
+
+
+def _load_yaml(text: str) -> Any:
+    try:
+        import yaml
+    except ImportError as e:
+        raise ImportError(
+            "缺少 PyYAML。代理/SSL 导致 pip 失败时，可改用国内镜像安装：\n"
+            "  python -m pip install pyyaml -i https://pypi.tuna.tsinghua.edu.cn/simple\n"
+            "或先执行: export PYTHONPATH=src"
+        ) from e
+    return yaml.safe_load(text)
 
 
 @dataclass
@@ -91,7 +101,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         hint = f" 可复制 {example} 为 {cfg_path.name}。" if example.is_file() else ""
         raise FileNotFoundError(f"未找到配置文件: {cfg_path}.{hint}")
 
-    raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    raw = _load_yaml(cfg_path.read_text(encoding="utf-8")) or {}
     adb_raw = _as_dict(raw.get("adb"))
     cap_raw = _as_dict(raw.get("capture"))
     stim_raw = _as_dict(raw.get("stimulus"))

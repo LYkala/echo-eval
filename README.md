@@ -39,12 +39,16 @@ git fetch origin
 git checkout cursor/phase2-audio-stimulus-4bfa
 git pull origin cursor/phase2-audio-stimulus-4bfa
 
-# 建议先升级 pip（Windows / 旧 pip 装 editable 常需要）
-python -m pip install -U pip setuptools wheel
-python -m pip install -e ".[dev]"
-
+# 方式 A：免安装（推荐；pip 代理/SSL 失败时用这个）
+export PYTHONPATH=src
+python -m pip install pyyaml -i https://pypi.tuna.tsinghua.edu.cn/simple
 python -m echo_eval doctor
 python -m echo_eval connect
+# 或: bash scripts/run.sh doctor
+
+# 方式 B：editable 安装（需能访问 PyPI；可先关代理或换镜像）
+# python -m pip install -U pip setuptools wheel -i https://pypi.tuna.tsinghua.edu.cn/simple
+# python -m pip install -e ".[dev]" -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 只录屏抽帧
 python -m echo_eval record
