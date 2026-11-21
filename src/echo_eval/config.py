@@ -35,10 +35,19 @@ def _parse_scalar(raw: str) -> Any:
     return s
 
 
+def _deepcopy_mapping(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _deepcopy_mapping(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_deepcopy_mapping(v) for v in value]
+    return value
+
+
 def _load_simple_yaml(text: str) -> dict[str, Any]:
-    """Parse the nested mapping subset used by configs/device.yaml."""
+    """Parse nested mappings + TestApp-style anchors (&name / *name / <<: *name)."""
     root: dict[str, Any] = {}
     stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
+    anchors: dict[str, Any] = {}
 
     for lineno, line in enumerate(text.splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
@@ -65,12 +74,47 @@ def _load_simple_yaml(text: str) -> dict[str, Any]:
         parent = stack[-1][1]
 
         value_raw = rest.strip()
+
+        # Merge key used by TestApp model.yaml: <<: *doubao
+        if key == "<<":
+            alias = value_raw[1:] if value_raw.startswith("*") else value_raw
+            if alias not in anchors:
+                raise ValueError(f"未知锚点 *{alias} (line {lineno})")
+            src = anchors[alias]
+            if not isinstance(src, dict):
+                raise ValueError(f"锚点 *{alias} 不是 mapping，无法 merge (line {lineno})")
+            for k, v in src.items():
+                if k not in parent:
+                    parent[k] = _deepcopy_mapping(v)
+            continue
+
+        anchor_name: str | None = None
+        if value_raw.startswith("&"):
+            # default: &doubao   OR   name: &a somevalue
+            parts = value_raw.split(None, 1)
+            anchor_name = parts[0][1:]
+            value_raw = parts[1] if len(parts) > 1 else ""
+
+        # Alias reference: key: *doubao
+        if value_raw.startswith("*") and len(value_raw.split()) == 1:
+            alias = value_raw[1:]
+            if alias not in anchors:
+                raise ValueError(f"未知锚点 *{alias} (line {lineno})")
+            parent[key] = _deepcopy_mapping(anchors[alias])
+            if anchor_name:
+                anchors[anchor_name] = parent[key]
+            continue
+
         if value_raw == "":
             child: dict[str, Any] = {}
             parent[key] = child
+            if anchor_name:
+                anchors[anchor_name] = child
             stack.append((indent, child))
         else:
             parent[key] = _parse_scalar(value_raw)
+            if anchor_name:
+                anchors[anchor_name] = parent[key]
     return root
 
 
