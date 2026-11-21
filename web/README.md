@@ -4,5 +4,5 @@ PC1 一体机控制台。说明见仓库 [`docs/WEB_CONSOLE.md`](../docs/WEB_CON
 
 ```bash
 npm install
-npm run dev   # http://127.0.0.1:3847
+npm run dev   # http://127.0.0.1:39247
 ```

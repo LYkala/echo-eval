@@ -14,11 +14,11 @@ const ConsoleClient = dynamic(
           <a className="mx-1 text-primary underline" href="/check">
             /check
           </a>
-          ，并确认地址是 <code>http://127.0.0.1:3847</code>
+          ，并确认地址是 <code>http://127.0.0.1:39247</code>
         </p>
         <p className="text-muted-foreground">
           也可在 Bash 测试：
-          <code className="ml-1">curl http://127.0.0.1:3847/api/ping</code>
+          <code className="ml-1">curl http://127.0.0.1:39247/api/ping</code>
         </p>
       </div>
     ),

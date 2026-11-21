@@ -113,7 +113,7 @@ export function ConsoleClient() {
         pushLog(`ping HTTP ${pingRes.status}: ${pingText.slice(0, 180)}`);
         if (!pingRes.ok) throw new Error(`ping 失败 HTTP ${pingRes.status}`);
       } catch (e) {
-        const message = `无法连接本机 API: ${String(e)}。请确认 Git Bash 里 npm run dev 仍在运行，并用 http://127.0.0.1:3847 打开（不要用 file://）。`;
+        const message = `无法连接本机 API: ${String(e)}。请确认 Git Bash 里 npm run dev 仍在运行，并用 http://127.0.0.1:39247 打开（不要用 file://）。`;
         pushLog(message);
         setEnvError(message);
         setEnvProgress("API 不通，已停止");
