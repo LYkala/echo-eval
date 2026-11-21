@@ -1,8 +1,6 @@
-"""CLI: doctor / connect / record / spike.
+"""CLI: doctor / connect / record / spike / judge.
 
-Phase 0–2 foundation of automated evaluation:
-connect + screenrecord (+ optional host audio) + pull + frames.
-Later `run --case` will add case loading and LLM judge on top.
+Phase 0–3: capture foundation + multi-frame VL judge (TestApp E1 port).
 """
 from __future__ import annotations
 
@@ -16,6 +14,8 @@ from echo_eval.capture.frames import FrameExtractError, resolve_ffmpeg
 from echo_eval.capture.screenrecord import record_session
 from echo_eval.config import DEFAULT_CONFIG_PATH, REPO_ROOT, load_config
 from echo_eval.device.adb import AdbClient, AdbError
+from echo_eval.judge.model_config import find_model_config_path
+from echo_eval.judge.service import JudgeError, judge_images, resolve_backend
 from echo_eval.stimulus.audio import AudioPlayError, _resolve_ffplay
 
 
@@ -98,6 +98,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         except ValueError as e:
             problems.append(str(e))
 
+    model_path = find_model_config_path()
+    if model_path:
+        print(f"vl_eval config: {model_path}")
+        print("judge backend auto: vl")
+    else:
+        print("vl_eval config: (missing — judge --backend auto 将使用 mock)")
+        print("  提示: export VL_EVAL_CONFIG=你的TestApp/configs/model.yaml")
+
     if problems:
         print("doctor: FAIL")
         for p in problems:
@@ -169,6 +177,57 @@ def cmd_spike(args: argparse.Namespace) -> int:
     return _run_record(args, force_play=True)
 
 
+def cmd_judge(args: argparse.Namespace) -> int:
+    expects: list[str] = []
+    if args.expect:
+        expects.extend(args.expect)
+    if args.expect_file:
+        text = Path(args.expect_file).read_text(encoding="utf-8")
+        expects.extend([ln.strip() for ln in text.splitlines() if ln.strip()])
+    if not expects:
+        print("judge: FAIL\n请提供 --expect 或 --expect-file", file=sys.stderr)
+        return 2
+
+    backend = resolve_backend(args.backend)
+    print(
+        f"judge backend={backend} (requested={args.backend}) "
+        f"expects={len(expects)} run_dir={args.run_dir or '-'} "
+        f"images={len(args.image or [])}"
+    )
+    try:
+        data = judge_images(
+            exceptions=expects,
+            run_dir=args.run_dir,
+            images=args.image,
+            backend=args.backend,
+            write=not args.no_write,
+        )
+    except JudgeError as e:
+        print(f"judge: FAIL\n{e}", file=sys.stderr)
+        return 2
+
+    passed = data.get("passed")
+    print(f"passed: {passed}")
+    print(f"images_used: {data.get('image_count_used')}/{data.get('image_count_total')}")
+    if data.get("evaluation_path"):
+        print(f"evaluation: {data['evaluation_path']}")
+    parsed = data.get("result_parsed")
+    if isinstance(parsed, list):
+        for item in parsed:
+            if not isinstance(item, dict):
+                continue
+            label = item.get("final_result") or item.get("expectation") or "?"
+            print(f"  - {label}: {item.get('result')}")
+    if passed is True:
+        print("judge: OK")
+        return 0
+    if passed is False:
+        print("judge: FAIL")
+        return 1
+    print("judge: UNKNOWN")
+    return 2
+
+
 def _add_record_args(p: argparse.ArgumentParser) -> None:
     _add_config_arg(p)
     p.add_argument("--seconds", type=int, default=None, help="覆盖配置中的录制秒数")
@@ -194,14 +253,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="echo-eval",
         description=(
-            "语音助手无线 ADB 采集工具（Phase 0–2）。"
-            "自动化测评将复用这些能力，并继续加入用例与 LLM 评判。"
+            "语音助手无线 ADB 采集与多帧 VL 评判（Phase 0–3）。"
+            "评判逻辑对齐 TestApp evaluate_gui_poll_images（E1）。"
         ),
     )
     parser.add_argument("--version", action="version", version=f"echo-eval {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_doc = sub.add_parser("doctor", help="检查 adb / ffmpeg / ffplay / 配置")
+    p_doc = sub.add_parser("doctor", help="检查 adb / ffmpeg / ffplay / 设备与模型配置")
     _add_config_arg(p_doc)
     p_doc.set_defaults(func=cmd_doctor)
 
@@ -222,6 +281,41 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_record_args(p_spike)
     p_spike.set_defaults(func=cmd_spike)
+
+    p_judge = sub.add_parser(
+        "judge",
+        help="多帧截图 + 预期结果 → evaluation.json（TestApp gui_poll E1 / Mock M2）",
+    )
+    p_judge.add_argument("--run-dir", default=None, help="含 frames/ 的采集目录")
+    p_judge.add_argument(
+        "--image",
+        action="append",
+        default=None,
+        help="额外指定图片路径，可重复；不配 --run-dir 时必填",
+    )
+    p_judge.add_argument(
+        "--expect",
+        action="append",
+        default=None,
+        help="一条预期结果（exceptions），可重复",
+    )
+    p_judge.add_argument(
+        "--expect-file",
+        default=None,
+        help="预期结果文本文件，一行一条",
+    )
+    p_judge.add_argument(
+        "--backend",
+        choices=["auto", "vl", "mock"],
+        default="auto",
+        help="auto=有 model.yaml 用 vl，否则 mock",
+    )
+    p_judge.add_argument(
+        "--no-write",
+        action="store_true",
+        help="不写 evaluation.json（仅打印）",
+    )
+    p_judge.set_defaults(func=cmd_judge)
 
     return parser
 

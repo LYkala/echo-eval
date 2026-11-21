@@ -8,7 +8,8 @@
 |------|------|------|
 | Phase 0–1 | 环境检查、无线连接、录屏、pull、抽帧 | `doctor` / `connect` / `record` |
 | Phase 2 | 录屏同时本机播放 wav（设备麦克拾音） | `spike` / `record --audio ...` |
-| 后续 | 用例 → 播放 → 录屏 → LLM 评判 → 报告 | 计划中的 `run --case` |
+| Phase 3 | 多帧截图 + 预期结果 → VL/Mock 评判 | `judge` |
+| 后续 | Excel 用例 → 采集 → 评判 → 报告 | 计划中的 `run --case` |
 
 这些命令是测评的**采集层**；完整 `run` 会复用同一套 `device/`、`capture/`、`stimulus/` 代码。
 
@@ -48,7 +49,15 @@ python -m echo_eval doctor
 python -m echo_eval connect
 python -m echo_eval record
 python -m echo_eval spike --audio assets/audio/beep_1s.wav --seconds 15
-# 或: bash scripts/run.sh doctor
+
+# Phase 3：多帧评判（指向本机已跑通的 TestApp model.yaml）
+export VL_EVAL_CONFIG="D:/code/voiceass/TestAppGUI-master/testApp/configs/model.yaml"
+python -m echo_eval judge --run-dir artifacts/capture_xxx \
+  --expect "界面出现天气相关结果" --backend vl
+
+# 无网关联调
+python -m echo_eval judge --run-dir artifacts/capture_xxx \
+  --expect "界面出现天气相关结果" --backend mock
 ```
 
 产物：`artifacts/capture_<时间戳>/`
@@ -57,6 +66,7 @@ python -m echo_eval spike --audio assets/audio/beep_1s.wav --seconds 15
 - `frames/frame_XXX.jpg`
 - `timeline.json`（含 `play_offset_sec`）
 - `capture_meta.json`
+- `evaluation.json`（`judge` 生成）
 
 ## 文档
 

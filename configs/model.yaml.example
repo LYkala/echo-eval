@@ -1,0 +1,14 @@
+# 复制为 model.yaml 后填写真实密钥（已在 .gitignore，勿提交）。
+# 也可不复制，直接设置环境变量指向 TestApp 已跑通的配置：
+#   export VL_EVAL_CONFIG="D:/code/voiceass/TestAppGUI-master/testApp/configs/model.yaml"
+#
+# 字段与 TestApp models.vl_eval 完全兼容。
+
+models:
+  vl_eval:
+    api_format: "openai"
+    base_url: "https://YOUR_GATEWAY/v1"
+    api_key: "YOUR_API_KEY"
+    model_id: "YOUR_VL_MODEL_ID"
+    timeout: 120
+    max_tokens: 3072

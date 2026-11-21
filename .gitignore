@@ -11,7 +11,9 @@ build/
 
 # Secrets — keep example only
 vendor/testApp/configs/model.yaml
+configs/model.yaml
 **/configs/model.yaml
+!configs/model.yaml.example
 !**/configs/model.yaml.example
 !configs/device.yaml
 !configs/device.yaml.example
