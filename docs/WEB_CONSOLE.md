@@ -16,8 +16,8 @@ cd /d/code/voiceass/echo-eval
 git checkout main
 git pull
 
-# 可选：VL 评判
-export VL_EVAL_CONFIG="D:/code/voiceass/TestAppGUI-master/testApp/configs/model.yaml"
+# 可选：VL 评判（默认用 configs/model.yaml；也可覆盖路径）
+# export VL_EVAL_CONFIG="D:/code/voiceass/TestAppGUI-master/testApp/configs/model.yaml"
 export PYTHONPATH=src
 
 cd web

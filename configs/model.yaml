@@ -1,0 +1,45 @@
+# 模型注册表（与 TestAppGUI testApp/configs/model.yaml 结构一致）
+# 各服务通过标签引用；外部大模型走火山 AI 网关（OpenAI 兼容）。
+# vl_eval 同时用于文本评判与截图 VL。
+#
+# 请把 api_key / base_url / model_id 换成你本机 TestApp 已跑通的值。
+# 含真实密钥时请勿提交（可用: git update-index --skip-worktree configs/model.yaml）
+
+models:
+  default: &doubao
+    api_format: "openai"
+    base_url: "https://YOUR_GATEWAY/v1"
+    api_key: "YOUR_API_KEY"
+    model_id: "YOUR_VL_MODEL_ID"
+    temperature: 1
+    timeout: 120
+    max_retries: 3
+
+  local:
+    <<: *doubao
+
+  vl_eval:
+    <<: *doubao
+
+  kimi25:
+    <<: *doubao
+
+  # 以下标签保留原名，便于旧配置引用；实际均指向同一网关
+  qwen122B:
+    <<: *doubao
+
+  qwen3.6-plus:
+    <<: *doubao
+
+  qwen27B:
+    <<: *doubao
+
+  qwen3_8B:
+    <<: *doubao
+
+  sili_qwen122B:
+    <<: *doubao
+
+  sili_qwen27B:
+    <<: *doubao
+    max_tokens: 4096

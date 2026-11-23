@@ -1,14 +1,41 @@
-# 复制为 model.yaml 后填写真实密钥（已在 .gitignore，勿提交）。
-# 也可不复制，直接设置环境变量指向 TestApp 已跑通的配置：
-#   export VL_EVAL_CONFIG="D:/code/voiceass/TestAppGUI-master/testApp/configs/model.yaml"
-#
-# 字段与 TestApp models.vl_eval 完全兼容。
+# 复制为 model.yaml 后填写真实密钥（或直接编辑 configs/model.yaml）。
+# 结构与 TestAppGUI testApp/configs/model.yaml 一致。
+# vl_eval 同时用于文本评判与截图 VL。
 
 models:
-  vl_eval:
+  default: &doubao
     api_format: "openai"
     base_url: "https://YOUR_GATEWAY/v1"
     api_key: "YOUR_API_KEY"
     model_id: "YOUR_VL_MODEL_ID"
+    temperature: 1
     timeout: 120
-    max_tokens: 3072
+    max_retries: 3
+
+  local:
+    <<: *doubao
+
+  vl_eval:
+    <<: *doubao
+
+  kimi25:
+    <<: *doubao
+
+  qwen122B:
+    <<: *doubao
+
+  qwen3.6-plus:
+    <<: *doubao
+
+  qwen27B:
+    <<: *doubao
+
+  qwen3_8B:
+    <<: *doubao
+
+  sili_qwen122B:
+    <<: *doubao
+
+  sili_qwen27B:
+    <<: *doubao
+    max_tokens: 4096

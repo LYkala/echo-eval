@@ -29,7 +29,8 @@
 ```bash
 git checkout cursor/phase4-excel-runner-4bfa   # 或 main（合入后）
 export PYTHONPATH=src
-export VL_EVAL_CONFIG="D:/code/voiceass/TestAppGUI-master/testApp/configs/model.yaml"
+# 默认读 configs/model.yaml；需要时再覆盖：
+# export VL_EVAL_CONFIG="D:/path/to/TestApp/configs/model.yaml"
 
 # 单条 + mock 评判（不调 VL）
 python -m echo_eval run --excel cases/examples/sample_weather.csv \

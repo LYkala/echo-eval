@@ -12,11 +12,10 @@ web/node_modules/
 web/.next/
 web/out/
 
-# Secrets — keep example only
+# Secrets — vendor TestApp 真密钥勿进仓；本仓库 configs/model.yaml 仅放占位符
 vendor/testApp/configs/model.yaml
-configs/model.yaml
-**/configs/model.yaml
+!configs/model.yaml
 !configs/model.yaml.example
-!**/configs/model.yaml.example
 !configs/device.yaml
 !configs/device.yaml.example
+!**/configs/model.yaml.example

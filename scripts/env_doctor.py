@@ -217,7 +217,7 @@ def main() -> int:
                 "key": "vl",
                 "label": "VL 网关 model.yaml",
                 "ok": bool(mp),
-                "detail": str(mp) if mp else "未设置 VL_EVAL_CONFIG；可用 mock",
+                "detail": str(mp) if mp else "缺少 configs/model.yaml（或 VL_EVAL_CONFIG）；可用 mock",
                 "required": False,
             }
         )
