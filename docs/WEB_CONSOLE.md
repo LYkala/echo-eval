@@ -13,7 +13,7 @@
 
 ```bash
 cd /d/code/voiceass/echo-eval
-git checkout cursor/phase5-web-console-4bfa   # 或 main（合入后）
+git checkout main
 git pull
 
 # 可选：VL 评判
