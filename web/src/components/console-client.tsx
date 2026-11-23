@@ -121,6 +121,14 @@ export function ConsoleClient() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [active, setActive] = useState<Job | null>(null);
+  const [hostPing, setHostPing] = useState<{
+    hostRole?: string;
+    hostLabel?: string;
+    platform?: string;
+    hostname?: string;
+    repoRoot?: string;
+    portHint?: number;
+  } | null>(null);
   const runIdRef = useRef(0);
   const autoStarted = useRef(false);
 
@@ -161,10 +169,28 @@ export function ConsoleClient() {
         pushLog("GET /api/ping …");
         const pingRes = await fetch("/api/ping", { cache: "no-store" });
         const pingText = await pingRes.text();
-        pushLog(`ping HTTP ${pingRes.status}: ${pingText.slice(0, 180)}`);
+        pushLog(`ping HTTP ${pingRes.status}: ${pingText.slice(0, 220)}`);
         if (!pingRes.ok) throw new Error(`ping 失败 HTTP ${pingRes.status}`);
+        try {
+          const pingJson = JSON.parse(pingText) as {
+            hostRole?: string;
+            hostLabel?: string;
+            platform?: string;
+            hostname?: string;
+            repoRoot?: string;
+            portHint?: number;
+          };
+          setHostPing(pingJson);
+          if (pingJson.hostRole === "cloud_agent") {
+            pushLog(
+              `警告：当前打到的是云端 Agent（${pingJson.repoRoot}），不是 Windows 本机。请改用 http://127.0.0.1:47391`
+            );
+          }
+        } catch {
+          /* ignore parse */
+        }
       } catch (e) {
-        const message = `无法连接本机 API: ${String(e)}。请确认 Git Bash 里 npm run dev 仍在运行，并用 http://127.0.0.1:39247 打开（不要用 file://）。`;
+        const message = `无法连接本机 API: ${String(e)}。请确认 Git Bash 里 npm run dev 仍在运行，并用 http://127.0.0.1:47391 打开（不要用 file://）。`;
         pushLog(message);
         setEnvError(message);
         setEnvProgress("API 不通，已停止");
@@ -433,6 +459,27 @@ export function ConsoleClient() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      {hostPing ? (
+        <div
+          className={`lg:col-span-2 rounded-md border px-3 py-2 text-sm ${
+            hostPing.hostRole === "cloud_agent"
+              ? "border-rose-300 bg-rose-50 text-rose-950"
+              : "border-emerald-300 bg-emerald-50 text-emerald-950"
+          }`}
+        >
+          <strong>{hostPing.hostLabel || hostPing.hostRole}</strong>
+          <span className="ml-2 text-xs opacity-90">
+            {hostPing.platform}/{hostPing.hostname} · {hostPing.repoRoot}
+          </span>
+          {hostPing.hostRole === "cloud_agent" ? (
+            <p className="mt-1 text-xs">
+              你打开的不是 Windows 本机控制台。请在本机 Git Bash 执行{" "}
+              <code>cd web &amp;&amp; npm run dev</code>，浏览器只用{" "}
+              <code>http://127.0.0.1:47391</code>（不要点 Cursor 云端端口预览）。
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <section className="animate-rise space-y-6" style={{ animationDelay: "60ms" }}>
         <Card>
           <CardHeader>

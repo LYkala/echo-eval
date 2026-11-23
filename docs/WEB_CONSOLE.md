@@ -25,8 +25,16 @@ npm install
 npm run dev
 ```
 
-浏览器打开：`http://127.0.0.1:39247`  
-局域网其它设备可用：`http://<PC1的IP>:39247`
+浏览器打开：`http://127.0.0.1:47391`（不要用 Cursor 云端 Port 预览，否则会打到云端 Linux）  
+局域网其它设备可用：`http://<PC1的IP>:47391`
+
+自检是否本机：
+
+```bash
+curl -s http://127.0.0.1:47391/api/ping
+# 期望 platform=win32，hostRole=local_pc，repoRoot 在 D:/… 之类
+# 若 platform=linux 且 repoRoot 含 /agent/repos → 打到了云端
+```
 
 ## 使用顺序
 
@@ -41,7 +49,7 @@ npm run dev
 
 ### 环境检查无反应时
 
-1. 确认浏览器地址是 `http://127.0.0.1:39247`（不要用 `file://`）  
+1. 确认浏览器地址是 `http://127.0.0.1:47391`（不要用 `file://`）  
 2. 看页面里的「调试日志」黑框是否出现 `hydration OK` / `用户点击`  
 3. 看运行 `npm run dev` 的 Git Bash 窗口，搜索 `[echo-eval]`：  
    - 有 `[ping]` / `[env/step]` → API 通了  
@@ -49,8 +57,8 @@ npm run dev
 4. 手动测 API：
 
 ```bash
-curl http://127.0.0.1:39247/api/ping
-curl "http://127.0.0.1:39247/api/env/step?step=config"
+curl http://127.0.0.1:47391/api/ping
+curl "http://127.0.0.1:47391/api/env/step?step=config"
 ```
 
 ## 目录
