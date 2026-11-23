@@ -153,8 +153,8 @@ export default async function CheckPage({
 
       <section className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
         <p className="font-medium text-foreground">Bash 手动命令</p>
-        <pre className="mt-2 overflow-auto rounded bg-black/90 p-3 text-xs text-green-100">{`curl http://127.0.0.1:39247/api/ping
-curl "http://127.0.0.1:39247/api/env/step?step=config"
+        <pre className="mt-2 overflow-auto rounded bg-black/90 p-3 text-xs text-green-100">{`curl http://127.0.0.1:47391/api/ping
+curl "http://127.0.0.1:47391/api/env/step?step=config"
 cd .. && python scripts/env_doctor.py --quick --step adb`}</pre>
       </section>
     </div>
