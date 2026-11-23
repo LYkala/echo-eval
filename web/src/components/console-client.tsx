@@ -46,6 +46,26 @@ function formatSize(n: number): string {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
+type JobProgressCase = {
+  index: number;
+  case_id: string;
+  name: string;
+  status: string;
+  phase?: string;
+  phase_label?: string;
+};
+
+type JobProgress = {
+  total: number;
+  done?: number;
+  current_index: number;
+  current_case_id: string;
+  current_name: string;
+  phase: string;
+  phase_label: string;
+  cases: JobProgressCase[];
+};
+
 type Job = {
   id: string;
   datasetName: string;
@@ -59,7 +79,10 @@ type Job = {
   results: { case_id: string; name: string; passed: boolean | null; run_dir: string }[];
   error?: string;
   note?: string;
+  progress?: JobProgress;
 };
+
+const ACTIVE_JOB_KEY = "echo_eval_active_job";
 
 type StepRow = {
   id: string;
@@ -93,7 +116,7 @@ export function ConsoleClient() {
   const [envError, setEnvError] = useState("");
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [datasetId, setDatasetId] = useState("__builtin_sample__");
-  const [caseId, setCaseId] = useState("demo_weather_001");
+  const [caseId, setCaseId] = useState("");
   const [backend, setBackend] = useState<"auto" | "vl" | "mock">("mock");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -268,15 +291,37 @@ export function ConsoleClient() {
     autoStarted.current = true;
     void refreshEnv();
     void refreshDatasets();
-  }, [mounted, refreshEnv, refreshDatasets]);
+    // Restore in-flight job after leaving/returning to this page.
+    const saved = sessionStorage.getItem(ACTIVE_JOB_KEY);
+    if (saved) {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/runs/${saved}`, { cache: "no-store" });
+          if (!res.ok) {
+            sessionStorage.removeItem(ACTIVE_JOB_KEY);
+            return;
+          }
+          const job = (await res.json()) as Job;
+          setActive(job);
+          pushLog(`恢复任务视图 ${job.id} status=${job.status}`);
+        } catch (e) {
+          pushLog(`恢复任务失败 ${String(e)}`);
+        }
+      })();
+    }
+  }, [mounted, refreshEnv, refreshDatasets, pushLog]);
 
   useEffect(() => {
     if (!active || !["queued", "running"].includes(active.status)) return;
     const t = setInterval(async () => {
       const res = await fetch(`/api/runs/${active.id}`, { cache: "no-store" });
       if (!res.ok) return;
-      setActive(await res.json());
-    }, 2000);
+      const job = (await res.json()) as Job;
+      setActive(job);
+      if (!["queued", "running"].includes(job.status)) {
+        sessionStorage.setItem(ACTIVE_JOB_KEY, job.id);
+      }
+    }, 1000);
     return () => clearInterval(t);
   }, [active]);
 
@@ -342,10 +387,14 @@ export function ConsoleClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(demo ? { demo: true } : { datasetId, caseId: caseId || null, backend }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "启动失败");
+      const data = (await res.json()) as Job;
+      if (!res.ok) throw new Error((data as { error?: string }).error || "启动失败");
       setActive(data);
-      setMsg(data.note || `任务已启动：${data.id}`);
+      sessionStorage.setItem(ACTIVE_JOB_KEY, data.id);
+      setMsg(
+        data.note ||
+          `任务已启动：${data.id}。语音由本机进程播放，切换页面不会中断；请留在本页或「任务」页查看进度。`
+      );
     } catch (e) {
       setMsg(String(e));
     } finally {
@@ -359,10 +408,20 @@ export function ConsoleClient() {
     try {
       await fetch(`/api/runs/${active.id}`, { method: "DELETE" });
       const res = await fetch(`/api/runs/${active.id}`);
-      setActive(await res.json());
+      const job = (await res.json()) as Job;
+      setActive(job);
+      sessionStorage.setItem(ACTIVE_JOB_KEY, job.id);
     } finally {
       setBusy(false);
     }
+  }
+
+  function progressBadge(status: string) {
+    if (status === "passed") return <Badge variant="pass">PASS</Badge>;
+    if (status === "failed") return <Badge variant="fail">FAIL</Badge>;
+    if (status === "running") return <Badge variant="running">进行中</Badge>;
+    if (status === "error") return <Badge variant="fail">ERROR</Badge>;
+    return <Badge variant="outline">等待</Badge>;
   }
 
   const statusBadge = (s: string) => {
@@ -556,12 +615,12 @@ export function ConsoleClient() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="case">用例编号（可空=全部）</Label>
+                <Label htmlFor="case">用例编号（默认空=跑全部）</Label>
                 <Input
                   id="case"
                   value={caseId}
                   onChange={(e) => setCaseId(e.target.value)}
-                  placeholder="demo_weather_001"
+                  placeholder="留空跑全部；也可填单个编号"
                 />
               </div>
               <div className="space-y-2">
@@ -614,6 +673,52 @@ export function ConsoleClient() {
               <p className="text-sm text-muted-foreground">尚无任务。环境未就绪时可先打开演示任务浏览界面。</p>
             ) : (
               <>
+                {["running", "queued"].includes(active.status) ? (
+                  <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                    语音由本机 Python 进程播放，切换到「任务」等页面<strong>不会中断</strong>执行；回到工作台会自动恢复当前任务进度。请保持扬声器朝向设备。
+                  </p>
+                ) : null}
+                {active.progress ? (
+                  <div className="space-y-2 rounded-md border border-border/80 bg-secondary/40 px-3 py-3">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                      <span className="font-medium">
+                        进度 {active.progress.done ?? 0}/{active.progress.total}
+                        {active.progress.current_case_id
+                          ? ` · 当前 ${active.progress.current_case_id}`
+                          : ""}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {active.progress.phase_label || active.progress.phase}
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-background">
+                      <div
+                        className="h-full bg-primary transition-all duration-500"
+                        style={{
+                          width: `${
+                            active.progress.total > 0
+                              ? Math.min(
+                                  100,
+                                  Math.round(
+                                    ((active.progress.phase === "finished"
+                                      ? active.progress.total
+                                      : active.progress.done ?? 0) /
+                                      active.progress.total) *
+                                      100
+                                  )
+                                )
+                              : 0
+                          }%`,
+                        }}
+                      />
+                    </div>
+                    {active.progress.current_name ? (
+                      <p className="text-xs text-muted-foreground">{active.progress.current_name}</p>
+                    ) : null}
+                  </div>
+                ) : ["running", "queued"].includes(active.status) ? (
+                  <p className="text-sm text-muted-foreground">正在启动用例，稍后显示进度…</p>
+                ) : null}
                 <div className="grid grid-cols-3 gap-2 text-center text-sm">
                   <div className="rounded-md bg-secondary/70 px-2 py-3">
                     <div className="text-xs text-muted-foreground">通过</div>
@@ -629,25 +734,57 @@ export function ConsoleClient() {
                   </div>
                 </div>
                 {active.error ? <p className="text-sm text-rose-700">{active.error}</p> : null}
-                <ul className="space-y-2">
-                  {(active.results || []).map((r) => (
-                    <li key={r.case_id}>
-                      <Link
-                        href={`/runs/${active.id}/cases/${encodeURIComponent(r.case_id)}`}
-                        className="flex items-center justify-between rounded-md border border-border/80 bg-card/60 px-3 py-2 text-sm transition hover:border-primary/40 hover:bg-accent/40"
-                      >
-                        <span>
-                          <span className="font-medium">{r.case_id}</span>
-                          <span className="ml-2 text-muted-foreground">{r.name}</span>
-                        </span>
-                        {r.passed === true ? (
-                          <Badge variant="pass">PASS</Badge>
-                        ) : r.passed === false ? (
-                          <Badge variant="fail">FAIL</Badge>
-                        ) : (
-                          <Badge variant="secondary">—</Badge>
-                        )}
-                      </Link>
+                <ul className="max-h-72 space-y-2 overflow-y-auto">
+                  {(active.progress?.cases?.length
+                    ? active.progress.cases.map((c) => ({
+                        key: `${c.index}-${c.case_id}`,
+                        case_id: c.case_id,
+                        name: c.name,
+                        status: c.status,
+                        phase_label: c.phase_label,
+                        linkable: ["passed", "failed"].includes(c.status),
+                      }))
+                    : (active.results || []).map((r) => ({
+                        key: r.case_id,
+                        case_id: r.case_id,
+                        name: r.name,
+                        status:
+                          r.passed === true ? "passed" : r.passed === false ? "failed" : "pending",
+                        phase_label: "",
+                        linkable: r.passed === true || r.passed === false,
+                      }))
+                  ).map((row) => (
+                    <li key={row.key}>
+                      {row.linkable ? (
+                        <Link
+                          href={`/runs/${active.id}/cases/${encodeURIComponent(row.case_id)}`}
+                          className="flex items-center justify-between gap-2 rounded-md border border-border/80 bg-card/60 px-3 py-2 text-sm transition hover:border-primary/40 hover:bg-accent/40"
+                        >
+                          <span className="min-w-0">
+                            <span className="font-medium">{row.case_id}</span>
+                            <span className="ml-2 text-muted-foreground">{row.name}</span>
+                            {row.phase_label ? (
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {row.phase_label}
+                              </span>
+                            ) : null}
+                          </span>
+                          {progressBadge(row.status)}
+                        </Link>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2 rounded-md border border-border/80 bg-card/60 px-3 py-2 text-sm">
+                          <span className="min-w-0">
+                            <span className="font-medium">{row.case_id}</span>
+                            <span className="ml-2 text-muted-foreground">{row.name}</span>
+                            {row.phase_label ? (
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {row.phase_label}
+                              </span>
+                            ) : null}
+                          </span>
+                          {progressBadge(row.status)}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>

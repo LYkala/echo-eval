@@ -13,6 +13,7 @@ from echo_eval.cases.excel_cases import EvalCase, load_cases
 from echo_eval.config import AppConfig, load_config
 from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.judge.service import JudgeError, judge_images
+from echo_eval.runner.progress import finish_batch, init_progress, update_case
 from echo_eval.stimulus.audio import play_audio_file
 from echo_eval.stimulus.tts import TtsError, synthesize, wav_duration_sec
 
@@ -107,7 +108,20 @@ def run_one_case(
     *,
     judge_backend: JudgeBackend = "auto",
     extract_frames_flag: bool = True,
+    case_index: int = 1,
+    case_total: int = 1,
 ) -> RunResult:
+    def _prog(status: str, phase: str, phase_label: str) -> None:
+        update_case(
+            index=case_index,
+            case_id=case.case_id,
+            name=case.name,
+            status=status,
+            phase=phase,
+            phase_label=phase_label,
+        )
+
+    _prog("running", "prepare", f"准备中（{case_index}/{case_total}）")
     serial = cfg.adb.resolved_serial
     adb = AdbClient(serial=serial, adb_path=cfg.adb.adb_path)
     state = adb.device_state()
@@ -138,6 +152,7 @@ def run_one_case(
     )
 
     # 1) TTS all steps first (know durations)
+    _prog("running", "tts", f"合成语音（{case_index}/{case_total}）")
     tts_meta = []
     total_play = 0.0
     for i, step in enumerate(case.steps, 1):
@@ -193,12 +208,18 @@ def run_one_case(
     started = datetime.now(timezone.utc).isoformat()
     timeline["record_started_at"] = started
     t0 = time.time()
+    _prog("running", "record", f"录屏+播报（{case_index}/{case_total}）")
     proc = adb.screenrecord_start(remote_on_device, duration_sec)
     if head > 0:
         time.sleep(head)
 
     try:
-        for item in tts_meta:
+        for step_i, item in enumerate(tts_meta, 1):
+            _prog(
+                "running",
+                "play",
+                f"播放第 {step_i}/{len(tts_meta)} 句（用例 {case_index}/{case_total}）",
+            )
             play_started = datetime.now(timezone.utc).isoformat()
             play_offset = round(time.time() - t0, 3)
             play_audio_file(item["wav"], ffmpeg_path=cfg.capture.ffmpeg_path)
@@ -225,9 +246,11 @@ def run_one_case(
             pass
         raise
 
+    _prog("running", "pull", f"拉取录屏（{case_index}/{case_total}）")
     adb.pull(_device_posix(remote_on_device), local_video)
     adb.rm_remote(remote_on_device)
     # Stopped + pulled: leave result UI before local judge work.
+    _prog("running", "home", f"回桌面（{case_index}/{case_total}）")
     home_after_pull = _return_to_system_home(
         cfg, adb=adb, case_id=case.case_id, phase="after_pull", wait=False
     )
@@ -235,6 +258,7 @@ def run_one_case(
 
     frame_paths: list[str] = []
     if extract_frames_flag and cfg.capture.fps > 0:
+        _prog("running", "frames", f"抽帧（{case_index}/{case_total}）")
         frames = extract_frames(
             local_video,
             frames_dir,
@@ -251,6 +275,7 @@ def run_one_case(
     if not expects:
         raise JudgeError(f"用例 {case.case_id} 无预期结果，无法评判")
 
+    _prog("running", "judge", f"评判中（{case_index}/{case_total}）")
     evaluation = judge_images(
         exceptions=expects,
         run_dir=run_dir,
@@ -260,6 +285,7 @@ def run_one_case(
     passed = evaluation.get("passed")
     # After judge: home again + wait so the next case starts from launcher
     # (assistant UI may reappear during judge).
+    _prog("running", "home", f"回桌面等待下一条（{case_index}/{case_total}）")
     home_after_case = _return_to_system_home(
         cfg, adb=adb, case_id=case.case_id, phase="after_case", wait=True
     )
@@ -283,6 +309,12 @@ def run_one_case(
         encoding="utf-8",
     )
 
+    final_status = (
+        "passed"
+        if passed is True
+        else ("failed" if passed is False else "error")
+    )
+    _prog(final_status, "done", f"本条完成（{case_index}/{case_total}）")
     return RunResult(
         case_id=case.case_id,
         name=case.name,
@@ -375,17 +407,21 @@ def run_excel(
     if not cases:
         raise ValueError(f"未解析到任何用例: {excel_path}")
 
+    init_progress([(c.case_id, c.name) for c in cases])
     summary = BatchSummary(
         excel=str(Path(excel_path).resolve()),
         started_at=datetime.now(timezone.utc).isoformat(),
     )
-    for case in cases:
+    total = len(cases)
+    for idx, case in enumerate(cases, 1):
         try:
             result = run_one_case(
                 case,
                 cfg,
                 judge_backend=judge_backend,
                 extract_frames_flag=extract_frames_flag,
+                case_index=idx,
+                case_total=total,
             )
         except Exception as e:
             result = RunResult(
@@ -395,6 +431,14 @@ def run_excel(
                 run_dir="",
                 error=str(e),
             )
+            update_case(
+                index=idx,
+                case_id=case.case_id,
+                name=case.name,
+                status="error",
+                phase="error",
+                phase_label=f"错误（{idx}/{total}）",
+            )
             # Best-effort home if the case failed before post-case reset.
             _return_to_system_home(
                 cfg, case_id=case.case_id, phase="after_error", wait=True
@@ -403,6 +447,7 @@ def run_excel(
         if fail_fast and (result.passed is False or result.error):
             break
 
+    finish_batch()
     summary.finished_at = datetime.now(timezone.utc).isoformat()
     out_dir = cfg.capture.local_root() / f"batch_{_run_id()}"
     out_dir.mkdir(parents=True, exist_ok=True)

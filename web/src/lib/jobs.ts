@@ -16,6 +16,27 @@ export type JobCaseResult = {
   evaluation_path?: string;
 };
 
+export type JobProgressCase = {
+  index: number;
+  case_id: string;
+  name: string;
+  status: string;
+  phase?: string;
+  phase_label?: string;
+};
+
+export type JobProgress = {
+  total: number;
+  done?: number;
+  current_index: number;
+  current_case_id: string;
+  current_name: string;
+  phase: string;
+  phase_label: string;
+  updated_at?: string;
+  cases: JobProgressCase[];
+};
+
 export type JobMeta = {
   id: string;
   datasetId: string;
@@ -35,6 +56,8 @@ export type JobMeta = {
   failed?: number;
   errors?: number;
   demo?: boolean;
+  note?: string;
+  progress?: JobProgress;
 };
 
 const live = new Map<string, ChildProcess>();
@@ -53,10 +76,36 @@ function writeJob(job: JobMeta): void {
   fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify(job, null, 2));
 }
 
+function readProgress(id: string): JobProgress | undefined {
+  const p = path.join(jobDir(id), "progress.json");
+  if (!fs.existsSync(p)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf-8")) as JobProgress;
+  } catch {
+    return undefined;
+  }
+}
+
 export function readJob(id: string): JobMeta | null {
   const p = path.join(jobDir(id), "job.json");
   if (!fs.existsSync(p)) return null;
-  return JSON.parse(fs.readFileSync(p, "utf-8")) as JobMeta;
+  const job = JSON.parse(fs.readFileSync(p, "utf-8")) as JobMeta;
+  const progress = readProgress(id);
+  if (progress) {
+    job.progress = progress;
+    // While running, surface finished cases into results for the console list.
+    if ((!job.results || job.results.length === 0) && Array.isArray(progress.cases)) {
+      job.results = progress.cases
+        .filter((c) => ["passed", "failed", "error"].includes(c.status))
+        .map((c) => ({
+          case_id: c.case_id,
+          name: c.name,
+          passed: c.status === "passed" ? true : c.status === "failed" ? false : null,
+          run_dir: "",
+        }));
+    }
+  }
+  return job;
 }
 
 export function listJobs(): JobMeta[] {
@@ -216,6 +265,7 @@ export function createAndStartJob(opts: {
   job.startedAt = new Date().toISOString();
   writeJob(job);
 
+  const progressPath = path.join(dir, "progress.json");
   const logFd = fs.openSync(logPath, "a");
   const child = spawn(pythonBin(), args, {
     cwd: root,
@@ -225,6 +275,7 @@ export function createAndStartJob(opts: {
       PYTHONUNBUFFERED: "1",
       PYTHONIOENCODING: "utf-8",
       PYTHONUTF8: "1",
+      ECHO_EVAL_PROGRESS_FILE: progressPath,
     },
     stdio: ["ignore", logFd, logFd],
     windowsHide: true,
