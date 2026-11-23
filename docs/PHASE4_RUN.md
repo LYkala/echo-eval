@@ -57,9 +57,12 @@ run:
   tail_sec: 5
   return_home_after_case: true   # 每条结束后按系统 Home
   return_home_wait_sec: 2        # Home 后再等几秒开下一条
+  judge_async: true              # 抽帧+VL 后台并行，不挡下一条
+  judge_parallel: 3              # 同时评判条数
 ```
 
-多用例时：停录并 pull 完成后，默认按一次 `KEYCODE_HOME` 回到系统桌面；Home 失败只打警告，不中断下一条。
+多用例时：停录并 pull 完成后，默认按一次 `KEYCODE_HOME` 回到系统桌面；Home 失败只打警告，不中断下一条。  
+评判默认异步（对齐 TestApp Web）：设备串行开下一条，抽帧+VL 进后台队列；`judge_async: false` 可恢复同步。
 
 ## 产物
 

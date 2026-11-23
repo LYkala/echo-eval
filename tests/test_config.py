@@ -27,6 +27,8 @@ run:
   tail_sec: 6
   return_home_after_case: false
   return_home_wait_sec: 3.5
+  judge_async: false
+  judge_parallel: 2
 """,
         encoding="utf-8",
     )
@@ -41,6 +43,8 @@ run:
     assert cfg.run.tail_sec == 6
     assert cfg.run.return_home_after_case is False
     assert cfg.run.return_home_wait_sec == 3.5
+    assert cfg.run.judge_async is False
+    assert cfg.run.judge_parallel == 2
 
 
 def test_serial_override(tmp_path: Path):
@@ -61,3 +65,5 @@ capture: {}
     assert cfg.run.head_delay_sec == 1.0
     assert cfg.run.return_home_after_case is True
     assert cfg.run.return_home_wait_sec == 2.0
+    assert cfg.run.judge_async is True
+    assert cfg.run.judge_parallel == 3

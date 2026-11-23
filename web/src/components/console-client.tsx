@@ -53,16 +53,24 @@ type JobProgressCase = {
   status: string;
   phase?: string;
   phase_label?: string;
+  device_status?: string;
+  device_label?: string;
+  judge_status?: string;
+  judge_label?: string;
 };
 
 type JobProgress = {
   total: number;
   done?: number;
+  device_done?: number;
+  judge_done?: number;
   current_index: number;
   current_case_id: string;
   current_name: string;
   phase: string;
   phase_label: string;
+  device_phase_label?: string;
+  judge_phase_label?: string;
   cases: JobProgressCase[];
 };
 
@@ -726,42 +734,66 @@ export function ConsoleClient() {
                   </p>
                 ) : null}
                 {active.progress ? (
-                  <div className="space-y-2 rounded-md border border-border/80 bg-secondary/40 px-3 py-3">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-                      <span className="font-medium">
-                        进度 {active.progress.done ?? 0}/{active.progress.total}
-                        {active.progress.current_case_id
-                          ? ` · 当前 ${active.progress.current_case_id}`
-                          : ""}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {active.progress.phase_label || active.progress.phase}
-                      </span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-background">
-                      <div
-                        className="h-full bg-primary transition-all duration-500"
-                        style={{
-                          width: `${
-                            active.progress.total > 0
-                              ? Math.min(
-                                  100,
-                                  Math.round(
-                                    ((active.progress.phase === "finished"
-                                      ? active.progress.total
-                                      : active.progress.done ?? 0) /
-                                      active.progress.total) *
-                                      100
+                  <div className="space-y-3 rounded-md border border-border/80 bg-secondary/40 px-3 py-3">
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                        <span className="font-medium">
+                          设备 {active.progress.device_done ?? 0}/{active.progress.total}
+                          {active.progress.current_case_id
+                            ? ` · ${active.progress.current_case_id}`
+                            : ""}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {active.progress.device_phase_label || "设备执行"}
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-background">
+                        <div
+                          className="h-full bg-emerald-700/80 transition-all duration-500"
+                          style={{
+                            width: `${
+                              active.progress.total > 0
+                                ? Math.min(
+                                    100,
+                                    Math.round(
+                                      ((active.progress.device_done ?? 0) / active.progress.total) * 100
+                                    )
                                   )
-                                )
-                              : 0
-                          }%`,
-                        }}
-                      />
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </div>
                     </div>
-                    {active.progress.current_name ? (
-                      <p className="text-xs text-muted-foreground">{active.progress.current_name}</p>
-                    ) : null}
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                        <span className="font-medium">
+                          评判 {active.progress.judge_done ?? 0}/{active.progress.total}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {active.progress.judge_phase_label ||
+                            active.progress.phase_label ||
+                            "评判"}
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-background">
+                        <div
+                          className="h-full bg-amber-700/70 transition-all duration-500"
+                          style={{
+                            width: `${
+                              active.progress.total > 0
+                                ? Math.min(
+                                    100,
+                                    Math.round(
+                                      ((active.progress.judge_done ?? 0) / active.progress.total) * 100
+                                    )
+                                  )
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 ) : ["running", "queued"].includes(active.status) ? (
                   <p className="text-sm text-muted-foreground">正在启动用例，稍后显示进度…</p>
@@ -788,7 +820,8 @@ export function ConsoleClient() {
                         case_id: c.case_id,
                         name: c.name,
                         status: c.status,
-                        phase_label: c.phase_label,
+                        device_label: c.device_label || c.device_status || "",
+                        judge_label: c.judge_label || c.judge_status || "",
                         linkable: ["passed", "failed"].includes(c.status),
                       }))
                     : (active.results || []).map((r) => ({
@@ -797,43 +830,42 @@ export function ConsoleClient() {
                         name: r.name,
                         status:
                           r.passed === true ? "passed" : r.passed === false ? "failed" : "pending",
-                        phase_label: "",
+                        device_label: "",
+                        judge_label: "",
                         linkable: r.passed === true || r.passed === false,
                       }))
-                  ).map((row) => (
-                    <li key={row.key}>
-                      {row.linkable ? (
-                        <Link
-                          href={`/runs/${active.id}/cases/${encodeURIComponent(row.case_id)}`}
-                          className="flex items-center justify-between gap-2 rounded-md border border-border/80 bg-card/60 px-3 py-2 text-sm transition hover:border-primary/40 hover:bg-accent/40"
-                        >
-                          <span className="min-w-0">
-                            <span className="font-medium">{row.case_id}</span>
-                            <span className="ml-2 text-muted-foreground">{row.name}</span>
-                            {row.phase_label ? (
-                              <span className="mt-0.5 block text-xs text-muted-foreground">
-                                {row.phase_label}
-                              </span>
-                            ) : null}
+                  ).map((row) => {
+                    const body = (
+                      <>
+                        <span className="min-w-0">
+                          <span className="font-medium">{row.case_id}</span>
+                          <span className="ml-2 text-muted-foreground">{row.name}</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            设备：{row.device_label || "—"}
+                            <span className="mx-1.5 opacity-40">|</span>
+                            评判：{row.judge_label || "—"}
                           </span>
-                          {progressBadge(row.status)}
-                        </Link>
-                      ) : (
-                        <div className="flex items-center justify-between gap-2 rounded-md border border-border/80 bg-card/60 px-3 py-2 text-sm">
-                          <span className="min-w-0">
-                            <span className="font-medium">{row.case_id}</span>
-                            <span className="ml-2 text-muted-foreground">{row.name}</span>
-                            {row.phase_label ? (
-                              <span className="mt-0.5 block text-xs text-muted-foreground">
-                                {row.phase_label}
-                              </span>
-                            ) : null}
-                          </span>
-                          {progressBadge(row.status)}
-                        </div>
-                      )}
-                    </li>
-                  ))}
+                        </span>
+                        {progressBadge(row.status)}
+                      </>
+                    );
+                    return (
+                      <li key={row.key}>
+                        {row.linkable ? (
+                          <Link
+                            href={`/runs/${active.id}/cases/${encodeURIComponent(row.case_id)}`}
+                            className="flex items-center justify-between gap-2 rounded-md border border-border/80 bg-card/60 px-3 py-2 text-sm transition hover:border-primary/40 hover:bg-accent/40"
+                          >
+                            {body}
+                          </Link>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2 rounded-md border border-border/80 bg-card/60 px-3 py-2 text-sm">
+                            {body}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <Link href={`/runs/${active.id}`} className="text-sm font-medium text-primary hover:underline">
                   查看任务详情 →

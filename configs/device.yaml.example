@@ -35,3 +35,6 @@ run:
   # 每条结束后按系统 Home，再等待后再开下一条（失败仅告警）
   return_home_after_case: true
   return_home_wait_sec: 2
+  # 设备串行；抽帧+评判后台并行（false=恢复同步）
+  judge_async: true
+  judge_parallel: 3
