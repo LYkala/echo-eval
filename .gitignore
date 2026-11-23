@@ -1,4 +1,4 @@
-artifacts/
+/artifacts/
 __pycache__/
 *.pyc
 .venv/
@@ -8,6 +8,9 @@ venv/
 dist/
 build/
 .pytest_cache/
+web/node_modules/
+web/.next/
+web/out/
 
 # Secrets — keep example only
 vendor/testApp/configs/model.yaml

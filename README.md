@@ -10,6 +10,7 @@
 | Phase 2 | 录屏同时本机播放 wav（设备麦克拾音） | `spike` / `record --audio ...` |
 | Phase 3 | 多帧截图 + 预期结果 → VL/Mock 评判 | `judge` |
 | Phase 4 | Excel/CSV → TTS → 录屏 → 评判 → 报告 | `run --excel` |
+| Phase 5 | PC1 Web 控制台（上传/检查/开测/回看） | `cd web && npm run dev` |
 
 这些命令是测评的**采集层**；完整 `run` 会复用同一套 `device/`、`capture/`、`stimulus/` 代码。
 
@@ -77,5 +78,6 @@ python -m echo_eval run --excel cases/examples/sample_weather.csv \
 - [`docs/SETUP_WINDOWS.md`](docs/SETUP_WINDOWS.md) — Windows 安装 ADB / FFmpeg  
 - [`docs/JUDGE.md`](docs/JUDGE.md) — Phase 3 评判  
 - [`docs/PHASE4_RUN.md`](docs/PHASE4_RUN.md) — Phase 4 Excel 编排  
+- [`docs/WEB_CONSOLE.md`](docs/WEB_CONSOLE.md) — PC1 Web 控制台  
 - [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md) — 开发计划  
 - [`docs/TESTAPP_JUDGE_MAPPING.md`](docs/TESTAPP_JUDGE_MAPPING.md) — TestAppGUI 评判对照  
