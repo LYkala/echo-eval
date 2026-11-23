@@ -17,7 +17,35 @@ type EnvResult = {
   checkedAt: string;
   error?: string;
 };
-type Dataset = { id: string; name: string; size: number; builtin?: boolean };
+type Dataset = {
+  id: string;
+  name: string;
+  size: number;
+  uploadedAt?: string;
+  builtin?: boolean;
+};
+
+/** Display upload time in Asia/Shanghai for distinguishing same-named datasets. */
+function formatUploadAt(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(d);
+}
+
+function formatSize(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 type Job = {
   id: string;
   datasetName: string;
@@ -272,6 +300,39 @@ export function ConsoleClient() {
     }
   }
 
+  function downloadDataset(d: Dataset) {
+    pushLog(`下载数据集 ${d.id}`);
+    window.open(`/api/datasets/${encodeURIComponent(d.id)}`, "_blank");
+  }
+
+  async function deleteDataset(d: Dataset) {
+    if (d.builtin) {
+      setMsg("内置样例不可删除");
+      return;
+    }
+    if (!window.confirm(`确认删除数据集「${d.name}」？\n上传于 ${formatUploadAt(d.uploadedAt)}`)) {
+      return;
+    }
+    setBusy(true);
+    setMsg("");
+    try {
+      pushLog(`DELETE /api/datasets/${d.id}`);
+      const res = await fetch(`/api/datasets/${encodeURIComponent(d.id)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "删除失败");
+      setMsg(`已删除：${d.name}`);
+      await refreshDatasets();
+      if (datasetId === d.id) {
+        setDatasetId("__builtin_sample__");
+      }
+    } catch (e) {
+      setMsg(String(e));
+      pushLog(`delete FAIL ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function startRun(demo = false) {
     setBusy(true);
     setMsg("");
@@ -434,19 +495,64 @@ export function ConsoleClient() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="dataset">选用数据集</Label>
-              <select
-                id="dataset"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={datasetId}
-                onChange={(e) => setDatasetId(e.target.value)}
-              >
-                {datasets.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
+              <Label>选用数据集</Label>
+              <ul className="max-h-64 divide-y overflow-y-auto rounded-md border border-input bg-background">
+                {datasets.length === 0 ? (
+                  <li className="px-3 py-4 text-sm text-muted-foreground">暂无数据集，请先上传</li>
+                ) : (
+                  datasets.map((d) => {
+                    const selected = datasetId === d.id;
+                    return (
+                      <li
+                        key={d.id}
+                        className={`flex flex-wrap items-center gap-2 px-3 py-2.5 sm:flex-nowrap ${
+                          selected ? "bg-secondary/80" : "hover:bg-secondary/40"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          disabled={busy}
+                          onClick={() => setDatasetId(d.id)}
+                        >
+                          <div className="truncate text-sm font-medium">
+                            {selected ? "● " : "○ "}
+                            {d.name}
+                            {d.builtin ? (
+                              <span className="ml-1 text-xs font-normal text-muted-foreground">内置</span>
+                            ) : null}
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            上传 {formatUploadAt(d.uploadedAt)}
+                            {d.size ? ` · ${formatSize(d.size)}` : ""}
+                          </div>
+                        </button>
+                        <div className="flex shrink-0 gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => downloadDataset(d)}
+                          >
+                            下载
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            disabled={busy || !!d.builtin}
+                            title={d.builtin ? "内置样例不可删除" : "删除"}
+                            onClick={() => void deleteDataset(d)}
+                          >
+                            删除
+                          </Button>
+                        </div>
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">

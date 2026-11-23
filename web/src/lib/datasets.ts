@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { datasetsRoot, ensureDir, safeId } from "./paths";
+import { datasetsRoot, ensureDir, repoRoot, safeId } from "./paths";
+
+export const BUILTIN_DATASET_ID = "__builtin_sample__";
 
 export type DatasetMeta = {
   id: string;
@@ -9,7 +11,27 @@ export type DatasetMeta = {
   storedPath: string;
   uploadedAt: string;
   size: number;
+  builtin?: boolean;
 };
+
+function builtinSamplePath(): string {
+  return path.join(repoRoot(), "cases", "examples", "sample_weather.csv");
+}
+
+export function getBuiltinDataset(): DatasetMeta | null {
+  const sample = builtinSamplePath();
+  if (!fs.existsSync(sample)) return null;
+  const st = fs.statSync(sample);
+  return {
+    id: BUILTIN_DATASET_ID,
+    name: "sample_weather.csv（内置样例）",
+    filename: "sample_weather.csv",
+    storedPath: sample,
+    uploadedAt: st.mtime.toISOString(),
+    size: st.size,
+    builtin: true,
+  };
+}
 
 export function listDatasets(): DatasetMeta[] {
   const root = datasetsRoot();
@@ -19,7 +41,13 @@ export function listDatasets(): DatasetMeta[] {
     const metaPath = path.join(root, id, "meta.json");
     if (!fs.existsSync(metaPath)) continue;
     try {
-      out.push(JSON.parse(fs.readFileSync(metaPath, "utf-8")) as DatasetMeta);
+      const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8")) as DatasetMeta;
+      // Prefer on-disk path under datasets root (meta.storedPath may be machine-specific).
+      const localPath = path.join(root, id, meta.filename || "dataset.csv");
+      if (fs.existsSync(localPath)) {
+        meta.storedPath = localPath;
+      }
+      out.push(meta);
     } catch {
       /* skip */
     }
@@ -28,9 +56,48 @@ export function listDatasets(): DatasetMeta[] {
 }
 
 export function getDataset(id: string): DatasetMeta | null {
-  const metaPath = path.join(datasetsRoot(), safeId(id), "meta.json");
+  if (id === BUILTIN_DATASET_ID) return getBuiltinDataset();
+  const sid = safeId(id);
+  const metaPath = path.join(datasetsRoot(), sid, "meta.json");
   if (!fs.existsSync(metaPath)) return null;
-  return JSON.parse(fs.readFileSync(metaPath, "utf-8")) as DatasetMeta;
+  const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8")) as DatasetMeta;
+  const localPath = path.join(datasetsRoot(), sid, meta.filename || "dataset.csv");
+  if (fs.existsSync(localPath)) {
+    meta.storedPath = localPath;
+  }
+  return meta;
+}
+
+export function deleteDataset(id: string): void {
+  if (id === BUILTIN_DATASET_ID) {
+    throw new Error("内置样例不可删除");
+  }
+  const sid = safeId(id);
+  const dir = path.join(datasetsRoot(), sid);
+  if (!fs.existsSync(dir)) {
+    throw new Error("数据集不存在");
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+export function resolveDownload(id: string): { meta: DatasetMeta; absolutePath: string } {
+  const meta = getDataset(id);
+  if (!meta) throw new Error("数据集不存在");
+  const absolutePath = path.resolve(meta.storedPath);
+  if (!fs.existsSync(absolutePath)) {
+    throw new Error("数据集文件缺失");
+  }
+  // Guard: only serve files under datasets root or the builtin sample path.
+  const root = path.resolve(datasetsRoot());
+  const builtin = path.resolve(builtinSamplePath());
+  const allowed =
+    absolutePath === builtin ||
+    absolutePath === path.resolve(root) ||
+    absolutePath.startsWith(root + path.sep);
+  if (!allowed) {
+    throw new Error("非法路径");
+  }
+  return { meta, absolutePath };
 }
 
 export async function saveUpload(file: File): Promise<DatasetMeta> {
