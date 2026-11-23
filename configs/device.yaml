@@ -52,3 +52,6 @@ run:
   # 每条用例结束后按一次系统 Home，再等一会再开下一条
   return_home_after_case: true
   return_home_wait_sec: 2
+  # 设备串行执行；抽帧+VL 后台并行（不挡下一条）
+  judge_async: true
+  judge_parallel: 3

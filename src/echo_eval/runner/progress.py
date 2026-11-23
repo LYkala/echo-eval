@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_lock = threading.Lock()
 
 
 def _path() -> Path | None:
@@ -35,6 +38,27 @@ def _write(path: Path, data: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _recompute(data: dict[str, Any]) -> None:
+    cases = list(data.get("cases") or [])
+    data["total"] = int(data.get("total") or len(cases))
+    data["device_done"] = sum(
+        1 for c in cases if c.get("device_status") in ("done", "error")
+    )
+    data["judge_done"] = sum(
+        1
+        for c in cases
+        if c.get("judge_status") in ("passed", "failed", "error", "skipped")
+    )
+    # Overall "done" = fully finished (device + judge terminal).
+    data["done"] = sum(
+        1
+        for c in cases
+        if c.get("status") in ("passed", "failed", "error")
+        and c.get("device_status") in ("done", "error")
+        and c.get("judge_status") in ("passed", "failed", "error", "skipped")
+    )
+
+
 def init_progress(cases: list[tuple[str, str]]) -> None:
     """cases: list of (case_id, name)."""
     path = _path()
@@ -42,11 +66,16 @@ def init_progress(cases: list[tuple[str, str]]) -> None:
         return
     data = {
         "total": len(cases),
+        "device_done": 0,
+        "judge_done": 0,
+        "done": 0,
         "current_index": 0,
         "current_case_id": "",
         "current_name": "",
         "phase": "queued",
         "phase_label": "排队中",
+        "device_phase_label": "设备：等待开始",
+        "judge_phase_label": "评判：等待",
         "updated_at": _now(),
         "cases": [
             {
@@ -55,12 +84,17 @@ def init_progress(cases: list[tuple[str, str]]) -> None:
                 "name": name,
                 "status": "pending",
                 "phase": "pending",
-                "phase_label": "等待",
+                "phase_label": "等待设备执行",
+                "device_status": "pending",
+                "device_label": "等待",
+                "judge_status": "pending",
+                "judge_label": "等待",
             }
             for i, (cid, name) in enumerate(cases)
         ],
     }
-    _write(path, data)
+    with _lock:
+        _write(path, data)
     print(
         f"[echo-eval] progress file={path} total={len(cases)}",
         flush=True,
@@ -72,59 +106,123 @@ def update_case(
     index: int,
     case_id: str,
     name: str,
-    status: str,
-    phase: str,
-    phase_label: str,
+    status: str | None = None,
+    phase: str | None = None,
+    phase_label: str | None = None,
+    device_status: str | None = None,
+    device_label: str | None = None,
+    judge_status: str | None = None,
+    judge_label: str | None = None,
+    touch_device_current: bool = False,
+    touch_judge_current: bool = False,
 ) -> None:
     path = _path()
     if not path:
         return
-    data = _read(path)
-    cases = list(data.get("cases") or [])
-    for row in cases:
-        if int(row.get("index") or 0) == index or row.get("case_id") == case_id:
-            row["status"] = status
-            row["phase"] = phase
-            row["phase_label"] = phase_label
-            row["name"] = name or row.get("name") or ""
-            break
-    else:
-        cases.append(
-            {
+    with _lock:
+        data = _read(path)
+        cases = list(data.get("cases") or [])
+        row: dict[str, Any] | None = None
+        for c in cases:
+            if int(c.get("index") or 0) == index or c.get("case_id") == case_id:
+                row = c
+                break
+        if row is None:
+            row = {
                 "index": index,
                 "case_id": case_id,
                 "name": name,
-                "status": status,
-                "phase": phase,
-                "phase_label": phase_label,
+                "status": "pending",
+                "phase": "pending",
+                "phase_label": "",
+                "device_status": "pending",
+                "device_label": "等待",
+                "judge_status": "pending",
+                "judge_label": "等待",
             }
+            cases.append(row)
+
+        row["name"] = name or row.get("name") or ""
+        if device_status is not None:
+            row["device_status"] = device_status
+        if device_label is not None:
+            row["device_label"] = device_label
+        if judge_status is not None:
+            row["judge_status"] = judge_status
+        if judge_label is not None:
+            row["judge_label"] = judge_label
+        if status is not None:
+            row["status"] = status
+        if phase is not None:
+            row["phase"] = phase
+        if phase_label is not None:
+            row["phase_label"] = phase_label
+        else:
+            # Build a combined label when not explicitly provided.
+            dlab = row.get("device_label") or row.get("device_status") or ""
+            jlab = row.get("judge_label") or row.get("judge_status") or ""
+            row["phase_label"] = f"设备:{dlab} · 评判:{jlab}"
+
+        data["cases"] = cases
+        _recompute(data)
+        if touch_device_current:
+            data["current_index"] = index
+            data["current_case_id"] = case_id
+            data["current_name"] = name
+            data["device_phase_label"] = (
+                f"设备：{row.get('device_label') or ''}（{index}/{data['total']}）"
+            )
+            data["phase"] = "device_running"
+            data["phase_label"] = data["device_phase_label"]
+        if touch_judge_current:
+            data["judge_phase_label"] = (
+                f"评判：{row.get('judge_label') or ''}（{case_id}）"
+            )
+            # Prefer showing judge activity when device batch may already be done.
+            if data.get("device_done", 0) >= data.get("total", 0):
+                data["phase"] = "judging"
+                data["phase_label"] = data["judge_phase_label"]
+        data["updated_at"] = _now()
+        _write(path, data)
+        print(
+            f"[echo-eval] progress {index}/{data['total']} {case_id} "
+            f"device={row.get('device_status')} judge={row.get('judge_status')} "
+            f"{row.get('phase_label')}",
+            flush=True,
         )
-    data["cases"] = cases
-    data["total"] = int(data.get("total") or len(cases))
-    data["current_index"] = index
-    data["current_case_id"] = case_id
-    data["current_name"] = name
-    data["phase"] = phase
-    data["phase_label"] = phase_label
-    data["updated_at"] = _now()
-    done = sum(1 for c in cases if c.get("status") in ("passed", "failed", "error"))
-    data["done"] = done
-    _write(path, data)
-    print(
-        f"[echo-eval] progress {index}/{data['total']} {case_id} {status} {phase_label}",
-        flush=True,
-    )
+
+
+def set_batch_phase(*, phase: str, phase_label: str) -> None:
+    path = _path()
+    if not path:
+        return
+    with _lock:
+        data = _read(path)
+        data["phase"] = phase
+        data["phase_label"] = phase_label
+        if phase == "judging":
+            data["judge_phase_label"] = phase_label
+        if phase == "device_running":
+            data["device_phase_label"] = phase_label
+        data["updated_at"] = _now()
+        _write(path, data)
 
 
 def finish_batch() -> None:
     path = _path()
     if not path:
         return
-    data = _read(path)
-    total = int(data.get("total") or 0)
-    data["phase"] = "finished"
-    data["phase_label"] = "全部完成"
-    data["current_index"] = total
-    data["done"] = total
-    data["updated_at"] = _now()
-    _write(path, data)
+    with _lock:
+        data = _read(path)
+        total = int(data.get("total") or 0)
+        data["phase"] = "finished"
+        data["phase_label"] = "全部完成"
+        data["device_phase_label"] = f"设备：已完成 {total}/{total}"
+        data["judge_phase_label"] = f"评判：已完成 {total}/{total}"
+        data["current_index"] = total
+        _recompute(data)
+        data["done"] = total
+        data["device_done"] = total
+        data["judge_done"] = total
+        data["updated_at"] = _now()
+        _write(path, data)

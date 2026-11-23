@@ -206,6 +206,9 @@ class RunConfig:
     # After each case (post pull): press system Home once, then wait.
     return_home_after_case: bool = True
     return_home_wait_sec: float = 2.0
+    # Device runs serially; frame extract + VL judge run in a background pool.
+    judge_async: bool = True
+    judge_parallel: int = 3
 
 
 @dataclass
@@ -272,6 +275,10 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         return_home = bool(run_raw.get("return_home_after_case"))
     else:
         return_home = True
+    if "judge_async" in run_raw:
+        judge_async = bool(run_raw.get("judge_async"))
+    else:
+        judge_async = True
     run = RunConfig(
         step_wait_sec=float(
             run_raw.get("step_wait_sec") if run_raw.get("step_wait_sec") is not None else 3.0
@@ -285,6 +292,15 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             run_raw.get("return_home_wait_sec")
             if run_raw.get("return_home_wait_sec") is not None
             else 2.0
+        ),
+        judge_async=judge_async,
+        judge_parallel=max(
+            1,
+            int(
+                run_raw.get("judge_parallel")
+                if run_raw.get("judge_parallel") is not None
+                else 3
+            ),
         ),
     )
     return AppConfig(

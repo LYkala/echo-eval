@@ -23,16 +23,24 @@ export type JobProgressCase = {
   status: string;
   phase?: string;
   phase_label?: string;
+  device_status?: string;
+  device_label?: string;
+  judge_status?: string;
+  judge_label?: string;
 };
 
 export type JobProgress = {
   total: number;
   done?: number;
+  device_done?: number;
+  judge_done?: number;
   current_index: number;
   current_case_id: string;
   current_name: string;
   phase: string;
   phase_label: string;
+  device_phase_label?: string;
+  judge_phase_label?: string;
   updated_at?: string;
   cases: JobProgressCase[];
 };
@@ -93,16 +101,21 @@ export function readJob(id: string): JobMeta | null {
   const progress = readProgress(id);
   if (progress) {
     job.progress = progress;
-    // While running, surface finished cases into results for the console list.
+    // While running, surface judged cases into results for the console list.
     if ((!job.results || job.results.length === 0) && Array.isArray(progress.cases)) {
       job.results = progress.cases
-        .filter((c) => ["passed", "failed", "error"].includes(c.status))
-        .map((c) => ({
-          case_id: c.case_id,
-          name: c.name,
-          passed: c.status === "passed" ? true : c.status === "failed" ? false : null,
-          run_dir: "",
-        }));
+        .filter((c) =>
+          ["passed", "failed", "error"].includes(c.judge_status || c.status)
+        )
+        .map((c) => {
+          const st = c.judge_status || c.status;
+          return {
+            case_id: c.case_id,
+            name: c.name,
+            passed: st === "passed" ? true : st === "failed" ? false : null,
+            run_dir: "",
+          };
+        });
     }
   }
   return job;
