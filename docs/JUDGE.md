@@ -14,12 +14,13 @@
 
 ## 配置
 
+默认读取仓库内 **`configs/model.yaml`**（结构与 TestApp `configs/model.yaml` 相同）。  
+把 TestApp 里已跑通的 `api_key` / `base_url` / `model_id` 填进去即可。
+
 ```bash
-# 推荐：直接指向本机已跑通的 TestApp 配置（勿提交密钥）
+# 可选：覆盖路径
 export VL_EVAL_CONFIG="D:/code/voiceass/TestAppGUI-master/testApp/configs/model.yaml"
 ```
-
-或复制 `configs/model.yaml.example` → `configs/model.yaml` 后填写（已 gitignore）。
 
 ## 用法
 

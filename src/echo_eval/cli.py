@@ -106,7 +106,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print("judge backend auto: vl")
     else:
         print("vl_eval config: (missing — judge --backend auto 将使用 mock)")
-        print("  提示: export VL_EVAL_CONFIG=你的TestApp/configs/model.yaml")
+        print("  提示: 编辑 configs/model.yaml 填写 api_key（结构同 TestApp）")
 
     if problems:
         print("doctor: FAIL")

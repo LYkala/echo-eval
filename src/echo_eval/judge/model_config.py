@@ -15,12 +15,13 @@ class ModelConfigError(RuntimeError):
 
 
 def model_config_candidates() -> list[Path]:
+    """Resolve order: explicit VL_EVAL_CONFIG → configs/model.yaml → vendor TestApp."""
     out: list[Path] = []
     env = (os.environ.get("VL_EVAL_CONFIG") or "").strip()
     if env:
         out.append(Path(env))
+    # Default for echo-eval: in-repo configs/model.yaml (TestApp-compatible).
     out.append(DEFAULT_MODEL_PATH)
-    # Optional: sibling TestApp layout if vendored configs appear later
     out.append(REPO_ROOT / "vendor" / "testApp" / "configs" / "model.yaml")
     # dedupe
     seen: set[str] = set()
@@ -48,8 +49,8 @@ def load_vl_eval_config(path: Path | str | None = None) -> dict[str, Any]:
         if not found:
             looked = ", ".join(str(p) for p in model_config_candidates())
             raise ModelConfigError(
-                "未找到 VL 模型配置。请设置 VL_EVAL_CONFIG 指向 TestApp 的 model.yaml，"
-                f"或复制 configs/model.yaml.example 为 configs/model.yaml。已查找: {looked}"
+                "未找到 VL 模型配置。请编辑 configs/model.yaml（与 TestApp 同结构）填写 api_key，"
+                f"或设置 VL_EVAL_CONFIG 覆盖路径。已查找: {looked}"
             )
         cfg_path = found
 

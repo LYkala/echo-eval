@@ -51,8 +51,8 @@ python -m echo_eval connect
 python -m echo_eval record
 python -m echo_eval spike --audio assets/audio/beep_1s.wav --seconds 15
 
-# Phase 3：多帧评判（指向本机已跑通的 TestApp model.yaml）
-export VL_EVAL_CONFIG="D:/code/voiceass/TestAppGUI-master/testApp/configs/model.yaml"
+# Phase 3：多帧评判（默认 configs/model.yaml，结构同 TestApp）
+# 先把 TestApp 里的 api_key/base_url/model_id 填进 configs/model.yaml
 python -m echo_eval judge --run-dir artifacts/capture_xxx \
   --expect "界面出现天气相关结果" --backend vl
 
