@@ -25,6 +25,8 @@ tts:
 run:
   step_wait_sec: 4
   tail_sec: 6
+  return_home_after_case: false
+  return_home_wait_sec: 3.5
 """,
         encoding="utf-8",
     )
@@ -37,6 +39,8 @@ run:
     assert cfg.tts.backend == "sapi"
     assert cfg.run.step_wait_sec == 4
     assert cfg.run.tail_sec == 6
+    assert cfg.run.return_home_after_case is False
+    assert cfg.run.return_home_wait_sec == 3.5
 
 
 def test_serial_override(tmp_path: Path):
@@ -55,3 +59,5 @@ capture: {}
     assert cfg.adb.resolved_serial == "192.168.43.244:37123"
     assert cfg.tts.backend == "sapi"
     assert cfg.run.head_delay_sec == 1.0
+    assert cfg.run.return_home_after_case is True
+    assert cfg.run.return_home_wait_sec == 2.0

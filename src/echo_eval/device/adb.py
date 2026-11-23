@@ -200,3 +200,7 @@ class AdbClient:
     def has_screenrecord(self) -> bool:
         proc = self.shell("command -v screenrecord || which screenrecord", check=False)
         return bool((proc.stdout or "").strip())
+
+    def press_home(self, *, timeout: float = 10) -> None:
+        """Press KEYCODE_HOME to return to the system launcher."""
+        self.shell("input keyevent KEYCODE_HOME", check=True, timeout=timeout)

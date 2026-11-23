@@ -227,6 +227,8 @@ def run_one_case(
 
     adb.pull(_device_posix(remote_on_device), local_video)
     adb.rm_remote(remote_on_device)
+    # Stopped + pulled: return to system launcher before judge / next case.
+    _return_to_system_home(cfg)
 
     frame_paths: list[str] = []
     if extract_frames_flag and cfg.capture.fps > 0:
@@ -283,6 +285,24 @@ def math_ceil(x: float) -> int:
     return int(math.ceil(x))
 
 
+def _return_to_system_home(cfg: AppConfig) -> None:
+    """Press KEYCODE_HOME once, then wait. Failures only warn."""
+    if not cfg.run.return_home_after_case:
+        return
+    wait_sec = max(0.0, float(cfg.run.return_home_wait_sec))
+    try:
+        adb = AdbClient(serial=cfg.adb.resolved_serial, adb_path=cfg.adb.adb_path)
+        adb.press_home()
+        print(
+            f"[echo-eval] return home OK; wait {wait_sec:g}s before next case",
+            flush=True,
+        )
+    except Exception as e:
+        print(f"[echo-eval][warn] return home failed: {e}", flush=True)
+    if wait_sec > 0:
+        time.sleep(wait_sec)
+
+
 def run_excel(
     excel_path: Path | str,
     *,
@@ -321,6 +341,8 @@ def run_excel(
                 run_dir="",
                 error=str(e),
             )
+            # Best-effort home if the case failed before post-pull reset.
+            _return_to_system_home(cfg)
         summary.results.append(result)
         if fail_fast and (result.passed is False or result.error):
             break
