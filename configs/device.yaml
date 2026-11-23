@@ -49,3 +49,6 @@ run:
   head_delay_sec: 1
   # 说完后再多录几秒，便于界面出结果
   tail_sec: 5
+  # 每条用例结束后按一次系统 Home，再等一会再开下一条
+  return_home_after_case: true
+  return_home_wait_sec: 2

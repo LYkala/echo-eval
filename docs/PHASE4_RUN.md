@@ -54,7 +54,11 @@ run:
   step_wait_sec: 3
   head_delay_sec: 1
   tail_sec: 5
+  return_home_after_case: true   # 每条结束后按系统 Home
+  return_home_wait_sec: 2        # Home 后再等几秒开下一条
 ```
+
+多用例时：停录并 pull 完成后，默认按一次 `KEYCODE_HOME` 回到系统桌面；Home 失败只打警告，不中断下一条。
 
 ## 产物
 

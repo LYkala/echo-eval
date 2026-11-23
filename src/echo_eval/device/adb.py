@@ -200,3 +200,12 @@ class AdbClient:
     def has_screenrecord(self) -> bool:
         proc = self.shell("command -v screenrecord || which screenrecord", check=False)
         return bool((proc.stdout or "").strip())
+
+    def press_home(self, *, timeout: float = 10) -> None:
+        """Press Home (keycode 3) to return to the system launcher."""
+        # Prefer numeric 3: some OEM builds are flaky with KEYCODE_HOME token
+        # when the remote command is passed as a single adb shell argument.
+        try:
+            self.shell("input keyevent 3", check=True, timeout=timeout)
+        except AdbError:
+            self.shell("input keyevent KEYCODE_HOME", check=True, timeout=timeout)

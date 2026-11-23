@@ -32,3 +32,6 @@ run:
   step_wait_sec: 3
   head_delay_sec: 1
   tail_sec: 5
+  # 每条结束后按系统 Home，再等待后再开下一条（失败仅告警）
+  return_home_after_case: true
+  return_home_wait_sec: 2

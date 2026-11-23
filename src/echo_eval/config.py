@@ -203,6 +203,9 @@ class RunConfig:
     step_wait_sec: float
     head_delay_sec: float
     tail_sec: float
+    # After each case (post pull): press system Home once, then wait.
+    return_home_after_case: bool = True
+    return_home_wait_sec: float = 2.0
 
 
 @dataclass
@@ -265,6 +268,10 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         rate=int(tts_raw.get("rate") or 0),
         lookup_dir=str(tts_raw.get("lookup_dir") or "").strip(),
     )
+    if "return_home_after_case" in run_raw:
+        return_home = bool(run_raw.get("return_home_after_case"))
+    else:
+        return_home = True
     run = RunConfig(
         step_wait_sec=float(
             run_raw.get("step_wait_sec") if run_raw.get("step_wait_sec") is not None else 3.0
@@ -273,6 +280,12 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             run_raw.get("head_delay_sec") if run_raw.get("head_delay_sec") is not None else 1.0
         ),
         tail_sec=float(run_raw.get("tail_sec") if run_raw.get("tail_sec") is not None else 5.0),
+        return_home_after_case=return_home,
+        return_home_wait_sec=float(
+            run_raw.get("return_home_wait_sec")
+            if run_raw.get("return_home_wait_sec") is not None
+            else 2.0
+        ),
     )
     return AppConfig(
         adb=adb,

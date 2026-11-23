@@ -227,6 +227,11 @@ def run_one_case(
 
     adb.pull(_device_posix(remote_on_device), local_video)
     adb.rm_remote(remote_on_device)
+    # Stopped + pulled: leave result UI before local judge work.
+    home_after_pull = _return_to_system_home(
+        cfg, adb=adb, case_id=case.case_id, phase="after_pull", wait=False
+    )
+    timeline["return_home_after_pull"] = home_after_pull
 
     frame_paths: list[str] = []
     if extract_frames_flag and cfg.capture.fps > 0:
@@ -253,6 +258,11 @@ def run_one_case(
         write=True,
     )
     passed = evaluation.get("passed")
+    # After judge: home again + wait so the next case starts from launcher
+    # (assistant UI may reappear during judge).
+    home_after_case = _return_to_system_home(
+        cfg, adb=adb, case_id=case.case_id, phase="after_case", wait=True
+    )
     report_path = run_dir / "report.md"
     payload = {
         "passed": passed,
@@ -261,10 +271,16 @@ def run_one_case(
         "evaluation": evaluation,
         "tts": tts_meta,
         "frame_count": len(frame_paths),
+        "return_home_after_pull": home_after_pull,
+        "return_home_after_case": home_after_case,
     }
     _write_report(report_path, case, payload)
     (run_dir / "run_meta.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (run_dir / "timeline.json").write_text(
+        json.dumps({**timeline, "return_home_after_case": home_after_case}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
     )
 
     return RunResult(
@@ -283,6 +299,58 @@ def math_ceil(x: float) -> int:
     return int(math.ceil(x))
 
 
+def _return_to_system_home(
+    cfg: AppConfig,
+    *,
+    adb: AdbClient | None = None,
+    case_id: str = "",
+    phase: str = "home",
+    wait: bool = True,
+) -> dict[str, Any]:
+    """Press Home once. Failures only warn. Returns a small status dict for logs."""
+    info: dict[str, Any] = {
+        "enabled": bool(cfg.run.return_home_after_case),
+        "phase": phase,
+        "case_id": case_id,
+        "ok": False,
+        "error": "",
+        "wait_sec": 0.0,
+    }
+    if not cfg.run.return_home_after_case:
+        print(
+            f"[echo-eval] return home skipped (disabled) case={case_id or '-'} phase={phase}",
+            flush=True,
+        )
+        return info
+    wait_sec = max(0.0, float(cfg.run.return_home_wait_sec)) if wait else 0.0
+    info["wait_sec"] = wait_sec
+    serial = cfg.adb.resolved_serial
+    try:
+        client = adb or AdbClient(serial=serial, adb_path=cfg.adb.adb_path)
+        print(
+            f"[echo-eval] return home… case={case_id or '-'} phase={phase} "
+            f"serial={serial} adb={client.adb_bin}",
+            flush=True,
+        )
+        client.press_home()
+        info["ok"] = True
+        print(
+            f"[echo-eval] return home OK case={case_id or '-'} phase={phase}; "
+            f"wait {wait_sec:g}s",
+            flush=True,
+        )
+    except Exception as e:
+        info["error"] = str(e)
+        print(
+            f"[echo-eval][warn] return home failed case={case_id or '-'} "
+            f"phase={phase}: {e}",
+            flush=True,
+        )
+    if wait_sec > 0:
+        time.sleep(wait_sec)
+    return info
+
+
 def run_excel(
     excel_path: Path | str,
     *,
@@ -293,6 +361,12 @@ def run_excel(
     extract_frames_flag: bool = True,
 ) -> BatchSummary:
     cfg = load_config(config_path) if config_path else load_config()
+    print(
+        f"[echo-eval] run_excel return_home_after_case={cfg.run.return_home_after_case} "
+        f"return_home_wait_sec={cfg.run.return_home_wait_sec} "
+        f"serial={cfg.adb.resolved_serial}",
+        flush=True,
+    )
     cases = load_cases(
         excel_path,
         case_id=case_id,
@@ -320,6 +394,10 @@ def run_excel(
                 passed=None,
                 run_dir="",
                 error=str(e),
+            )
+            # Best-effort home if the case failed before post-case reset.
+            _return_to_system_home(
+                cfg, case_id=case.case_id, phase="after_error", wait=True
             )
         summary.results.append(result)
         if fail_fast and (result.passed is False or result.error):
