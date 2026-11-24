@@ -29,6 +29,7 @@ export type CalibrateJobMeta = {
   caseId: string | null;
   backend: "auto" | "vl" | "mock";
   retryFailed: boolean;
+  force: boolean;
   status: CalibrateStatus;
   createdAt: string;
   startedAt?: string;
@@ -142,6 +143,7 @@ export function createAndStartCalibrateJob(opts: {
   caseId?: string | null;
   backend?: "auto" | "vl" | "mock";
   retryFailed?: boolean;
+  force?: boolean;
 }): CalibrateJobMeta {
   if (hasActiveRunJob()) {
     throw new Error("有测试任务正在运行，请先停止后再校准（设备互斥）");
@@ -166,6 +168,7 @@ export function createAndStartCalibrateJob(opts: {
     caseId: opts.caseId || null,
     backend: opts.backend || "auto",
     retryFailed: Boolean(opts.retryFailed),
+    force: Boolean(opts.force),
     status: "queued",
     createdAt: new Date().toISOString(),
     logPath,
@@ -185,6 +188,7 @@ export function createAndStartCalibrateJob(opts: {
   ];
   if (job.caseId) args.push("--case-id", job.caseId);
   if (job.retryFailed) args.push("--retry-failed");
+  if (job.force) args.push("--force");
 
   job.status = "running";
   job.startedAt = new Date().toISOString();

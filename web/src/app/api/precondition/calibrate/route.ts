@@ -18,6 +18,7 @@ export async function POST(req: Request) {
     caseId?: string | null;
     backend?: "auto" | "vl" | "mock";
     retryFailed?: boolean;
+    force?: boolean;
   };
   if (!body.datasetId) {
     return NextResponse.json({ error: "缺少 datasetId" }, { status: 400 });
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
       caseId: body.caseId || null,
       backend,
       retryFailed: Boolean(body.retryFailed),
+      force: Boolean(body.force),
     });
     return NextResponse.json(job);
   } catch (e) {

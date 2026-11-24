@@ -183,7 +183,7 @@ def cmd_spike(args: argparse.Namespace) -> int:
 def cmd_precondition_calibrate(args: argparse.Namespace) -> int:
     print(
         f"precondition-calibrate excel={args.excel} case_id={args.case_id or '*'} "
-        f"backend={args.backend} retry_failed={args.retry_failed}"
+        f"backend={args.backend} retry_failed={args.retry_failed} force={args.force}"
     )
     try:
         summary = calibrate_dataset(
@@ -192,6 +192,7 @@ def cmd_precondition_calibrate(args: argparse.Namespace) -> int:
             case_id=args.case_id,
             backend=args.backend,
             retry_failed=bool(args.retry_failed),
+            force=bool(args.force),
         )
     except (FileNotFoundError, ValueError, ImportError, AdbError, CalibrateError) as e:
         print(f"precondition-calibrate: FAIL\n{e}", file=sys.stderr)
@@ -425,6 +426,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--retry-failed",
         action="store_true",
         help="强制重试缓存中状态为 failed 的步骤",
+    )
+    p_cal.add_argument(
+        "--force",
+        action="store_true",
+        help="重训已 pass 的步骤（默认只处理未全部 pass 的用例，前缀 pass 仅回放 ADB）",
     )
     p_cal.set_defaults(func=cmd_precondition_calibrate)
 

@@ -46,7 +46,6 @@ run:
     assert cfg.run.judge_async is False
     assert cfg.run.judge_parallel == 2
     assert cfg.precondition.enabled is True
-    assert cfg.precondition.reuse_passed is True
     assert cfg.precondition.verify_after_replay is False
 
 
@@ -85,8 +84,6 @@ capture: {}
 precondition:
   enabled: false
   coverage_check: false
-  reuse_passed: false
-  skip_passed_on_calibrate: true
   verify_after_replay: true
   max_retries: 5
   step_settle_sec: 1.5
@@ -99,8 +96,6 @@ precondition:
     cfg = load_config(p)
     assert cfg.precondition.enabled is False
     assert cfg.precondition.coverage_check is False
-    assert cfg.precondition.reuse_passed is False
-    assert cfg.precondition.skip_passed_on_calibrate is True
     assert cfg.precondition.verify_after_replay is True
     assert cfg.precondition.max_retries == 5
     assert cfg.precondition.step_settle_sec == 1.5

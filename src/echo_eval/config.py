@@ -217,13 +217,9 @@ class PreconditionConfig:
 
     enabled: bool = True
     coverage_check: bool = True
-    # 已「通过」的步骤直接回放缓存，不再探索校准
-    reuse_passed: bool = True
-    # 校准遇到已 passed：true=完全跳过（不 tap）；false=回放 cache（为后续步铺界面）
-    # 仅影响 precondition-calibrate；正式 run 仍会回放
-    skip_passed_on_calibrate: bool = False
     # 回放后再 VL 验一次；false = 已通过不再重新测试
     verify_after_replay: bool = False
+    # 已 pass 的步骤一律回放 cache ADB（校准/正式 run）；重训用 CLI --force
     max_retries: int = 3
     # 逐步回放后的默认等待（秒）；可被 step_settle_overrides 按步骤文案覆盖
     step_settle_sec: float = 1.0
@@ -351,14 +347,6 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         pre_coverage = bool(pre_raw.get("coverage_check"))
     else:
         pre_coverage = True
-    if "reuse_passed" in pre_raw:
-        pre_reuse = bool(pre_raw.get("reuse_passed"))
-    else:
-        pre_reuse = True
-    if "skip_passed_on_calibrate" in pre_raw:
-        pre_skip_passed = bool(pre_raw.get("skip_passed_on_calibrate"))
-    else:
-        pre_skip_passed = False
     if "verify_after_replay" in pre_raw:
         pre_verify = bool(pre_raw.get("verify_after_replay"))
     else:
@@ -366,8 +354,6 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     precondition = PreconditionConfig(
         enabled=pre_enabled,
         coverage_check=pre_coverage,
-        reuse_passed=pre_reuse,
-        skip_passed_on_calibrate=pre_skip_passed,
         verify_after_replay=pre_verify,
         max_retries=max(
             1,

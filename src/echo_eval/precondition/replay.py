@@ -152,12 +152,7 @@ def prepare_case_precondition(
         allow_any = False
         package = ""
 
-        if (
-            entry
-            and entry.status == "passed"
-            and pre.reuse_passed
-            and entry.adb_commands
-        ):
+        if entry and entry.status == "passed" and entry.adb_commands:
             commands = list(entry.adb_commands)
             source = "cache"
             package = entry.package or ""

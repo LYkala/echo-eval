@@ -340,6 +340,7 @@ def calibrate_dataset(
     case_id: str | None = None,
     backend: Backend = "auto",
     retry_failed: bool = False,
+    force: bool = False,
 ) -> CalibrateSummary:
     cfg = load_config(config_path) if config_path else load_config()
     cases = load_cases(
@@ -359,14 +360,43 @@ def calibrate_dataset(
 
     print(
         f"[echo-eval] precondition-calibrate backend={resolved} "
-        f"(requested={backend}) retry_failed={retry_failed} "
-        f"reuse_passed={pre.reuse_passed} "
-        f"skip_passed_on_calibrate={pre.skip_passed_on_calibrate} "
+        f"(requested={backend}) retry_failed={retry_failed} force={force} "
         f"max_retries={pre.max_retries}",
         flush=True,
     )
     report = build_coverage_report(cases, cfg=pre, cache=cache, packages=packages)
     print_coverage_report(report)
+
+    ready_ids = {c.case_id for c in report.cases if c.ready}
+    if force:
+        cases_to_run = list(cases)
+        print(
+            "[echo-eval] force=true: 处理全部用例，已 pass 步骤将重新校准",
+            flush=True,
+        )
+    else:
+        cases_to_run = [c for c in cases if c.case_id not in ready_ids]
+        for c in cases:
+            if c.case_id in ready_ids:
+                print(
+                    f"[echo-eval] skip ready case {c.case_id} {c.name} "
+                    f"（预置已全部通过；重训请加 --force）",
+                    flush=True,
+                )
+                summary.results.append(
+                    StepCalibrateResult(
+                        case_id=c.case_id,
+                        step_text="(case)",
+                        key="",
+                        status="skipped",
+                        error="预置已全部通过",
+                    )
+                )
+        print(
+            f"[echo-eval] pending cases: {len(cases_to_run)}/{len(cases)} "
+            f"（仅未全部 pass 的用例；前缀已 pass 回放 ADB）",
+            flush=True,
+        )
 
     model_cfg = None
     if resolved == "vl":
@@ -385,7 +415,7 @@ def calibrate_dataset(
     home_settle = max(0.0, float(pre.step_settle_sec))
     max_retries = max(1, int(pre.max_retries))
 
-    for case in cases:
+    for case in cases_to_run:
         print(f"[echo-eval] === calibrate case {case.case_id} {case.name} ===", flush=True)
         if previous_package:
             try:
@@ -431,30 +461,16 @@ def calibrate_dataset(
                 flush=True,
             )
 
-            # Prefer passed cache (incl. manually edited launch commands) over
-            # re-deriving via launch_package / deterministic plans.
-            if status == "passed" and pre.reuse_passed and entry and entry.adb_commands:
-                if pre.skip_passed_on_calibrate:
-                    print(
-                        f"[echo-eval]   skip passed step (skip_passed_on_calibrate) "
-                        f"kind={entry.kind} cmds={list(entry.adb_commands)}",
-                        flush=True,
-                    )
-                    summary.results.append(
-                        StepCalibrateResult(
-                            case_id=case.case_id,
-                            step_text=text,
-                            key=key,
-                            status="passed",
-                            attempts=0,
-                            commands=list(entry.adb_commands),
-                        )
-                    )
-                    prefix.append(text)
-                    continue
+            # Already passed: replay ADB to set up UI for later steps (unless --force).
+            if (
+                status == "passed"
+                and entry
+                and entry.adb_commands
+                and not force
+            ):
                 try:
                     print(
-                        f"[echo-eval]   reuse cache kind={entry.kind} "
+                        f"[echo-eval]   replay passed cache kind={entry.kind} "
                         f"cmds={list(entry.adb_commands)}",
                         flush=True,
                     )
@@ -491,7 +507,7 @@ def calibrate_dataset(
                     prefix.append(text)
                     continue
 
-            # Deterministic system commands (only when no reusable cache)
+            # Deterministic system commands (only when no reusable cache / --force)
             if plan is not None:
                 try:
                     used_cmds = list(plan.commands)

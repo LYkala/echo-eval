@@ -74,8 +74,6 @@ run:
 precondition:
   enabled: true
   coverage_check: true
-  reuse_passed: true          # 已通过步骤用缓存，不重 VL 探索
-  skip_passed_on_calibrate: true  # 校准遇到已通过：跳过且不 tap（正式 run 仍回放）
   verify_after_replay: false  # false=已通过不再 VL 复验
   max_retries: 3
   step_settle_sec: 1.0        # 每步默认等待（秒）
@@ -88,19 +86,22 @@ precondition:
 
 `step_settle_overrides` 在校准与正式回放中，于**该步执行完之后**生效；匹配顺序为规范化后精确匹配 → 最长子串包含。未命中则用 `step_settle_sec`。
 
-当 `reuse_passed: true` 且 cache 中该步已是 `passed` 时：
-- **正式 run**：原样执行 `adb_commands`（含手改），不调用 `launch_package` 覆盖。
-- **校准**：若 `skip_passed_on_calibrate: true`，完全跳过（不 tap、不 settle）；若为 `false`，则回放 cache 以便给后续未通过步骤铺界面。
-仅在无可用 cache 时才自动推导并写回。
+**预置校准**（`precondition-calibrate`）：
+- 默认只处理「预置未全部 pass」的用例；整条已 ready 的跳过。
+- 用例内已 pass 的前缀步：**回放 ADB**（铺界面），不重 VL。
+- 未 pass 的步：确定性执行或 VL 校准。
+- `--retry-failed`：重试 cache 为 failed 的步。
+- `--force`：连已 pass 也重新校准（并处理全部用例）。
+
+正式 run / 校准回放时，已 pass 的 `adb_commands` 原样执行（含手改），不调用 `launch_package` 覆盖。
 
 样例数据集：`cases/examples/sample_v012_system_iqiyi_10.csv`（v0.12 精简预置；新列名）。
-
-点击类预置需先独立校准（写入 `artifacts/precondition_cache/`，跨数据集按「前缀+当前步」复用；默认不自动清理）：
 
 ```bat
 set PYTHONPATH=src
 python -m echo_eval precondition-calibrate --excel cases/examples/sample_v012_system_iqiyi_10.csv --backend vl
 python -m echo_eval precondition-calibrate --excel cases/examples/sample_v012_system_iqiyi_10.csv --retry-failed
+python -m echo_eval precondition-calibrate --excel cases/examples/sample_v012_system_iqiyi_10.csv --force
 ```
 
 未就绪或 `failed`（未加 `--retry-failed`）的用例在 `run` 时会跳过并提示。

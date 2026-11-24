@@ -659,7 +659,6 @@ def run_excel(
         f"return_home_wait_sec={cfg.run.return_home_wait_sec} "
         f"judge_async={cfg.run.judge_async} judge_parallel={cfg.run.judge_parallel} "
         f"precondition.enabled={cfg.precondition.enabled} "
-        f"reuse_passed={cfg.precondition.reuse_passed} "
         f"verify_after_replay={cfg.precondition.verify_after_replay} "
         f"serial={cfg.adb.resolved_serial}",
         flush=True,
@@ -877,7 +876,6 @@ def run_excel(
                 "precondition": {
                     "enabled": cfg.precondition.enabled,
                     "coverage_check": cfg.precondition.coverage_check,
-                    "reuse_passed": cfg.precondition.reuse_passed,
                     "verify_after_replay": cfg.precondition.verify_after_replay,
                     "skipped_case_ids": sorted(skip_ids),
                 },

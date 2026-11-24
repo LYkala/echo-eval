@@ -87,7 +87,6 @@ capture: {}
 precondition:
   enabled: true
   coverage_check: true
-  reuse_passed: true
   verify_after_replay: false
   cache_dir: artifacts/precondition_cache
   packages_path: configs/packages.yaml

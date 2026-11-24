@@ -120,6 +120,7 @@ type CalibrateJob = {
   status: string;
   backend: string;
   retryFailed?: boolean;
+  force?: boolean;
   passed?: number;
   failed?: number;
   skipped?: number;
@@ -167,6 +168,7 @@ export function ConsoleClient() {
   const [backend, setBackend] = useState<"auto" | "vl" | "mock">("mock");
   const [calBackend, setCalBackend] = useState<"auto" | "vl" | "mock">("vl");
   const [retryFailed, setRetryFailed] = useState(false);
+  const [calForce, setCalForce] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [active, setActive] = useState<Job | null>(null);
@@ -531,7 +533,7 @@ export function ConsoleClient() {
     setMsg("");
     try {
       pushLog(
-        `POST /api/precondition/calibrate backend=${calBackend} retryFailed=${retryFailed}`
+        `POST /api/precondition/calibrate backend=${calBackend} retryFailed=${retryFailed} force=${calForce}`
       );
       const res = await fetch("/api/precondition/calibrate", {
         method: "POST",
@@ -541,6 +543,7 @@ export function ConsoleClient() {
           caseId: caseId || null,
           backend: calBackend,
           retryFailed,
+          force: calForce,
         }),
       });
       const data = (await res.json()) as CalibrateJob & { error?: string };
@@ -908,19 +911,27 @@ export function ConsoleClient() {
                   <option value="mock">mock（仅联调）</option>
                 </select>
               </div>
-              <div className="flex items-end">
+              <div className="flex flex-col justify-end gap-2">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
                     checked={retryFailed}
                     onChange={(e) => setRetryFailed(e.target.checked)}
                   />
-                  强制重试 failed（--retry-failed）
+                  重试 failed（--retry-failed）
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={calForce}
+                    onChange={(e) => setCalForce(e.target.checked)}
+                  />
+                  重训已 pass（--force）
                 </label>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              使用上方「选用数据集 / 用例编号」。推荐内置{" "}
+              默认只校准「预置未全部通过」的用例；前缀已 pass 会回放 ADB。推荐内置{" "}
               <code>sample_v012_system_iqiyi_10.csv</code>。
             </p>
             <div className="flex flex-wrap gap-3">
@@ -948,6 +959,7 @@ export function ConsoleClient() {
                 <div className="text-sm font-medium">
                   {calJob.datasetName} · {calJob.backend}
                   {calJob.retryFailed ? " · retry-failed" : ""}
+                  {calJob.force ? " · force" : ""}
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center text-sm">
                   <div className="rounded-md bg-background px-2 py-2">

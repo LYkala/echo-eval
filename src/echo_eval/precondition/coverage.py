@@ -50,20 +50,17 @@ def _effective_status(
     cached: StepStatus,
     *,
     deterministic: bool,
-    reuse_passed: bool,
 ) -> tuple[StepStatus, bool, str]:
     """Return (status, ready, reason)."""
     if cached == "failed":
         return "failed", False, "预置步骤已失败（校准用尽），跳过该用例"
     if cached == "stale":
         return "stale", False, "预置步骤已过期，请运行 precondition-calibrate 重新校准"
-    if cached == "passed" and reuse_passed:
+    if cached == "passed":
         return "passed", True, "已通过，将回放缓存 ADB"
     if deterministic:
         # System ADB steps can run without prior VL pass
         return ("passed" if cached == "passed" else "untested"), True, "确定性系统 ADB，可直接执行"
-    if cached == "passed" and not reuse_passed:
-        return "passed", False, "reuse_passed=false，需重新校准"
     return (
         "untested",
         False,
@@ -101,7 +98,6 @@ def build_coverage_report(
             status, ready, reason = _effective_status(
                 cached_status,
                 deterministic=deterministic,
-                reuse_passed=bool(cfg.reuse_passed),
             )
             if deterministic:
                 counts["deterministic"] += 1
