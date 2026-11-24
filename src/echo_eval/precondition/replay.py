@@ -10,7 +10,7 @@ from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.precondition.cache import PreconditionCache, StepCacheEntry
 from echo_eval.precondition.commands import run_allowed_commands
 from echo_eval.precondition.deterministic import plan_deterministic_step, resolve_package
-from echo_eval.precondition.steps import step_cache_key
+from echo_eval.precondition.steps import resolve_step_settle_sec, step_cache_key
 
 
 class PreconditionSkip(RuntimeError):
@@ -245,8 +245,17 @@ def prepare_case_precondition(
 
         if package:
             opened = package
-        settle = max(0.0, float(pre.step_settle_sec))
+        settle = resolve_step_settle_sec(
+            text,
+            default_sec=pre.step_settle_sec,
+            overrides=pre.step_settle_overrides,
+        )
+        step_log["settle_sec"] = settle
         if settle:
+            print(
+                f"[echo-eval]   settle {settle:g}s after step={text!r}",
+                flush=True,
+            )
             time.sleep(settle)
 
         # Optional VL verify after replay — deferred to module ②

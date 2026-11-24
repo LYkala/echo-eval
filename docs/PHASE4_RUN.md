@@ -77,9 +77,15 @@ precondition:
   reuse_passed: true          # 已通过步骤只回放，不重校准
   verify_after_replay: false  # false=已通过不再 VL 复验
   max_retries: 3
+  step_settle_sec: 1.0        # 每步默认等待（秒）
+  step_settle_overrides:      # 按预置步骤文案差异化等待（开 App 等广告）
+    打开爱奇艺: 8
+    打开设置: 2
   cache_dir: artifacts/precondition_cache
   packages_path: configs/packages.yaml
 ```
+
+`step_settle_overrides` 在校准与正式回放中，于**该步执行完之后**生效；匹配顺序为规范化后精确匹配 → 最长子串包含。未命中则用 `step_settle_sec`。
 
 样例数据集：`cases/examples/sample_v012_system_iqiyi_10.csv`（v0.12 精简预置；新列名）。
 

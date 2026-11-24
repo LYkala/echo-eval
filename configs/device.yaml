@@ -65,6 +65,10 @@ precondition:
   # 回放后再 VL 验一次；false=已通过不用重新测试
   verify_after_replay: false
   max_retries: 3
+  # 每步默认等待；打开 App 等广告可用 overrides 拉长
   step_settle_sec: 1.0
+  step_settle_overrides:
+    打开爱奇艺: 8
+    打开设置: 2
   cache_dir: artifacts/precondition_cache
   packages_path: configs/packages.yaml

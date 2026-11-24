@@ -17,7 +17,7 @@ from echo_eval.precondition.commands import run_allowed_commands
 from echo_eval.precondition.coverage import build_coverage_report, print_coverage_report
 from echo_eval.precondition.deterministic import plan_deterministic_step
 from echo_eval.precondition.replay import resolve_opened_package
-from echo_eval.precondition.steps import step_cache_key
+from echo_eval.precondition.steps import resolve_step_settle_sec, step_cache_key
 from echo_eval.precondition.vl_act import (
     mock_propose_commands,
     mock_verify_step,
@@ -377,7 +377,7 @@ def calibrate_dataset(
         adb.connect(timeout_sec=cfg.adb.connect_timeout_sec)
 
     previous_package = ""
-    settle = max(0.0, float(pre.step_settle_sec))
+    home_settle = max(0.0, float(pre.step_settle_sec))
     max_retries = max(1, int(pre.max_retries))
 
     for case in cases:
@@ -389,8 +389,8 @@ def calibrate_dataset(
                 print(f"[echo-eval][warn] force-stop {previous_package}: {e}", flush=True)
         try:
             adb.press_home()
-            if settle:
-                time.sleep(settle)
+            if home_settle:
+                time.sleep(home_settle)
         except AdbError as e:
             print(f"[echo-eval][warn] home: {e}", flush=True)
 
@@ -403,6 +403,11 @@ def calibrate_dataset(
             entry = cache.get(key)
             status = entry.status if entry else "untested"
             plan = plan_deterministic_step(text, packages=packages)
+            settle = resolve_step_settle_sec(
+                text,
+                default_sec=pre.step_settle_sec,
+                overrides=pre.step_settle_overrides,
+            )
 
             # Deterministic system commands
             if plan is not None:
@@ -458,6 +463,10 @@ def calibrate_dataset(
                     abort_case = True
                     break
                 if settle:
+                    print(
+                        f"[echo-eval]   settle {settle:g}s after step={text!r}",
+                        flush=True,
+                    )
                     time.sleep(settle)
                 prefix.append(text)
                 continue
@@ -488,6 +497,10 @@ def calibrate_dataset(
                     status = "stale"
                 else:
                     if settle:
+                        print(
+                            f"[echo-eval]   settle {settle:g}s after step={text!r}",
+                            flush=True,
+                        )
                         time.sleep(settle)
                     prefix.append(text)
                     continue
@@ -523,6 +536,10 @@ def calibrate_dataset(
                 abort_case = True
                 break
             if settle:
+                print(
+                    f"[echo-eval]   settle {settle:g}s after step={text!r}",
+                    flush=True,
+                )
                 time.sleep(settle)
             prefix.append(text)
 

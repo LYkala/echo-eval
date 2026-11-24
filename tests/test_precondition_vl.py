@@ -2,9 +2,20 @@ from pathlib import Path
 from unittest.mock import patch
 
 from echo_eval.precondition.commands import filter_allowed_commands, is_allowed_input_command
-from echo_eval.precondition.steps import step_cache_key
+from echo_eval.precondition.steps import resolve_step_settle_sec, step_cache_key
 from echo_eval.precondition.vl_act import extract_json_object, vl_propose_commands
 from echo_eval.precondition.cache import PreconditionCache, StepCacheEntry
+
+
+def test_resolve_step_settle_overrides():
+    overrides = {"打开爱奇艺": 8, "打开设置": 2.5, "打开": 1.5}
+    assert resolve_step_settle_sec("点击筛选", default_sec=1.0, overrides=overrides) == 1.0
+    assert resolve_step_settle_sec("打开爱奇艺", default_sec=1.0, overrides=overrides) == 8.0
+    assert resolve_step_settle_sec("打开 爱奇艺", default_sec=1.0, overrides=overrides) == 8.0
+    assert resolve_step_settle_sec("打开设置", default_sec=1.0, overrides=overrides) == 2.5
+    # longest substring key wins over shorter "打开"
+    assert resolve_step_settle_sec("打开爱奇艺APP", default_sec=1.0, overrides=overrides) == 8.0
+    assert resolve_step_settle_sec("打开某某", default_sec=1.0, overrides=overrides) == 1.5
 
 
 def test_whitelist_commands():
