@@ -396,7 +396,19 @@ def calibrate_dataset(
 
         prefix: list[str] = []
         abort_case = False
-        for text in case.precondition_steps:
+        steps = list(case.precondition_steps)
+        if not steps:
+            print(
+                f"[echo-eval]   case {case.case_id}: 无预置步骤，跳过",
+                flush=True,
+            )
+        else:
+            print(
+                f"[echo-eval]   case {case.case_id}: "
+                f"{len(steps)} 个预置步骤 → {' → '.join(steps)}",
+                flush=True,
+            )
+        for step_i, text in enumerate(steps, 1):
             if abort_case:
                 break
             key = step_cache_key(prefix, text)
@@ -407,6 +419,11 @@ def calibrate_dataset(
                 text,
                 default_sec=pre.step_settle_sec,
                 overrides=pre.step_settle_overrides,
+            )
+            print(
+                f"[echo-eval]   step {step_i}/{len(steps)} text={text!r} "
+                f"status={status} kind={'deterministic:' + plan.kind if plan else 'gui'}",
+                flush=True,
             )
 
             # Deterministic system commands
@@ -506,13 +523,21 @@ def calibrate_dataset(
                     continue
 
             if status == "failed" and not retry_failed:
+                msg = (
+                    f"状态=failed，未加 --retry-failed；本条后续预置步骤中止。"
+                    f"需要重试请加: --retry-failed"
+                )
+                print(
+                    f"[echo-eval][warn] skip step={text!r} key={key}: {msg}",
+                    flush=True,
+                )
                 summary.results.append(
                     StepCalibrateResult(
                         case_id=case.case_id,
                         step_text=text,
                         key=key,
                         status="skipped",
-                        error="状态=failed，未加 --retry-failed",
+                        error=msg,
                     )
                 )
                 abort_case = True
@@ -533,6 +558,11 @@ def calibrate_dataset(
             )
             summary.results.append(result)
             if result.status != "passed":
+                print(
+                    f"[echo-eval][warn] VL calibrate failed for step={text!r}; "
+                    f"abort remaining steps of case={case.case_id}",
+                    flush=True,
+                )
                 abort_case = True
                 break
             if settle:
