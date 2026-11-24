@@ -64,7 +64,8 @@ run:
 多用例时：停录并 pull 完成后，默认按一次 `KEYCODE_HOME` 回到系统桌面；Home 失败只打警告，不中断下一条。  
 评判默认异步（对齐 TestApp Web）：设备串行开下一条，抽帧+VL 进后台队列；`judge_async: false` 可恢复同步。
 
-更细的录屏 / 播报 / Home / 异步评判时间线见 [CASE_TIMELINE.md](./CASE_TIMELINE.md)。
+更细的录屏 / 播报 / Home / 异步评判时间线见 [CASE_TIMELINE.md](./CASE_TIMELINE.md)。  
+预置 VL 验收与正式多帧评判的方法对比见 [EVALUATION_METHODS.md](./EVALUATION_METHODS.md)。
 
 ## 预置条件（v0.11）
 

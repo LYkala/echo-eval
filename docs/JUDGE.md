@@ -2,6 +2,8 @@
 
 对齐 TestAppGUI `evaluate_gui_poll_images`（**E1**：主评判 + 解析 + 本地占位规则；不做证据接地/引用修复）。
 
+与**预置条件 VL 验收**的区分与对照见 [EVALUATION_METHODS.md](./EVALUATION_METHODS.md)。
+
 ## 决策摘要
 
 | 项 | 选择 |
