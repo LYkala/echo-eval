@@ -93,6 +93,9 @@ python -m echo_eval precondition-calibrate --excel cases/examples/sample_v012_sy
 
 未就绪或 `failed`（未加 `--retry-failed`）的用例在 `run` 时会跳过并提示。
 
+点击类 VL 校准时，控制台/任务日志会打印 `VL-Act raw` / `VL-Verify raw`；同时落盘到  
+`artifacts/precondition_cache/shots/<key>/tryN_act.json`、`tryN_verify.json`（及前后截图），便于排查点偏或超时。
+
 ## 产物
 
 ```

@@ -1,6 +1,7 @@
 """Calibrate GUI precondition steps via VL (independent CLI entry)."""
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any, Literal
 from echo_eval.cases.excel_cases import load_cases
 from echo_eval.config import load_config, load_object_packages, load_packages_map
 from echo_eval.device.adb import AdbClient, AdbError
+from echo_eval.judge.client import JudgeClientError
 from echo_eval.judge.model_config import ModelConfigError, find_model_config_path, load_vl_eval_config
 from echo_eval.precondition.cache import PreconditionCache, StepCacheEntry
 from echo_eval.precondition.commands import run_allowed_commands
@@ -71,6 +73,22 @@ def _shot_dir(cache: PreconditionCache, key: str) -> Path:
     return d
 
 
+def _clip(text: str, limit: int = 1200) -> str:
+    s = (text or "").replace("\r\n", "\n").strip()
+    if len(s) <= limit:
+        return s
+    return s[: limit - 20] + "\n…(truncated)…"
+
+
+def _write_attempt_log(path: Path, payload: dict[str, Any]) -> None:
+    try:
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError as e:
+        print(f"[echo-eval][warn] write attempt log failed: {e}", flush=True)
+
+
 def _exec_deterministic(
     adb: AdbClient,
     commands: list[str],
@@ -126,11 +144,14 @@ def calibrate_gui_step(
         after = shots / f"try{attempt}_after.png"
         print(
             f"[echo-eval] calibrate {case_id} step={step_text!r} "
-            f"attempt={attempt}/{max_retries}",
+            f"attempt={attempt}/{max_retries} key={key} shots={shots}",
             flush=True,
         )
+        if feedback:
+            print(f"[echo-eval]   prior_feedback: {_clip(feedback, 400)}", flush=True)
         try:
             adb.screencap_png(before)
+            print(f"[echo-eval]   screencap before: {before}", flush=True)
             act = propose(
                 screenshot=before,
                 step_text=step_text,
@@ -141,19 +162,47 @@ def calibrate_gui_step(
             )
             cmds = list(act.get("adb_commands") or [])
             rejected = list(act.get("rejected") or [])
+            act_raw = str(act.get("raw") or "")
+            act_reason = str(act.get("reason") or "")
+            print(
+                f"[echo-eval]   VL-Act reason={act_reason!r} "
+                f"cmds={cmds} rejected={rejected}",
+                flush=True,
+            )
+            print(f"[echo-eval]   VL-Act raw:\n{_clip(act_raw)}", flush=True)
+            _write_attempt_log(
+                shots / f"try{attempt}_act.json",
+                {
+                    "case_id": case_id,
+                    "step_text": step_text,
+                    "prefix": prefix,
+                    "wm_size": wm,
+                    "feedback_in": feedback,
+                    "adb_commands": cmds,
+                    "rejected": rejected,
+                    "reason": act_reason,
+                    "parsed": act.get("parsed"),
+                    "raw": act_raw,
+                    "before": str(before),
+                },
+            )
             if rejected:
                 feedback = f"模型给出非法命令已拒绝: {rejected[:3]}"
                 last_err = feedback
+                print(f"[echo-eval][warn] {feedback}", flush=True)
                 continue
             if not cmds:
                 feedback = "模型未给出任何 input 命令"
                 last_err = feedback
+                print(f"[echo-eval][warn] {feedback}", flush=True)
                 continue
             last_cmds = cmds
+            print(f"[echo-eval]   exec: {cmds}", flush=True)
             run_allowed_commands(adb, cmds)
             if settle_sec > 0:
                 time.sleep(settle_sec)
             adb.screencap_png(after)
+            print(f"[echo-eval]   screencap after: {after}", flush=True)
             verdict = verify(
                 screenshot_after=after,
                 step_text=step_text,
@@ -161,7 +210,30 @@ def calibrate_gui_step(
                 screenshot_before=before,
                 model_cfg=model_cfg,
             )
-            if verdict.get("achieved"):
+            achieved = bool(verdict.get("achieved"))
+            v_reason = str(verdict.get("reason") or "")
+            v_raw = str(verdict.get("raw") or "")
+            print(
+                f"[echo-eval]   VL-Verify achieved={achieved} reason={v_reason!r}",
+                flush=True,
+            )
+            print(f"[echo-eval]   VL-Verify raw:\n{_clip(v_raw)}", flush=True)
+            _write_attempt_log(
+                shots / f"try{attempt}_verify.json",
+                {
+                    "case_id": case_id,
+                    "step_text": step_text,
+                    "prefix": prefix,
+                    "achieved": achieved,
+                    "reason": v_reason,
+                    "parsed": verdict.get("parsed"),
+                    "raw": v_raw,
+                    "before": str(before),
+                    "after": str(after),
+                    "executed_commands": cmds,
+                },
+            )
+            if achieved:
                 entry = StepCacheEntry(
                     key=key,
                     step_text=step_text,
@@ -169,13 +241,17 @@ def calibrate_gui_step(
                     status="passed",
                     adb_commands=cmds,
                     kind="vl",
-                    judge_notes=str(verdict.get("reason") or act.get("reason") or ""),
+                    judge_notes=str(v_reason or act_reason or ""),
                     screenshots=[str(before), str(after)],
                     device_wm_size=wm,
                     case_ids=[case_id],
                 )
                 cache.upsert(entry)
                 cache.save()
+                print(
+                    f"[echo-eval]   PASS step={step_text!r} cmds={cmds}",
+                    flush=True,
+                )
                 return StepCalibrateResult(
                     case_id=case_id,
                     step_text=step_text,
@@ -184,12 +260,30 @@ def calibrate_gui_step(
                     attempts=attempt,
                     commands=cmds,
                 )
-            feedback = str(verdict.get("reason") or "VL 判定未达成")
+            feedback = v_reason or "VL 判定未达成"
             last_err = feedback
-        except (AdbError, ModelConfigError, ValueError, OSError) as e:
+            print(f"[echo-eval][warn] verify not achieved: {feedback}", flush=True)
+        except (
+            AdbError,
+            ModelConfigError,
+            JudgeClientError,
+            ValueError,
+            OSError,
+        ) as e:
             last_err = str(e)
             feedback = last_err
             print(f"[echo-eval][warn] calibrate attempt failed: {e}", flush=True)
+            _write_attempt_log(
+                shots / f"try{attempt}_error.json",
+                {
+                    "case_id": case_id,
+                    "step_text": step_text,
+                    "prefix": prefix,
+                    "error": last_err,
+                    "before": str(before),
+                    "after": str(after),
+                },
+            )
 
     entry = StepCacheEntry(
         key=key,
