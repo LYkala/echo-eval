@@ -45,6 +45,9 @@ run:
     assert cfg.run.return_home_wait_sec == 3.5
     assert cfg.run.judge_async is False
     assert cfg.run.judge_parallel == 2
+    assert cfg.precondition.enabled is True
+    assert cfg.precondition.reuse_passed is True
+    assert cfg.precondition.verify_after_replay is False
 
 
 def test_serial_override(tmp_path: Path):
@@ -67,3 +70,30 @@ capture: {}
     assert cfg.run.return_home_wait_sec == 2.0
     assert cfg.run.judge_async is True
     assert cfg.run.judge_parallel == 3
+    assert cfg.precondition.enabled is True
+    assert cfg.precondition.coverage_check is True
+    assert cfg.precondition.max_retries == 3
+
+
+def test_precondition_switches(tmp_path: Path):
+    p = tmp_path / "device.yaml"
+    p.write_text(
+        """
+adb:
+  host: "10.0.0.2"
+capture: {}
+precondition:
+  enabled: false
+  coverage_check: false
+  reuse_passed: false
+  verify_after_replay: true
+  max_retries: 5
+""",
+        encoding="utf-8",
+    )
+    cfg = load_config(p)
+    assert cfg.precondition.enabled is False
+    assert cfg.precondition.coverage_check is False
+    assert cfg.precondition.reuse_passed is False
+    assert cfg.precondition.verify_after_replay is True
+    assert cfg.precondition.max_retries == 5

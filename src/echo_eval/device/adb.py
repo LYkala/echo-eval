@@ -209,3 +209,13 @@ class AdbClient:
             self.shell("input keyevent 3", check=True, timeout=timeout)
         except AdbError:
             self.shell("input keyevent KEYCODE_HOME", check=True, timeout=timeout)
+
+    def force_stop(self, package: str, *, timeout: float = 15) -> None:
+        """am force-stop <package> to clear previous case app process."""
+        pkg = (package or "").strip()
+        if not pkg:
+            raise AdbError("force_stop: package 为空")
+        self.shell(f"am force-stop {pkg}", check=True, timeout=timeout)
+
+    def tap(self, x: int, y: int, *, timeout: float = 10) -> None:
+        self.shell(f"input tap {int(x)} {int(y)}", check=True, timeout=timeout)

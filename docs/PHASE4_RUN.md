@@ -66,6 +66,23 @@ run:
 
 更细的录屏 / 播报 / Home / 异步评判时间线见 [CASE_TIMELINE.md](./CASE_TIMELINE.md)。
 
+## 预置条件（v0.11）
+
+开跑前可做覆盖检查；每条正式测前：`force-stop` 上一条包 → Home → 回放本条预置 ADB → 再播「文本语料」。
+
+```yaml
+precondition:
+  enabled: true
+  coverage_check: true
+  reuse_passed: true          # 已通过步骤只回放，不重校准
+  verify_after_replay: false  # false=已通过不再 VL 复验
+  max_retries: 3
+  cache_dir: artifacts/precondition_cache
+  packages_path: configs/packages.yaml
+```
+
+样例数据集：`cases/examples/sample_v011_android_iqiyi_10.csv`（新列名）。点击类预置需后续 VL 校准模块写入缓存；未就绪的用例会跳过并提示。
+
 ## 产物
 
 ```

@@ -11,9 +11,22 @@ from typing import Any, Literal
 
 from echo_eval.capture.frames import extract_frames
 from echo_eval.cases.excel_cases import EvalCase, load_cases
-from echo_eval.config import AppConfig, load_config
+from echo_eval.config import (
+    AppConfig,
+    load_config,
+    load_object_packages,
+    load_packages_map,
+)
 from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.judge.service import JudgeError, judge_images
+from echo_eval.precondition import (
+    PreconditionSkip,
+    build_coverage_report,
+    prepare_case_precondition,
+    print_coverage_report,
+    resolve_opened_package,
+)
+from echo_eval.precondition.cache import PreconditionCache
 from echo_eval.runner.progress import (
     finish_batch,
     init_progress,
@@ -71,6 +84,8 @@ class _DeviceCapture:
     tts_meta: list[dict[str, Any]]
     home_after_pull: dict[str, Any]
     extract_frames_flag: bool
+    opened_package: str = ""
+    precondition_info: dict[str, Any] = field(default_factory=dict)
 
 
 def _safe_name(s: str) -> str:
@@ -234,8 +249,10 @@ def capture_one_case(
     case_index: int = 1,
     case_total: int = 1,
     extract_frames_flag: bool = True,
+    previous_package: str = "",
+    precondition_cache: PreconditionCache | None = None,
 ) -> _DeviceCapture:
-    """Device path only: TTS → record → pull → Home. No frames/judge."""
+    """Device path: precondition → TTS → record → pull → Home. No frames/judge."""
     _prog_device(
         case,
         index=case_index,
@@ -262,6 +279,10 @@ def capture_one_case(
         "name": case.name,
         "description": case.description,
         "case_type": case.case_type,
+        "object": case.object_name,
+        "scene": case.scene,
+        "priority": case.priority,
+        "precondition_steps": list(case.precondition_steps),
         "steps": [{"text": s.text, "wait_sec": s.wait_sec} for s in case.steps],
         "expected": case.expected,
         "exceptions": case.exceptions(),
@@ -269,6 +290,26 @@ def capture_one_case(
     (run_dir / "case.json").write_text(
         json.dumps(case_payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+    _prog_device(
+        case,
+        index=case_index,
+        total=case_total,
+        device_status="running",
+        device_label=f"预置条件（{case_index}/{case_total}）",
+        status="running",
+    )
+    pre_info = prepare_case_precondition(
+        case,
+        cfg,
+        adb=adb,
+        previous_package=previous_package,
+        cache=precondition_cache,
+    )
+    (run_dir / "precondition.json").write_text(
+        json.dumps(pre_info, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    opened_package = str(pre_info.get("opened_package") or "")
 
     _prog_device(
         case,
@@ -427,6 +468,8 @@ def capture_one_case(
         tts_meta=tts_meta,
         home_after_pull=home_after_pull,
         extract_frames_flag=extract_frames_flag,
+        opened_package=opened_package,
+        precondition_info=pre_info,
     )
 
 
@@ -555,6 +598,8 @@ def run_one_case(
     extract_frames_flag: bool = True,
     case_index: int = 1,
     case_total: int = 1,
+    previous_package: str = "",
+    precondition_cache: PreconditionCache | None = None,
 ) -> RunResult:
     """Synchronous path (device + judge). Used when judge_async is false."""
     cap = capture_one_case(
@@ -563,8 +608,40 @@ def run_one_case(
         case_index=case_index,
         case_total=case_total,
         extract_frames_flag=extract_frames_flag,
+        previous_package=previous_package,
+        precondition_cache=precondition_cache,
     )
     return judge_one_capture(cap, cfg, judge_backend=judge_backend)
+
+
+def _mark_case_skipped(
+    case: EvalCase,
+    *,
+    index: int,
+    total: int,
+    reason: str,
+) -> RunResult:
+    print(f"[echo-eval][skip] {case.case_id}: {reason}", flush=True)
+    update_case(
+        index=index,
+        case_id=case.case_id,
+        name=case.name,
+        status="error",
+        device_status="skipped",
+        device_label="预置未就绪，已跳过",
+        judge_status="skipped",
+        judge_label="跳过",
+        phase="skipped",
+        phase_label=f"跳过（{index}/{total}）",
+        touch_device_current=True,
+    )
+    return RunResult(
+        case_id=case.case_id,
+        name=case.name,
+        passed=None,
+        run_dir="",
+        error=reason,
+    )
 
 
 def run_excel(
@@ -581,6 +658,9 @@ def run_excel(
         f"[echo-eval] run_excel return_home_after_case={cfg.run.return_home_after_case} "
         f"return_home_wait_sec={cfg.run.return_home_wait_sec} "
         f"judge_async={cfg.run.judge_async} judge_parallel={cfg.run.judge_parallel} "
+        f"precondition.enabled={cfg.precondition.enabled} "
+        f"reuse_passed={cfg.precondition.reuse_passed} "
+        f"verify_after_replay={cfg.precondition.verify_after_replay} "
         f"serial={cfg.adb.resolved_serial}",
         flush=True,
     )
@@ -592,6 +672,19 @@ def run_excel(
     if not cases:
         raise ValueError(f"未解析到任何用例: {excel_path}")
 
+    pre_cache = PreconditionCache(cfg.precondition.resolved_cache_dir())
+    skip_ids: set[str] = set()
+    skip_reasons: dict[str, str] = {}
+    if cfg.precondition.enabled and cfg.precondition.coverage_check:
+        report = build_coverage_report(
+            cases, cfg=cfg.precondition, cache=pre_cache
+        )
+        print_coverage_report(report)
+        skip_ids = report.skip_case_ids
+        skip_reasons = {
+            c.case_id: c.skip_reason for c in report.cases if c.skip
+        }
+
     init_progress([(c.case_id, c.name) for c in cases])
     summary = BatchSummary(
         excel=str(Path(excel_path).resolve()),
@@ -600,9 +693,20 @@ def run_excel(
     total = len(cases)
     async_mode = bool(cfg.run.judge_async)
     workers = max(1, int(cfg.run.judge_parallel))
+    packages = load_packages_map(cfg.precondition.resolved_packages_path())
+    object_packages = load_object_packages(cfg.precondition.resolved_packages_path())
+    previous_package = ""
 
     if not async_mode:
         for idx, case in enumerate(cases, 1):
+            if case.case_id in skip_ids:
+                reason = skip_reasons.get(
+                    case.case_id, f"预置条件未就绪，跳过用例 {case.case_id}"
+                )
+                summary.results.append(
+                    _mark_case_skipped(case, index=idx, total=total, reason=reason)
+                )
+                continue
             try:
                 result = run_one_case(
                     case,
@@ -611,6 +715,15 @@ def run_excel(
                     extract_frames_flag=extract_frames_flag,
                     case_index=idx,
                     case_total=total,
+                    previous_package=previous_package,
+                    precondition_cache=pre_cache,
+                )
+                previous_package = resolve_opened_package(
+                    case, packages=packages, object_packages=object_packages
+                )
+            except PreconditionSkip as e:
+                result = _mark_case_skipped(
+                    case, index=idx, total=total, reason=str(e)
                 )
             except Exception as e:
                 result = RunResult(
@@ -646,6 +759,14 @@ def run_excel(
         results_by_index: dict[int, RunResult] = {}
         with ThreadPoolExecutor(max_workers=workers) as pool:
             for idx, case in enumerate(cases, 1):
+                if case.case_id in skip_ids:
+                    reason = skip_reasons.get(
+                        case.case_id, f"预置条件未就绪，跳过用例 {case.case_id}"
+                    )
+                    results_by_index[idx] = _mark_case_skipped(
+                        case, index=idx, total=total, reason=reason
+                    )
+                    continue
                 try:
                     cap = capture_one_case(
                         case,
@@ -653,6 +774,11 @@ def run_excel(
                         case_index=idx,
                         case_total=total,
                         extract_frames_flag=extract_frames_flag,
+                        previous_package=previous_package,
+                        precondition_cache=pre_cache,
+                    )
+                    previous_package = cap.opened_package or resolve_opened_package(
+                        case, packages=packages, object_packages=object_packages
                     )
                     fut = pool.submit(
                         judge_one_capture,
@@ -665,6 +791,10 @@ def run_excel(
                         f"[echo-eval] queued judge case={case.case_id} "
                         f"({idx}/{total}) workers={workers}",
                         flush=True,
+                    )
+                except PreconditionSkip as e:
+                    results_by_index[idx] = _mark_case_skipped(
+                        case, index=idx, total=total, reason=str(e)
                     )
                 except Exception as e:
                     result = RunResult(
@@ -744,6 +874,13 @@ def run_excel(
                 "errors": summary.error_count,
                 "judge_async": async_mode,
                 "judge_parallel": workers if async_mode else 1,
+                "precondition": {
+                    "enabled": cfg.precondition.enabled,
+                    "coverage_check": cfg.precondition.coverage_check,
+                    "reuse_passed": cfg.precondition.reuse_passed,
+                    "verify_after_replay": cfg.precondition.verify_after_replay,
+                    "skipped_case_ids": sorted(skip_ids),
+                },
                 "results": [asdict(r) for r in summary.results],
             },
             ensure_ascii=False,

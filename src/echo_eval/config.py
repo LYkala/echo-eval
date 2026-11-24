@@ -212,12 +212,46 @@ class RunConfig:
 
 
 @dataclass
+class PreconditionConfig:
+    """预置条件：开跑前覆盖检查 + 每条用例前的 ADB 回放。"""
+
+    enabled: bool = True
+    coverage_check: bool = True
+    # 已「通过」的步骤直接回放缓存，不再探索校准
+    reuse_passed: bool = True
+    # 回放后再 VL 验一次；false = 已通过不再重新测试
+    verify_after_replay: bool = False
+    max_retries: int = 3
+    # 逐步回放后的短等待
+    step_settle_sec: float = 1.0
+    # 缓存目录（相对仓库根或绝对路径）
+    cache_dir: str = "artifacts/precondition_cache"
+    # 应用包名映射文件
+    packages_path: str = "configs/packages.yaml"
+
+    def resolved_cache_dir(self, repo_root: Path | None = None) -> Path:
+        root = repo_root or REPO_ROOT
+        p = Path(self.cache_dir)
+        if p.is_absolute():
+            return p
+        return (root / p).resolve()
+
+    def resolved_packages_path(self, repo_root: Path | None = None) -> Path:
+        root = repo_root or REPO_ROOT
+        p = Path(self.packages_path)
+        if p.is_absolute():
+            return p
+        return (root / p).resolve()
+
+
+@dataclass
 class AppConfig:
     adb: AdbConfig
     capture: CaptureConfig
     stimulus: StimulusConfig
     tts: TtsConfig
     run: RunConfig
+    precondition: PreconditionConfig
     path: Path
 
 
@@ -238,6 +272,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     stim_raw = _as_dict(raw.get("stimulus"))
     tts_raw = _as_dict(raw.get("tts"))
     run_raw = _as_dict(raw.get("run"))
+    pre_raw = _as_dict(raw.get("precondition"))
 
     adb = AdbConfig(
         host=str(adb_raw.get("host") or ""),
@@ -303,11 +338,80 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             ),
         ),
     )
+    if "enabled" in pre_raw:
+        pre_enabled = bool(pre_raw.get("enabled"))
+    else:
+        pre_enabled = True
+    if "coverage_check" in pre_raw:
+        pre_coverage = bool(pre_raw.get("coverage_check"))
+    else:
+        pre_coverage = True
+    if "reuse_passed" in pre_raw:
+        pre_reuse = bool(pre_raw.get("reuse_passed"))
+    else:
+        pre_reuse = True
+    if "verify_after_replay" in pre_raw:
+        pre_verify = bool(pre_raw.get("verify_after_replay"))
+    else:
+        pre_verify = False
+    precondition = PreconditionConfig(
+        enabled=pre_enabled,
+        coverage_check=pre_coverage,
+        reuse_passed=pre_reuse,
+        verify_after_replay=pre_verify,
+        max_retries=max(
+            1,
+            int(
+                pre_raw.get("max_retries")
+                if pre_raw.get("max_retries") is not None
+                else 3
+            ),
+        ),
+        step_settle_sec=float(
+            pre_raw.get("step_settle_sec")
+            if pre_raw.get("step_settle_sec") is not None
+            else 1.0
+        ),
+        cache_dir=str(pre_raw.get("cache_dir") or "artifacts/precondition_cache"),
+        packages_path=str(pre_raw.get("packages_path") or "configs/packages.yaml"),
+    )
     return AppConfig(
         adb=adb,
         capture=capture,
         stimulus=stimulus,
         tts=tts,
         run=run,
+        precondition=precondition,
         path=cfg_path.resolve(),
     )
+
+
+def load_packages_map(path: Path | str | None = None) -> dict[str, str]:
+    """Load display-name → package map from configs/packages.yaml."""
+    pkg_path = Path(path) if path else (REPO_ROOT / "configs" / "packages.yaml")
+    if not pkg_path.is_file():
+        return {}
+    raw = _load_config_text(pkg_path, pkg_path.read_text(encoding="utf-8")) or {}
+    packages = _as_dict(raw.get("packages"))
+    out: dict[str, str] = {}
+    for k, v in packages.items():
+        name = str(k).strip()
+        pkg = str(v or "").strip()
+        if name and pkg:
+            out[name] = pkg
+    return out
+
+
+def load_object_packages(path: Path | str | None = None) -> dict[str, str]:
+    pkg_path = Path(path) if path else (REPO_ROOT / "configs" / "packages.yaml")
+    if not pkg_path.is_file():
+        return {}
+    raw = _load_config_text(pkg_path, pkg_path.read_text(encoding="utf-8")) or {}
+    objects = _as_dict(raw.get("objects"))
+    out: dict[str, str] = {}
+    for k, v in objects.items():
+        name = str(k).strip()
+        pkg = str(v or "").strip()
+        if name:
+            out[name] = pkg
+    return out

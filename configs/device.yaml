@@ -55,3 +55,16 @@ run:
   # 设备串行执行；抽帧+VL 后台并行（不挡下一条）
   judge_async: true
   judge_parallel: 3
+
+# 预置条件：开跑前覆盖检查；每条正式测前 force-stop→Home→回放 ADB
+precondition:
+  enabled: true
+  coverage_check: true
+  # 已「通过」的步骤直接回放缓存，不再探索校准
+  reuse_passed: true
+  # 回放后再 VL 验一次；false=已通过不用重新测试
+  verify_after_replay: false
+  max_retries: 3
+  step_settle_sec: 1.0
+  cache_dir: artifacts/precondition_cache
+  packages_path: configs/packages.yaml

@@ -1,4 +1,4 @@
-"""Parse TestApp-style Excel/CSV cases (步骤文本 + 预期结果)."""
+"""Parse TestApp-style / v0.11 Excel/CSV cases (语料 + 预置条件 + 预期结果)."""
 from __future__ import annotations
 
 import csv
@@ -23,6 +23,12 @@ class EvalCase:
     steps: list[CaseStep] = field(default_factory=list)
     expected: str = ""
     timeout_sec: float = 120.0
+    # v0.11 fields
+    object_name: str = ""
+    scene: str = ""
+    priority: str = ""
+    exec_notes: str = ""
+    precondition_steps: list[str] = field(default_factory=list)
 
     def exceptions(self) -> list[str]:
         lines = _parse_numbered_lines(self.expected)
@@ -53,6 +59,36 @@ def _parse_numbered_lines(cell_value: Any) -> list[str]:
     return [x for x in lines if x]
 
 
+def _parse_utterance_lines(cell_value: Any) -> list[str]:
+    """Parse 文本语料 / 测试步骤; split numbered lines and '→' multi-utterances."""
+    base = _parse_numbered_lines(cell_value)
+    if not base:
+        return []
+    out: list[str] = []
+    for line in base:
+        parts = [p.strip() for p in re.split(r"\s*→\s*", line) if p.strip()]
+        if parts:
+            out.extend(parts)
+        else:
+            out.append(line)
+    return out
+
+
+def _parse_precondition_steps(cell_value: Any) -> list[str]:
+    """预置条件：按换行拆分；也容忍 ' | ' / '→' 分隔。"""
+    text = _cell_str(cell_value)
+    if not text:
+        return []
+    if "\n" in text or "\r" in text:
+        return _parse_numbered_lines(text)
+    # single-line separators used in some exports
+    if "|" in text:
+        return [p.strip() for p in text.split("|") if p.strip()]
+    if "→" in text:
+        return [p.strip() for p in re.split(r"\s*→\s*", text) if p.strip()]
+    return [text]
+
+
 def _parse_wait_seconds(cell_value: Any, default_sec: float) -> list[float]:
     waits: list[float] = []
     for line in _parse_numbered_lines(cell_value):
@@ -70,12 +106,25 @@ def _header_map(headers: Sequence[Any]) -> dict[str, Any]:
         if not name:
             continue
         n = name.replace(" ", "")
-        if "用例编号" in n or n.lower() in ("id", "caseid", "testid"):
+        n_lower = n.lower()
+        if (
+            "用例编号" in n
+            or n in ("用例ID", "用例Id")
+            or n_lower in ("id", "caseid", "testid", "用例id")
+        ):
             col["id"] = i
         elif "用例名称" in n or "用例标题" in n or n == "标题":
             col["name"] = i
+        elif n == "对象":
+            col["object"] = i
+        elif n == "场景":
+            col["scene"] = i
+        elif "优先级" in n:
+            col["priority"] = i
         elif "预置条件" in n:
-            col["desc"] = i
+            col["precondition"] = i
+        elif "执行说明" in n:
+            col["exec_notes"] = i
         elif "描述" in n and "预期" not in n and "预置" not in n:
             col["desc"] = i
         elif "用例类型" in n or n == "类型":
@@ -85,15 +134,17 @@ def _header_map(headers: Sequence[Any]) -> dict[str, Any]:
             col["steps_cols"].append(i)
         elif "测试步骤" in n:
             col["steps"] = i
-        elif "语料" in n and "预期" not in n:
-            col.setdefault("steps", i)
+        elif "文本语料" in n or ("语料" in n and "预期" not in n):
+            # prefer 文本语料 as utterance source
+            if "steps" not in col or "文本语料" in n:
+                col["steps"] = i
         elif "单步操作等待" in n or "等待时间" in n:
             col["wait"] = i
-        elif "预期结果" in n or n.lower() in ("exceptions", "expections"):
+        elif "预期结果" in n or n_lower in ("exceptions", "expections"):
             col["expected"] = i
         elif "预期" in n and "expected" not in col:
             col["expected"] = i
-        elif "timeout" in n.lower():
+        elif "timeout" in n_lower:
             col["timeout"] = i
     return col
 
@@ -125,6 +176,15 @@ def _rows_from_xlsx(path: Path) -> list[list[Any]]:
     return rows
 
 
+def _col_str(row: list[Any], col: dict[str, Any], key: str) -> str:
+    if key not in col:
+        return ""
+    i = col[key]
+    if i >= len(row):
+        return ""
+    return _cell_str(row[i])
+
+
 def _parse_rows(
     rows: list[list[Any]],
     *,
@@ -136,7 +196,7 @@ def _parse_rows(
         return []
     col = _header_map(rows[0])
     if "id" not in col:
-        raise ValueError(f"缺少「用例编号」列: {source}")
+        raise ValueError(f"缺少「用例编号」或「用例 ID」列: {source}")
 
     cases: list[EvalCase] = []
     for row in rows[1:]:
@@ -147,17 +207,20 @@ def _parse_rows(
         case_id = _cell_str(row[col["id"]] if col["id"] < len(row) else None)
         if not case_id:
             continue
-        name = (
-            _cell_str(row[col["name"]] if "name" in col and col["name"] < len(row) else None)
-            or case_id
-        )
-        desc = _cell_str(row[col["desc"]] if "desc" in col and col["desc"] < len(row) else None)
-        case_type = (
-            _cell_str(row[col["type"]] if "type" in col and col["type"] < len(row) else None)
-            or "GUI"
-        )
-        expected = _cell_str(
-            row[col["expected"]] if "expected" in col and col["expected"] < len(row) else None
+        name = _col_str(row, col, "name") or case_id
+        desc = _col_str(row, col, "desc")
+        exec_notes = _col_str(row, col, "exec_notes")
+        if not desc and exec_notes:
+            desc = exec_notes
+        case_type = _col_str(row, col, "type") or "GUI"
+        expected = _col_str(row, col, "expected")
+        object_name = _col_str(row, col, "object")
+        scene = _col_str(row, col, "scene")
+        priority = _col_str(row, col, "priority")
+        precondition_steps = (
+            _parse_precondition_steps(row[col["precondition"]])
+            if "precondition" in col and col["precondition"] < len(row)
+            else []
         )
 
         timeout_sec = default_timeout_sec
@@ -172,14 +235,14 @@ def _parse_rows(
 
         chat_texts: list[str] = []
         if "steps" in col and col["steps"] < len(row):
-            chat_texts = _parse_numbered_lines(row[col["steps"]])
+            chat_texts = _parse_utterance_lines(row[col["steps"]])
         steps_cols = col.get("steps_cols") or []
         if isinstance(steps_cols, list):
             for idx in steps_cols:
                 if idx < len(row):
                     t = _cell_str(row[idx])
                     if t:
-                        chat_texts.append(t)
+                        chat_texts.extend(_parse_utterance_lines(t))
         if not chat_texts:
             # allow empty steps? skip case without steps
             continue
@@ -204,6 +267,11 @@ def _parse_rows(
                 steps=steps,
                 expected=expected,
                 timeout_sec=timeout_sec,
+                object_name=object_name,
+                scene=scene,
+                priority=priority,
+                exec_notes=exec_notes,
+                precondition_steps=precondition_steps,
             )
         )
     return cases
