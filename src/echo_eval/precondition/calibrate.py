@@ -13,7 +13,10 @@ from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.judge.client import JudgeClientError
 from echo_eval.judge.model_config import ModelConfigError, find_model_config_path, load_vl_eval_config
 from echo_eval.precondition.cache import PreconditionCache, StepCacheEntry
-from echo_eval.precondition.commands import run_cached_step_commands
+from echo_eval.precondition.commands import (
+    run_allowed_commands,
+    run_cached_step_commands,
+)
 from echo_eval.precondition.coverage import build_coverage_report, print_coverage_report
 from echo_eval.precondition.deterministic import plan_deterministic_step
 from echo_eval.precondition.replay import resolve_opened_package
