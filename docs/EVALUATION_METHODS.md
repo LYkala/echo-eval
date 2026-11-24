@@ -235,6 +235,7 @@ run:
 |------|------|
 | [PHASE4_RUN.md](./PHASE4_RUN.md) | Excel/CSV 端到端、预置开关与 CLI |
 | [JUDGE.md](./JUDGE.md) | 正式多帧评判器（E1）与 mock |
+| [FORMAL_VL_JUDGE.md](./FORMAL_VL_JUDGE.md) | **仅正式评测**：方法说明 + 完整 VL 提示词 |
 | [CASE_TIMELINE.md](./CASE_TIMELINE.md) | 录屏 / TTS / Home / 异步评判时间线 |
 | [TESTAPP_JUDGE_MAPPING.md](./TESTAPP_JUDGE_MAPPING.md) | 与 TestApp 评判字段映射 |
 | [WEB_CONSOLE.md](./WEB_CONSOLE.md) | 前端覆盖检查与校准入口 |
