@@ -8,6 +8,7 @@ from echo_eval.cases.excel_cases import EvalCase
 from echo_eval.config import AppConfig, load_object_packages, load_packages_map
 from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.precondition.cache import PreconditionCache, StepCacheEntry
+from echo_eval.precondition.commands import run_allowed_commands
 from echo_eval.precondition.deterministic import plan_deterministic_step, resolve_package
 from echo_eval.precondition.steps import step_cache_key
 
@@ -199,7 +200,10 @@ def prepare_case_precondition(
             flush=True,
         )
         try:
-            logs = _run_shell_commands(adb, commands, allow_any_success=allow_any)
+            if source == "cache" and entry and entry.kind == "vl":
+                logs = run_allowed_commands(adb, commands)
+            else:
+                logs = _run_shell_commands(adb, commands, allow_any_success=allow_any)
             step_log["exec"] = logs
             step_log["ok"] = True
         except AdbError as e:

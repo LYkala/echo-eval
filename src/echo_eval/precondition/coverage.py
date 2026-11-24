@@ -56,7 +56,7 @@ def _effective_status(
     if cached == "failed":
         return "failed", False, "预置步骤已失败（校准用尽），跳过该用例"
     if cached == "stale":
-        return "stale", False, "预置步骤已过期，需重新校准（VL 模块后续提供）"
+        return "stale", False, "预置步骤已过期，请运行 precondition-calibrate 重新校准"
     if cached == "passed" and reuse_passed:
         return "passed", True, "已通过，将回放缓存 ADB"
     if deterministic:
@@ -64,7 +64,11 @@ def _effective_status(
         return ("passed" if cached == "passed" else "untested"), True, "确定性系统 ADB，可直接执行"
     if cached == "passed" and not reuse_passed:
         return "passed", False, "reuse_passed=false，需重新校准"
-    return "untested", False, "未通过/无缓存，点击类步骤待 VL 校准（模块②）"
+    return (
+        "untested",
+        False,
+        "未通过/无缓存，请运行: python -m echo_eval precondition-calibrate --excel <数据集>",
+    )
 
 
 def build_coverage_report(

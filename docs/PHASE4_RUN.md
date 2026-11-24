@@ -81,7 +81,17 @@ precondition:
   packages_path: configs/packages.yaml
 ```
 
-样例数据集：`cases/examples/sample_v011_android_iqiyi_10.csv`（新列名）。点击类预置需后续 VL 校准模块写入缓存；未就绪的用例会跳过并提示。
+样例数据集：`cases/examples/sample_v011_android_iqiyi_10.csv`（新列名）。
+
+点击类预置需先独立校准（写入 `artifacts/precondition_cache/`，跨数据集按「前缀+当前步」复用；默认不自动清理）：
+
+```bat
+set PYTHONPATH=src
+python -m echo_eval precondition-calibrate --excel cases/examples/sample_v011_android_iqiyi_10.csv --backend vl
+python -m echo_eval precondition-calibrate --excel cases/examples/sample_v011_android_iqiyi_10.csv --retry-failed
+```
+
+未就绪或 `failed`（未加 `--retry-failed`）的用例在 `run` 时会跳过并提示。
 
 ## 产物
 

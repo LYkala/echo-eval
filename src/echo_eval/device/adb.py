@@ -219,3 +219,22 @@ class AdbClient:
 
     def tap(self, x: int, y: int, *, timeout: float = 10) -> None:
         self.shell(f"input tap {int(x)} {int(y)}", check=True, timeout=timeout)
+
+    def wm_size(self, *, timeout: float = 10) -> str:
+        """Return raw `wm size` output, e.g. 'Physical size: 1080x2340'."""
+        proc = self.shell("wm size", check=False, timeout=timeout)
+        return (proc.stdout or proc.stderr or "").strip()
+
+    def screencap_png(self, local_path: Path, *, timeout: float = 30) -> Path:
+        """Capture device screen to a local PNG via screencap -p + pull."""
+        local_path = Path(local_path)
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        remote = "/sdcard/echo_eval/pre_screencap.png"
+        self.ensure_remote_dir("/sdcard/echo_eval")
+        self.rm_remote(remote)
+        self.shell(f'screencap -p "{remote}"', check=True, timeout=timeout)
+        self.pull(_remote_arg(remote), local_path)
+        self.rm_remote(remote)
+        if not local_path.is_file() or local_path.stat().st_size <= 0:
+            raise AdbError(f"screencap 后本地文件无效: {local_path}")
+        return local_path
