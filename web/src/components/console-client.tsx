@@ -162,7 +162,7 @@ export function ConsoleClient() {
   const [envProgress, setEnvProgress] = useState("脚本加载后将自动检查");
   const [envError, setEnvError] = useState("");
   const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [datasetId, setDatasetId] = useState("__builtin_v011__");
+  const [datasetId, setDatasetId] = useState("__builtin_v012__");
   const [caseId, setCaseId] = useState("");
   const [backend, setBackend] = useState<"auto" | "vl" | "mock">("mock");
   const [calBackend, setCalBackend] = useState<"auto" | "vl" | "mock">("vl");
@@ -475,7 +475,7 @@ export function ConsoleClient() {
       setMsg(`已删除：${d.name}`);
       await refreshDatasets();
       if (datasetId === d.id) {
-        setDatasetId("__builtin_v011__");
+        setDatasetId("__builtin_v012__");
       }
     } catch (e) {
       setMsg(String(e));
@@ -921,7 +921,7 @@ export function ConsoleClient() {
             </div>
             <p className="text-xs text-muted-foreground">
               使用上方「选用数据集 / 用例编号」。推荐内置{" "}
-              <code>sample_v011_android_iqiyi_10.csv</code>。
+              <code>sample_v012_system_iqiyi_10.csv</code>。
             </p>
             <div className="flex flex-wrap gap-3">
               <Button type="button" variant="outline" disabled={busy} onClick={() => void checkCoverage()}>

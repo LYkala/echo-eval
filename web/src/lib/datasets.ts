@@ -3,7 +3,9 @@ import path from "path";
 import { datasetsRoot, ensureDir, repoRoot, safeId } from "./paths";
 
 export const BUILTIN_DATASET_ID = "__builtin_sample__";
-export const BUILTIN_V011_ID = "__builtin_v011__";
+export const BUILTIN_V012_ID = "__builtin_v012__";
+/** @deprecated use BUILTIN_V012_ID */
+export const BUILTIN_V011_ID = BUILTIN_V012_ID;
 
 export type DatasetMeta = {
   id: string;
@@ -19,8 +21,8 @@ function weatherSamplePath(): string {
   return path.join(repoRoot(), "cases", "examples", "sample_weather.csv");
 }
 
-function v011SamplePath(): string {
-  return path.join(repoRoot(), "cases", "examples", "sample_v011_android_iqiyi_10.csv");
+function v012SamplePath(): string {
+  return path.join(repoRoot(), "cases", "examples", "sample_v012_system_iqiyi_10.csv");
 }
 
 function builtinFromFile(id: string, name: string, filePath: string): DatasetMeta | null {
@@ -45,16 +47,16 @@ export function getBuiltinDataset(): DatasetMeta | null {
   );
 }
 
-export function getBuiltinV011Dataset(): DatasetMeta | null {
+export function getBuiltinV012Dataset(): DatasetMeta | null {
   return builtinFromFile(
-    BUILTIN_V011_ID,
-    "sample_v011_android_iqiyi_10.csv（内置·预置校准）",
-    v011SamplePath()
+    BUILTIN_V012_ID,
+    "sample_v012_system_iqiyi_10.csv（内置·预置校准）",
+    v012SamplePath()
   );
 }
 
 export function listBuiltinDatasets(): DatasetMeta[] {
-  return [getBuiltinV011Dataset(), getBuiltinDataset()].filter(Boolean) as DatasetMeta[];
+  return [getBuiltinV012Dataset(), getBuiltinDataset()].filter(Boolean) as DatasetMeta[];
 }
 
 export function listDatasets(): DatasetMeta[] {
@@ -81,7 +83,7 @@ export function listDatasets(): DatasetMeta[] {
 
 export function getDataset(id: string): DatasetMeta | null {
   if (id === BUILTIN_DATASET_ID) return getBuiltinDataset();
-  if (id === BUILTIN_V011_ID) return getBuiltinV011Dataset();
+  if (id === BUILTIN_V012_ID || id === "__builtin_v011__") return getBuiltinV012Dataset();
   const sid = safeId(id);
   const metaPath = path.join(datasetsRoot(), sid, "meta.json");
   if (!fs.existsSync(metaPath)) return null;
@@ -94,7 +96,7 @@ export function getDataset(id: string): DatasetMeta | null {
 }
 
 export function deleteDataset(id: string): void {
-  if (id === BUILTIN_DATASET_ID || id === BUILTIN_V011_ID) {
+  if (id === BUILTIN_DATASET_ID || id === BUILTIN_V012_ID || id === "__builtin_v011__") {
     throw new Error("内置样例不可删除");
   }
   const sid = safeId(id);
@@ -114,7 +116,7 @@ export function resolveDownload(id: string): { meta: DatasetMeta; absolutePath: 
   }
   // Guard: only serve files under datasets root or builtin sample paths.
   const root = path.resolve(datasetsRoot());
-  const allowedBuiltins = [weatherSamplePath(), v011SamplePath()].map((p) => path.resolve(p));
+  const allowedBuiltins = [weatherSamplePath(), v012SamplePath()].map((p) => path.resolve(p));
   const allowed =
     allowedBuiltins.includes(absolutePath) ||
     absolutePath === path.resolve(root) ||

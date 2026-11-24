@@ -7,20 +7,34 @@ from echo_eval.precondition.deterministic import plan_deterministic_step
 from echo_eval.precondition.steps import step_cache_key
 
 
-def test_load_v011_sample_csv():
-    path = Path("cases/examples/sample_v011_android_iqiyi_10.csv")
-    cases = load_cases(path, default_wait_sec=3)
+SAMPLE = Path("cases/examples/sample_v012_system_iqiyi_10.csv")
+
+
+def test_load_v012_sample_csv():
+    cases = load_cases(SAMPLE, default_wait_sec=3)
     assert len(cases) == 10
     c0 = cases[0]
     assert c0.case_id == "SYS2-001"
-    assert c0.object_name == "Android 系统"
-    assert c0.precondition_steps[0] == "打开网易云音乐"
-    assert "音量调到50%" in c0.precondition_steps
+    assert c0.object_name == "系统操控"
+    assert c0.precondition_steps == ["音量调到50%"]
     assert len(c0.steps) == 1
     assert c0.steps[0].text == "增大音量"
     iq = next(c for c in cases if c.case_id == "IQ-SCR-071")
     assert iq.precondition_steps == ["打开爱奇艺", "点击筛选", "点击热播榜"]
     assert iq.steps[0].text == "点击电影"
+    ids = [c.case_id for c in cases]
+    assert ids == [
+        "SYS2-001",
+        "SYS2-032",
+        "SYS2-009",
+        "SYS2-054",
+        "SYS2-058-02",
+        "IQ-SCR-001",
+        "IQ-SCR-026",
+        "IQ-SCR-071",
+        "IQ-SCR-093",
+        "IQ-SCR-111",
+    ]
 
 
 def test_utterance_arrow_split(tmp_path: Path):
@@ -63,9 +77,7 @@ def test_deterministic_open_and_volume():
 
 
 def test_coverage_skips_gui_without_cache(tmp_path: Path):
-    path = Path("cases/examples/sample_v011_android_iqiyi_10.csv")
-    cases = load_cases(path)
-    # Use an isolated config so local device.yaml (or stash conflict markers) cannot break CI/local runs.
+    cases = load_cases(SAMPLE)
     cfg_path = tmp_path / "device.yaml"
     cfg_path.write_text(
         """
@@ -84,10 +96,13 @@ precondition:
     )
     cfg = load_config(cfg_path)
     report = build_coverage_report(cases, cfg=cfg.precondition)
-    # Cases with only deterministic steps can be ready (e.g. 回桌面 / 仅打开爱奇艺)
     ready_ids = {c.case_id for c in report.cases if c.ready}
     skip_ids = report.skip_case_ids
-    assert "SYS2-058-02" in ready_ids  # 回桌面 only
-    assert "IQ-SCR-001" in ready_ids  # 打开爱奇艺 only
-    assert "IQ-SCR-026" in skip_ids  # needs 点击筛选
-    assert "SYS2-001" in skip_ids  # needs 点击歌单/歌曲
+    # v0.12: many system steps are deterministic-only
+    assert "SYS2-001" in ready_ids  # 音量调到50%
+    assert "SYS2-032" in ready_ids  # 亮度调到50%
+    assert "SYS2-009" in ready_ids  # 静音
+    assert "SYS2-058-02" in ready_ids  # 回桌面
+    assert "IQ-SCR-001" in ready_ids  # 打开爱奇艺
+    assert "SYS2-054" in skip_ids  # 打开设置 → 点击显示
+    assert "IQ-SCR-026" in skip_ids  # 点击筛选

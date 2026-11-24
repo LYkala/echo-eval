@@ -20,6 +20,8 @@ packages:
 # 「对象」列 → 默认关联包（用于 force-stop 上一条）
 objects:
   爱奇艺: com.qiyi.video
-  Android 系统: ""   # 按预置里打开的 App 推断
+  系统操控: ""   # 按预置里打开的 App 推断
+  系统设置: com.android.settings
+  Android 系统: ""   # 兼容旧表
   网易云音乐: com.netease.cloudmusic
   哔哩哔哩: tv.danmaku.bili

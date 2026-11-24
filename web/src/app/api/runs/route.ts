@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { BUILTIN_DATASET_ID, BUILTIN_V011_ID, getDataset } from "@/lib/datasets";
+import { BUILTIN_DATASET_ID, BUILTIN_V012_ID, getDataset } from "@/lib/datasets";
 import { createAndStartJob, ensureDemoJob, listJobs, readJob } from "@/lib/jobs";
 import { runEnvCheck } from "@/lib/env-check";
 
@@ -31,7 +31,8 @@ export async function POST(req: Request) {
 
   if (
     datasetId !== BUILTIN_DATASET_ID &&
-    datasetId !== BUILTIN_V011_ID &&
+    datasetId !== BUILTIN_V012_ID &&
+    datasetId !== "__builtin_v011__" &&
     !getDataset(datasetId)
   ) {
     return NextResponse.json({ error: "数据集不存在" }, { status: 404 });
