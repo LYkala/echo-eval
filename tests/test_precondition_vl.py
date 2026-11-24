@@ -79,6 +79,59 @@ def test_run_cached_splits_semicolon_chain():
     ]
 
 
+def test_run_cached_volume_allow_any_stops_on_first_success():
+    from echo_eval.device.adb import AdbError
+
+    class FakeAdb:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def shell(self, cmd: str, *, check: bool = True, timeout: float = 30):
+            self.calls.append(cmd)
+            if cmd.startswith("media "):
+                raise AdbError("media missing")
+            return None
+
+    adb = FakeAdb()
+    logs = run_cached_step_commands(
+        adb,  # type: ignore[arg-type]
+        [
+            "cmd media_session volume --stream 3 --set 8",
+            "media volume --stream 3 --set 8",
+        ],
+        kind="volume",
+    )
+    assert adb.calls == ["cmd media_session volume --stream 3 --set 8"]
+    assert logs == [{"cmd": "cmd media_session volume --stream 3 --set 8", "ok": True}]
+
+
+def test_run_cached_volume_tries_fallback_when_first_fails():
+    from echo_eval.device.adb import AdbError
+
+    class FakeAdb:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def shell(self, cmd: str, *, check: bool = True, timeout: float = 30):
+            self.calls.append(cmd)
+            if "media_session" in cmd:
+                raise AdbError("media_session missing")
+            return None
+
+    adb = FakeAdb()
+    logs = run_cached_step_commands(
+        adb,  # type: ignore[arg-type]
+        [
+            "cmd media_session volume --stream 3 --set 0",
+            "media volume --stream 3 --set 0",
+        ],
+        kind="mute",
+    )
+    assert len(adb.calls) == 2
+    assert logs[-1]["ok"] is True
+    assert logs[-1]["cmd"].startswith("media volume")
+
+
 def test_run_cached_vl_still_rejects_am_start():
     class FakeAdb:
         def shell(self, cmd: str, *, check: bool = True, timeout: float = 30):

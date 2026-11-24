@@ -95,24 +95,49 @@ def run_cached_step_commands(
     """Execute commands from a passed cache entry without rewriting them.
 
     - kind=vl: input whitelist only
-    - other kinds (launch/volume/...): run shell commands as stored, so manual
-      edits like am start / sleep / input tap are honored
+    - kind=volume/mute: try fallbacks until one succeeds (same as calibrate)
+    - other kinds (launch/brightness/...): run all commands in order
 
     Prefer listing steps as separate array items. A single string with
     ``;`` / ``&&`` is split and executed sequentially for adb compatibility.
     """
-    if (kind or "").strip().lower() == "vl":
+    kind_l = (kind or "").strip().lower()
+    if kind_l == "vl":
         return run_allowed_commands(adb, commands)
-    logs: list[dict] = []
+
+    flat: list[str] = []
     for raw in commands:
-        for cmd in _split_shell_chain(str(raw)):
-            timeout = _shell_timeout(cmd)
-            print(
-                f"[echo-eval]   exec cache cmd ({timeout:g}s): {cmd}",
-                flush=True,
-            )
+        flat.extend(_split_shell_chain(str(raw)))
+    if not flat:
+        raise AdbError("缓存中没有可执行命令")
+
+    # volume/mute cache stores alternative backends; one success is enough.
+    allow_any = kind_l in ("volume", "mute")
+    logs: list[dict] = []
+    last_err: AdbError | None = None
+    any_ok = False
+    for cmd in flat:
+        timeout = _shell_timeout(cmd)
+        print(
+            f"[echo-eval]   exec cache cmd ({timeout:g}s"
+            f"{', allow_any' if allow_any else ''}): {cmd}",
+            flush=True,
+        )
+        try:
             adb.shell(cmd, check=True, timeout=timeout)
             logs.append({"cmd": cmd, "ok": True})
-    if not logs:
-        raise AdbError("缓存中没有可执行命令")
+            any_ok = True
+            if allow_any:
+                return logs
+        except AdbError as e:
+            last_err = e
+            logs.append({"cmd": cmd, "ok": False, "error": str(e)})
+            print(f"[echo-eval][warn] cache cmd failed: {e}", flush=True)
+            if not allow_any:
+                raise
+            continue
+    if allow_any and not any_ok and last_err:
+        raise AdbError(f"音量/静音兜底命令均失败: {last_err}") from last_err
+    if not any_ok and last_err:
+        raise last_err
     return logs
