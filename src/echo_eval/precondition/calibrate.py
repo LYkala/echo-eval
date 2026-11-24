@@ -543,7 +543,8 @@ def calibrate_dataset(
                 abort_case = True
                 break
 
-            # GUI VL calibrate
+            # GUI VL calibrate: settle runs once inside calibrate_gui_step
+            # (exec → wait → after shot → verify). Do not sleep again here.
             result = calibrate_gui_step(
                 adb=adb,
                 cache=cache,
@@ -565,12 +566,6 @@ def calibrate_dataset(
                 )
                 abort_case = True
                 break
-            if settle:
-                print(
-                    f"[echo-eval]   settle {settle:g}s after step={text!r}",
-                    flush=True,
-                )
-                time.sleep(settle)
             prefix.append(text)
 
         previous_package = resolve_opened_package(
