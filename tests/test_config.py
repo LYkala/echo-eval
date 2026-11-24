@@ -46,7 +46,6 @@ run:
     assert cfg.run.judge_async is False
     assert cfg.run.judge_parallel == 2
     assert cfg.precondition.enabled is True
-    assert cfg.precondition.reuse_passed is True
     assert cfg.precondition.verify_after_replay is False
 
 
@@ -85,15 +84,20 @@ capture: {}
 precondition:
   enabled: false
   coverage_check: false
-  reuse_passed: false
   verify_after_replay: true
   max_retries: 5
+  step_settle_sec: 1.5
+  step_settle_overrides:
+    打开爱奇艺: 8
+    打开设置: 2
 """,
         encoding="utf-8",
     )
     cfg = load_config(p)
     assert cfg.precondition.enabled is False
     assert cfg.precondition.coverage_check is False
-    assert cfg.precondition.reuse_passed is False
     assert cfg.precondition.verify_after_replay is True
     assert cfg.precondition.max_retries == 5
+    assert cfg.precondition.step_settle_sec == 1.5
+    assert cfg.precondition.step_settle_overrides["打开爱奇艺"] == 8.0
+    assert cfg.precondition.step_settle_overrides["打开设置"] == 2.0

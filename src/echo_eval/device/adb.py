@@ -219,3 +219,110 @@ class AdbClient:
 
     def tap(self, x: int, y: int, *, timeout: float = 10) -> None:
         self.shell(f"input tap {int(x)} {int(y)}", check=True, timeout=timeout)
+
+    def wm_size(self, *, timeout: float = 10) -> str:
+        """Return raw `wm size` output, e.g. 'Physical size: 1080x2340'."""
+        proc = self.shell("wm size", check=False, timeout=timeout)
+        return (proc.stdout or proc.stderr or "").strip()
+
+    def screencap_png(self, local_path: Path, *, timeout: float = 30) -> Path:
+        """Capture device screen to a local PNG via screencap -p + pull."""
+        local_path = Path(local_path)
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        remote = "/sdcard/echo_eval/pre_screencap.png"
+        self.ensure_remote_dir("/sdcard/echo_eval")
+        self.rm_remote(remote)
+        self.shell(f'screencap -p "{remote}"', check=True, timeout=timeout)
+        self.pull(_remote_arg(remote), local_path)
+        self.rm_remote(remote)
+        if not local_path.is_file() or local_path.stat().st_size <= 0:
+            raise AdbError(f"screencap 后本地文件无效: {local_path}")
+        return local_path
+
+    def _shell_ok_text(
+        self, remote_cmd: str, *, timeout: float = 30
+    ) -> subprocess.CompletedProcess[str]:
+        """Run shell; treat non-zero or Error/Exception in output as failure."""
+        proc = self.shell(remote_cmd, check=False, timeout=timeout)
+        out = f"{proc.stdout or ''}{proc.stderr or ''}"
+        low = out.lower()
+        bad = proc.returncode != 0 or "error:" in low or "exception" in low
+        # monkey often prints "// Monkey aborted" on failure
+        if "monkey aborted" in low or "no activities found" in low:
+            bad = True
+        if bad:
+            raise AdbError(
+                f"adb 失败 ({proc.returncode}): {self.adb_bin} -s {self.serial} "
+                f"shell {remote_cmd}\n{(out or '').strip()}"
+            )
+        return proc
+
+    def launch_package(self, package: str, *, prefer_settings_intent: bool = False) -> str:
+        """
+        Launch an app by package. Prefer am start; monkey is last resort
+        (many OEMs return monkey exit 252 even for installed apps).
+        Returns the successful command string.
+        """
+        pkg = (package or "").strip()
+        if not pkg:
+            raise AdbError("launch_package: package 为空")
+
+        attempts: list[str] = []
+        if prefer_settings_intent or pkg == "com.android.settings":
+            attempts.append("am start -a android.settings.SETTINGS")
+        attempts.append(
+            "am start -a android.intent.action.MAIN "
+            f"-c android.intent.category.LAUNCHER -p {pkg}"
+        )
+
+        errors: list[str] = []
+        for cmd in attempts:
+            try:
+                self._shell_ok_text(cmd, timeout=30)
+                return cmd
+            except AdbError as e:
+                errors.append(str(e))
+
+        # Resolve launcher activity → am start -n
+        try:
+            proc = self.shell(
+                f"cmd package resolve-activity --brief "
+                f"-c android.intent.category.LAUNCHER {pkg}",
+                check=False,
+                timeout=20,
+            )
+            lines = [
+                ln.strip()
+                for ln in (proc.stdout or "").splitlines()
+                if ln.strip() and not ln.strip().lower().startswith("priority=")
+            ]
+            component = ""
+            for ln in reversed(lines):
+                # e.g. com.android.settings/.Settings
+                if "/" in ln and not ln.startswith("name="):
+                    component = ln.split()[-1]
+                    break
+            if component and "/" in component:
+                cmd = f"am start -n {component}"
+                self._shell_ok_text(cmd, timeout=30)
+                return cmd
+            errors.append(f"无法解析启动 Activity: {(proc.stdout or '').strip()[:200]}")
+        except AdbError as e:
+            errors.append(str(e))
+
+        # Last resort: monkey
+        monkey = (
+            f"monkey --pct-syskeys 0 -p {pkg} -c android.intent.category.LAUNCHER 1"
+        )
+        try:
+            self._shell_ok_text(monkey, timeout=45)
+            return monkey
+        except AdbError as e:
+            errors.append(str(e))
+
+        hint = (
+            f"无法启动包 {pkg}。请在设备上确认已安装，并用 "
+            f"`adb shell pm list packages | findstr /i <关键词>` 核对包名，"
+            f"然后改 configs/packages.yaml。"
+        )
+        raise AdbError(hint + "\n" + "\n---\n".join(errors[:3]))

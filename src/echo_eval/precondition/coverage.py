@@ -50,21 +50,32 @@ def _effective_status(
     cached: StepStatus,
     *,
     deterministic: bool,
-    reuse_passed: bool,
+    has_commands: bool = False,
 ) -> tuple[StepStatus, bool, str]:
     """Return (status, ready, reason)."""
     if cached == "failed":
         return "failed", False, "预置步骤已失败（校准用尽），跳过该用例"
     if cached == "stale":
-        return "stale", False, "预置步骤已过期，需重新校准（VL 模块后续提供）"
-    if cached == "passed" and reuse_passed:
-        return "passed", True, "已通过，将回放缓存 ADB"
+        return "stale", False, "预置步骤已过期，请运行 precondition-calibrate 重新校准"
+    if cached == "passed":
+        # Run path only replays when adb_commands is non-empty; keep coverage aligned.
+        if has_commands:
+            return "passed", True, "已通过，将回放缓存 ADB"
+        if deterministic:
+            return "passed", True, "已通过（无命令，将走确定性 ADB）"
+        return (
+            "passed",
+            False,
+            "缓存 status=passed 但 adb_commands 为空，无法回放，请重新校准",
+        )
     if deterministic:
         # System ADB steps can run without prior VL pass
-        return ("passed" if cached == "passed" else "untested"), True, "确定性系统 ADB，可直接执行"
-    if cached == "passed" and not reuse_passed:
-        return "passed", False, "reuse_passed=false，需重新校准"
-    return "untested", False, "未通过/无缓存，点击类步骤待 VL 校准（模块②）"
+        return "untested", True, "确定性系统 ADB，可直接执行"
+    return (
+        "untested",
+        False,
+        "未通过/无缓存，请运行: python -m echo_eval precondition-calibrate --excel <数据集>",
+    )
 
 
 def build_coverage_report(
@@ -93,11 +104,13 @@ def build_coverage_report(
             key = step_cache_key(prefix, text)
             plan = plan_deterministic_step(text, packages=packages)
             deterministic = plan is not None
-            cached_status = cache.status_for(key)
+            entry = cache.get(key)
+            cached_status = entry.status if entry else "untested"
+            has_commands = bool(entry and entry.adb_commands)
             status, ready, reason = _effective_status(
                 cached_status,
                 deterministic=deterministic,
-                reuse_passed=bool(cfg.reuse_passed),
+                has_commands=has_commands,
             )
             if deterministic:
                 counts["deterministic"] += 1
@@ -126,8 +139,14 @@ def build_coverage_report(
     return report
 
 
-def print_coverage_report(report: CoverageReport) -> None:
+def print_coverage_report(
+    report: CoverageReport,
+    *,
+    cache_path: str | None = None,
+) -> None:
     print("[echo-eval] ===== 预置条件覆盖检查 =====", flush=True)
+    if cache_path:
+        print(f"[echo-eval] cache: {cache_path}", flush=True)
     c = report.counts
     print(
         f"[echo-eval] 步骤统计: passed={c.get('passed', 0)} "

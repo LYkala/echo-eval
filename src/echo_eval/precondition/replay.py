@@ -8,8 +8,9 @@ from echo_eval.cases.excel_cases import EvalCase
 from echo_eval.config import AppConfig, load_object_packages, load_packages_map
 from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.precondition.cache import PreconditionCache, StepCacheEntry
+from echo_eval.precondition.commands import run_cached_step_commands
 from echo_eval.precondition.deterministic import plan_deterministic_step, resolve_package
-from echo_eval.precondition.steps import step_cache_key
+from echo_eval.precondition.steps import resolve_step_settle_sec, step_cache_key
 
 
 class PreconditionSkip(RuntimeError):
@@ -151,12 +152,7 @@ def prepare_case_precondition(
         allow_any = False
         package = ""
 
-        if (
-            entry
-            and entry.status == "passed"
-            and pre.reuse_passed
-            and entry.adb_commands
-        ):
+        if entry and entry.status == "passed" and entry.adb_commands:
             commands = list(entry.adb_commands)
             source = "cache"
             package = entry.package or ""
@@ -165,7 +161,7 @@ def prepare_case_precondition(
             commands = list(plan.commands)
             source = f"deterministic:{plan.kind}"
             package = plan.package
-            allow_any = plan.kind in ("volume", "mute")
+            allow_any = bool(plan.any_success) or plan.kind in ("volume", "mute")
             # Persist deterministic success as passed for coverage reuse
             cache.upsert(
                 StepCacheEntry(
@@ -199,7 +195,36 @@ def prepare_case_precondition(
             flush=True,
         )
         try:
-            logs = _run_shell_commands(adb, commands, allow_any_success=allow_any)
+            if source == "cache" and entry is not None:
+                # Honor cached commands as-is (manual launch edits included).
+                # Do not call launch_package or upsert — that would overwrite.
+                logs = run_cached_step_commands(
+                    adb, commands, kind=str(entry.kind or "")
+                )
+                step_log["commands"] = list(commands)
+            elif plan is not None and plan.kind == "launch" and plan.package:
+                used = adb.launch_package(
+                    plan.package,
+                    prefer_settings_intent=bool(plan.prefer_settings_intent),
+                )
+                logs = [{"cmd": used, "ok": True}]
+                step_log["commands"] = [used]
+                cache.upsert(
+                    StepCacheEntry(
+                        key=key,
+                        step_text=text,
+                        prefix=list(prefix),
+                        status="passed",
+                        adb_commands=[used],
+                        kind="launch",
+                        package=plan.package,
+                        judge_notes=plan.notes,
+                        case_ids=[case.case_id],
+                    )
+                )
+                cache.save()
+            else:
+                logs = _run_shell_commands(adb, commands, allow_any_success=allow_any)
             step_log["exec"] = logs
             step_log["ok"] = True
         except AdbError as e:
@@ -210,8 +235,17 @@ def prepare_case_precondition(
 
         if package:
             opened = package
-        settle = max(0.0, float(pre.step_settle_sec))
+        settle = resolve_step_settle_sec(
+            text,
+            default_sec=pre.step_settle_sec,
+            overrides=pre.step_settle_overrides,
+        )
+        step_log["settle_sec"] = settle
         if settle:
+            print(
+                f"[echo-eval]   settle {settle:g}s after step={text!r}",
+                flush=True,
+            )
             time.sleep(settle)
 
         # Optional VL verify after replay — deferred to module ②

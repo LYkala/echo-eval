@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
-import { datasetsRoot, ensureDir, repoRoot, safeId } from "@/lib/paths";
+import { BUILTIN_DATASET_ID, BUILTIN_V012_ID, getDataset } from "@/lib/datasets";
 import { createAndStartJob, ensureDemoJob, listJobs, readJob } from "@/lib/jobs";
 import { runEnvCheck } from "@/lib/env-check";
 
@@ -26,37 +24,18 @@ export async function POST(req: Request) {
     return NextResponse.json(job);
   }
 
-  let datasetId = body.datasetId;
+  const datasetId = body.datasetId;
   if (!datasetId) {
     return NextResponse.json({ error: "缺少 datasetId" }, { status: 400 });
   }
 
-  // Materialize builtin sample into datasets store if needed
-  if (datasetId === "__builtin_sample__") {
-    const sample = path.join(repoRoot(), "cases", "examples", "sample_weather.csv");
-    const id = "builtin_sample_weather";
-    const dir = path.join(datasetsRoot(), id);
-    ensureDir(dir);
-    const dest = path.join(dir, "dataset.csv");
-    if (!fs.existsSync(dest)) {
-      fs.copyFileSync(sample, dest);
-      fs.writeFileSync(
-        path.join(dir, "meta.json"),
-        JSON.stringify(
-          {
-            id,
-            name: "sample_weather.csv",
-            filename: "dataset.csv",
-            storedPath: dest,
-            uploadedAt: new Date().toISOString(),
-            size: fs.statSync(dest).size,
-          },
-          null,
-          2
-        )
-      );
-    }
-    datasetId = id;
+  if (
+    datasetId !== BUILTIN_DATASET_ID &&
+    datasetId !== BUILTIN_V012_ID &&
+    datasetId !== "__builtin_v011__" &&
+    !getDataset(datasetId)
+  ) {
+    return NextResponse.json({ error: "数据集不存在" }, { status: 404 });
   }
 
   const env = runEnvCheck();
@@ -80,13 +59,13 @@ export async function POST(req: Request) {
 
   try {
     const job = createAndStartJob({
-      datasetId: safeId(datasetId),
+      datasetId,
       caseId: body.caseId || null,
       backend,
     });
     return NextResponse.json(job);
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    return NextResponse.json({ error: String(e) }, { status: 409 });
   }
 }
 

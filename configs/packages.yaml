@@ -1,5 +1,10 @@
 # 应用显示名 / 预置条件里的「打开 xxx」→ Android 包名
 # 可按真机安装包名修改；未列出的应用无法走确定性 am start / force-stop。
+#
+# 核对包名（Windows Git Bash）:
+#   adb shell pm list packages | grep -i qiyi
+#   adb shell pm list packages | grep -i bilibili
+#   adb shell pm list packages | grep -i cloudmusic
 
 packages:
   网易云音乐: com.netease.cloudmusic
@@ -7,7 +12,7 @@ packages:
   爱奇艺: com.qiyi.video
   设置: com.android.settings
   喜马拉雅: com.ximalaya.ting.android
-  # 评测集占位名：请改成实验室真实包名
+  # 评测集占位名：请改成实验室真实包名（占位包未安装时「打开【测试应用】」会失败）
   测试应用: com.echo.eval.testapp
   播放器测试应用: com.echo.eval.player
   测试聊天 App: com.echo.eval.chat
@@ -15,6 +20,8 @@ packages:
 # 「对象」列 → 默认关联包（用于 force-stop 上一条）
 objects:
   爱奇艺: com.qiyi.video
-  Android 系统: ""   # 按预置里打开的 App 推断
+  系统操控: ""   # 按预置里打开的 App 推断
+  系统设置: com.android.settings
+  Android 系统: ""   # 兼容旧表
   网易云音乐: com.netease.cloudmusic
   哔哩哔哩: tv.danmaku.bili

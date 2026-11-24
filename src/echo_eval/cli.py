@@ -16,6 +16,7 @@ from echo_eval.config import DEFAULT_CONFIG_PATH, REPO_ROOT, load_config
 from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.judge.model_config import find_model_config_path
 from echo_eval.judge.service import JudgeError, judge_images, resolve_backend
+from echo_eval.precondition import CalibrateError, calibrate_dataset
 from echo_eval.runner.excel_runner import run_excel
 from echo_eval.stimulus.audio import AudioPlayError, _resolve_ffplay
 from echo_eval.stimulus.tts import TtsError
@@ -177,6 +178,45 @@ def cmd_record(args: argparse.Namespace) -> int:
 def cmd_spike(args: argparse.Namespace) -> int:
     """End-to-end puncture: connect + record with host audio playback."""
     return _run_record(args, force_play=True)
+
+
+def cmd_precondition_calibrate(args: argparse.Namespace) -> int:
+    print(
+        f"precondition-calibrate excel={args.excel} case_id={args.case_id or '*'} "
+        f"backend={args.backend} retry_failed={args.retry_failed} force={args.force}"
+    )
+    try:
+        summary = calibrate_dataset(
+            args.excel,
+            config_path=args.config,
+            case_id=args.case_id,
+            backend=args.backend,
+            retry_failed=bool(args.retry_failed),
+            force=bool(args.force),
+        )
+    except (FileNotFoundError, ValueError, ImportError, AdbError, CalibrateError) as e:
+        print(f"precondition-calibrate: FAIL\n{e}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"precondition-calibrate: FAIL\n{e}", file=sys.stderr)
+        return 2
+
+    for r in summary.results:
+        extra = f" err={r.error}" if r.error else ""
+        cmds = f" cmds={r.commands}" if r.commands else ""
+        print(
+            f"[{r.status.upper()}] {r.case_id} step={r.step_text!r} "
+            f"attempts={r.attempts}{cmds}{extra}"
+        )
+    print(
+        f"summary: passed={summary.passed_steps} failed={summary.failed_steps} "
+        f"skipped={summary.skipped_steps} backend={summary.backend}"
+    )
+    if summary.failed_steps:
+        print("precondition-calibrate: FAIL")
+        return 1
+    print("precondition-calibrate: OK")
+    return 0
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -364,6 +404,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="不写 evaluation.json（仅打印）",
     )
     p_judge.set_defaults(func=cmd_judge)
+
+    p_cal = sub.add_parser(
+        "precondition-calibrate",
+        help="独立校准预置条件（截屏+VL→ADB，写入缓存；正式 run 前使用）",
+    )
+    _add_config_arg(p_cal)
+    p_cal.add_argument(
+        "--excel",
+        required=True,
+        help="用例表（.xlsx/.csv），含「预置条件」列",
+    )
+    p_cal.add_argument("--case-id", default=None, help="只校准指定用例")
+    p_cal.add_argument(
+        "--backend",
+        choices=["auto", "vl", "mock"],
+        default="auto",
+        help="auto=有 model.yaml 用 vl，否则 mock（mock 仅联调，勿用于真机验收）",
+    )
+    p_cal.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="强制重试缓存中状态为 failed 的步骤",
+    )
+    p_cal.add_argument(
+        "--force",
+        action="store_true",
+        help="重训已 pass 的步骤（默认只处理未全部 pass 的用例，前缀 pass 仅回放 ADB）",
+    )
+    p_cal.set_defaults(func=cmd_precondition_calibrate)
 
     p_run = sub.add_parser(
         "run",

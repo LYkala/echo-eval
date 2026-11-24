@@ -11,6 +11,10 @@ class DeterministicPlan:
     kind: str  # home | launch | force_stop | volume | brightness | mute
     package: str = ""
     notes: str = ""
+    # If True, stop after the first successful command (fallbacks).
+    any_success: bool = False
+    # For kind=launch: use AdbClient.launch_package instead of raw commands.
+    prefer_settings_intent: bool = False
 
 
 def _pct_to_media_index(pct: float, *, max_index: int = 15) -> int:
@@ -58,7 +62,6 @@ def plan_deterministic_step(
         )
 
     if s in ("取消静音", "解除静音"):
-        # Best-effort: unmute media stream (OEM-dependent).
         return DeterministicPlan(
             commands=[
                 "cmd media_session volume --stream 3 --adj raise",
@@ -66,6 +69,7 @@ def plan_deterministic_step(
             ],
             kind="mute",
             notes="尝试取消静音（多命令择一成功即可）",
+            any_success=True,
         )
 
     if s in ("静音", "开启静音"):
@@ -76,6 +80,7 @@ def plan_deterministic_step(
             ],
             kind="mute",
             notes="媒体音量置 0",
+            any_success=True,
         )
 
     m = re.match(r"^音量调到\s*(\d+)\s*%?\s*$", s)
@@ -89,6 +94,7 @@ def plan_deterministic_step(
             ],
             kind="volume",
             notes=f"媒体音量约 {pct:g}% → index {idx}",
+            any_success=True,
         )
 
     m = re.match(r"^亮度调到\s*(\d+)\s*%?\s*$", s)
@@ -113,13 +119,22 @@ def plan_deterministic_step(
 
     pkg = resolve_package(s, packages)
     if pkg:
+        app_name = ""
+        m_open = re.match(r"^打开\s*(.+)$", s)
+        if m_open:
+            app_name = m_open.group(1).strip().strip("【】[]")
+        prefer_settings = app_name in ("设置", "系统设置") or pkg == "com.android.settings"
+        # Placeholder command list for cache / logging; runtime uses launch_package.
         return DeterministicPlan(
             commands=[
-                f"monkey -p {pkg} -c android.intent.category.LAUNCHER 1",
+                f"am start -a android.intent.action.MAIN "
+                f"-c android.intent.category.LAUNCHER -p {pkg}"
             ],
             kind="launch",
             package=pkg,
-            notes=f"启动 {pkg}",
+            notes=f"启动 {pkg}（am start / resolve-activity / monkey 兜底）",
+            any_success=True,
+            prefer_settings_intent=prefer_settings,
         )
 
     return None

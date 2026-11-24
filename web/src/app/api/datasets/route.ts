@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { getBuiltinDataset, listDatasets, saveUpload } from "@/lib/datasets";
+import { listBuiltinDatasets, listDatasets, saveUpload } from "@/lib/datasets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const builtin = getBuiltinDataset();
+  const builtins = listBuiltinDatasets();
   const items = listDatasets();
-  return NextResponse.json({ items: builtin ? [builtin, ...items] : items });
+  return NextResponse.json({ items: [...builtins, ...items] });
 }
 
 export async function POST(req: Request) {

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -217,13 +217,14 @@ class PreconditionConfig:
 
     enabled: bool = True
     coverage_check: bool = True
-    # 已「通过」的步骤直接回放缓存，不再探索校准
-    reuse_passed: bool = True
     # 回放后再 VL 验一次；false = 已通过不再重新测试
     verify_after_replay: bool = False
+    # 已 pass 的步骤一律回放 cache ADB（校准/正式 run）；重训用 CLI --force
     max_retries: int = 3
-    # 逐步回放后的短等待
+    # 逐步回放后的默认等待（秒）；可被 step_settle_overrides 按步骤文案覆盖
     step_settle_sec: float = 1.0
+    # 按预置步骤文案差异化等待，例如开 App 后等广告：{"打开爱奇艺": 8}
+    step_settle_overrides: dict[str, float] = field(default_factory=dict)
     # 缓存目录（相对仓库根或绝对路径）
     cache_dir: str = "artifacts/precondition_cache"
     # 应用包名映射文件
@@ -346,10 +347,6 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         pre_coverage = bool(pre_raw.get("coverage_check"))
     else:
         pre_coverage = True
-    if "reuse_passed" in pre_raw:
-        pre_reuse = bool(pre_raw.get("reuse_passed"))
-    else:
-        pre_reuse = True
     if "verify_after_replay" in pre_raw:
         pre_verify = bool(pre_raw.get("verify_after_replay"))
     else:
@@ -357,7 +354,6 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     precondition = PreconditionConfig(
         enabled=pre_enabled,
         coverage_check=pre_coverage,
-        reuse_passed=pre_reuse,
         verify_after_replay=pre_verify,
         max_retries=max(
             1,
@@ -372,6 +368,9 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             if pre_raw.get("step_settle_sec") is not None
             else 1.0
         ),
+        step_settle_overrides=_parse_settle_overrides(
+            pre_raw.get("step_settle_overrides")
+        ),
         cache_dir=str(pre_raw.get("cache_dir") or "artifacts/precondition_cache"),
         packages_path=str(pre_raw.get("packages_path") or "configs/packages.yaml"),
     )
@@ -384,6 +383,22 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         precondition=precondition,
         path=cfg_path.resolve(),
     )
+
+
+def _parse_settle_overrides(raw: Any) -> dict[str, float]:
+    """Parse precondition.step_settle_overrides map from YAML."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, float] = {}
+    for k, v in raw.items():
+        key = str(k).strip()
+        if not key:
+            continue
+        try:
+            out[key] = max(0.0, float(v))
+        except (TypeError, ValueError):
+            continue
+    return out
 
 
 def load_packages_map(path: Path | str | None = None) -> dict[str, str]:
