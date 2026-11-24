@@ -365,7 +365,7 @@ def calibrate_dataset(
         flush=True,
     )
     report = build_coverage_report(cases, cfg=pre, cache=cache, packages=packages)
-    print_coverage_report(report)
+    print_coverage_report(report, cache_path=str(cache.path.resolve()))
 
     ready_ids = {c.case_id for c in report.cases if c.ready}
     if force:

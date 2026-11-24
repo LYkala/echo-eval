@@ -628,7 +628,7 @@ def _mark_case_skipped(
         name=case.name,
         status="error",
         device_status="skipped",
-        device_label="预置未就绪，已跳过",
+        device_label=(reason[:80] if reason else "预置未就绪，已跳过"),
         judge_status="skipped",
         judge_label="跳过",
         phase="skipped",
@@ -678,7 +678,9 @@ def run_excel(
         report = build_coverage_report(
             cases, cfg=cfg.precondition, cache=pre_cache
         )
-        print_coverage_report(report)
+        print_coverage_report(
+            report, cache_path=str(pre_cache.path.resolve())
+        )
         skip_ids = report.skip_case_ids
         skip_reasons = {
             c.case_id: c.skip_reason for c in report.cases if c.skip

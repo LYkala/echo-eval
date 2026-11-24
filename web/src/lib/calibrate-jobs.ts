@@ -272,8 +272,10 @@ from echo_eval.config import load_config
 from echo_eval.precondition.coverage import build_coverage_report
 cfg = load_config()
 cases = load_cases(${JSON.stringify(ds.storedPath)}, case_id=${opts.caseId ? JSON.stringify(opts.caseId) : "None"}, default_wait_sec=float(cfg.run.step_wait_sec))
+cache = cfg.precondition.resolved_cache_dir()
 report = build_coverage_report(cases, cfg=cfg.precondition)
 out = {
+  "cache_path": str(cache / "steps.json"),
   "counts": report.counts,
   "skip_case_ids": sorted(report.skip_case_ids),
   "cases": [

@@ -1003,6 +1003,9 @@ export function ConsoleClient() {
                   {coverage.counts
                     ? ` · passed=${coverage.counts.passed ?? 0} untested=${coverage.counts.untested ?? 0} failed=${coverage.counts.failed ?? 0} skip_cases=${coverage.counts.skip_cases ?? 0}`
                     : ""}
+                  {(coverage as { cache_path?: string }).cache_path
+                    ? ` · cache=${(coverage as { cache_path?: string }).cache_path}`
+                    : ""}
                 </div>
                 <ul className="max-h-48 space-y-1 overflow-y-auto text-xs">
                   {coverage.cases.map((c) => (
