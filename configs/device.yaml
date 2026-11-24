@@ -62,6 +62,9 @@ precondition:
   coverage_check: true
   # 已「通过」的步骤直接回放缓存，不再探索校准
   reuse_passed: true
+  # 校准遇到已 passed：true=完全跳过不 tap；false=回放 cache（为后续步铺界面）
+  # 仅影响 calibrate；正式 run 仍会回放
+  skip_passed_on_calibrate: true
   # 回放后再 VL 验一次；false=已通过不用重新测试
   verify_after_replay: false
   max_retries: 3

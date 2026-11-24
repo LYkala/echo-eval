@@ -360,7 +360,9 @@ def calibrate_dataset(
     print(
         f"[echo-eval] precondition-calibrate backend={resolved} "
         f"(requested={backend}) retry_failed={retry_failed} "
-        f"reuse_passed={pre.reuse_passed} max_retries={pre.max_retries}",
+        f"reuse_passed={pre.reuse_passed} "
+        f"skip_passed_on_calibrate={pre.skip_passed_on_calibrate} "
+        f"max_retries={pre.max_retries}",
         flush=True,
     )
     report = build_coverage_report(cases, cfg=pre, cache=cache, packages=packages)
@@ -432,6 +434,24 @@ def calibrate_dataset(
             # Prefer passed cache (incl. manually edited launch commands) over
             # re-deriving via launch_package / deterministic plans.
             if status == "passed" and pre.reuse_passed and entry and entry.adb_commands:
+                if pre.skip_passed_on_calibrate:
+                    print(
+                        f"[echo-eval]   skip passed step (skip_passed_on_calibrate) "
+                        f"kind={entry.kind} cmds={list(entry.adb_commands)}",
+                        flush=True,
+                    )
+                    summary.results.append(
+                        StepCalibrateResult(
+                            case_id=case.case_id,
+                            step_text=text,
+                            key=key,
+                            status="passed",
+                            attempts=0,
+                            commands=list(entry.adb_commands),
+                        )
+                    )
+                    prefix.append(text)
+                    continue
                 try:
                     print(
                         f"[echo-eval]   reuse cache kind={entry.kind} "

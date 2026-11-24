@@ -74,7 +74,8 @@ run:
 precondition:
   enabled: true
   coverage_check: true
-  reuse_passed: true          # 已通过步骤只回放，不重校准
+  reuse_passed: true          # 已通过步骤用缓存，不重 VL 探索
+  skip_passed_on_calibrate: true  # 校准遇到已通过：跳过且不 tap（正式 run 仍回放）
   verify_after_replay: false  # false=已通过不再 VL 复验
   max_retries: 3
   step_settle_sec: 1.0        # 每步默认等待（秒）
@@ -87,7 +88,10 @@ precondition:
 
 `step_settle_overrides` 在校准与正式回放中，于**该步执行完之后**生效；匹配顺序为规范化后精确匹配 → 最长子串包含。未命中则用 `step_settle_sec`。
 
-当 `reuse_passed: true` 且 cache 中该步已是 `passed` 时，校准/回放会**原样执行** `adb_commands`（含手改的 `am start` / `sleep` / `input tap`），不再调用 `launch_package` 覆盖。仅在无可用 cache 时才自动推导并写回。
+当 `reuse_passed: true` 且 cache 中该步已是 `passed` 时：
+- **正式 run**：原样执行 `adb_commands`（含手改），不调用 `launch_package` 覆盖。
+- **校准**：若 `skip_passed_on_calibrate: true`，完全跳过（不 tap、不 settle）；若为 `false`，则回放 cache 以便给后续未通过步骤铺界面。
+仅在无可用 cache 时才自动推导并写回。
 
 样例数据集：`cases/examples/sample_v012_system_iqiyi_10.csv`（v0.12 精简预置；新列名）。
 
