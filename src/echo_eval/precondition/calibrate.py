@@ -292,18 +292,27 @@ def calibrate_dataset(
             # Deterministic system commands
             if plan is not None:
                 try:
-                    _exec_deterministic(
-                        adb,
-                        plan.commands,
-                        allow_any=plan.kind in ("volume", "mute"),
-                    )
+                    used_cmds = list(plan.commands)
+                    if plan.kind == "launch" and plan.package:
+                        used = adb.launch_package(
+                            plan.package,
+                            prefer_settings_intent=bool(plan.prefer_settings_intent),
+                        )
+                        used_cmds = [used]
+                    else:
+                        _exec_deterministic(
+                            adb,
+                            plan.commands,
+                            allow_any=bool(plan.any_success)
+                            or plan.kind in ("volume", "mute"),
+                        )
                     cache.upsert(
                         StepCacheEntry(
                             key=key,
                             step_text=text,
                             prefix=list(prefix),
                             status="passed",
-                            adb_commands=list(plan.commands),
+                            adb_commands=used_cmds,
                             kind=plan.kind,
                             package=plan.package,
                             judge_notes=plan.notes,
@@ -318,7 +327,7 @@ def calibrate_dataset(
                             key=key,
                             status="passed",
                             attempts=0,
-                            commands=list(plan.commands),
+                            commands=used_cmds,
                         )
                     )
                 except AdbError as e:

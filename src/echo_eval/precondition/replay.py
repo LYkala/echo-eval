@@ -166,7 +166,7 @@ def prepare_case_precondition(
             commands = list(plan.commands)
             source = f"deterministic:{plan.kind}"
             package = plan.package
-            allow_any = plan.kind in ("volume", "mute")
+            allow_any = bool(plan.any_success) or plan.kind in ("volume", "mute")
             # Persist deterministic success as passed for coverage reuse
             cache.upsert(
                 StepCacheEntry(
@@ -200,7 +200,38 @@ def prepare_case_precondition(
             flush=True,
         )
         try:
-            if source == "cache" and entry and entry.kind == "vl":
+            if plan is not None and plan.kind == "launch" and plan.package:
+                used = adb.launch_package(
+                    plan.package,
+                    prefer_settings_intent=bool(plan.prefer_settings_intent),
+                )
+                logs = [{"cmd": used, "ok": True}]
+                step_log["commands"] = [used]
+                # refresh cache with the command that actually worked
+                cache.upsert(
+                    StepCacheEntry(
+                        key=key,
+                        step_text=text,
+                        prefix=list(prefix),
+                        status="passed",
+                        adb_commands=[used],
+                        kind="launch",
+                        package=plan.package,
+                        judge_notes=plan.notes,
+                        case_ids=[case.case_id],
+                    )
+                )
+                cache.save()
+            elif (
+                source == "cache"
+                and entry
+                and entry.kind == "launch"
+                and (entry.package or package)
+            ):
+                used = adb.launch_package(entry.package or package)
+                logs = [{"cmd": used, "ok": True}]
+                step_log["commands"] = [used]
+            elif source == "cache" and entry and entry.kind == "vl":
                 logs = run_allowed_commands(adb, commands)
             else:
                 logs = _run_shell_commands(adb, commands, allow_any_success=allow_any)

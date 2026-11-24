@@ -49,7 +49,11 @@ def test_deterministic_open_and_volume():
     plan = plan_deterministic_step("打开爱奇艺", packages=packages)
     assert plan is not None
     assert plan.kind == "launch"
-    assert "com.qiyi.video" in plan.commands[0]
+    assert plan.package == "com.qiyi.video"
+    assert plan.any_success is True
+    assert "am start" in plan.commands[0]
+    settings = plan_deterministic_step("打开设置", packages=packages)
+    assert settings is not None and settings.prefer_settings_intent is True
     vol = plan_deterministic_step("音量调到50%", packages=packages)
     assert vol is not None and vol.kind == "volume"
     home = plan_deterministic_step("回桌面", packages=packages)
