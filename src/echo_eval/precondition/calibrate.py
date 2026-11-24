@@ -488,15 +488,25 @@ def calibrate_dataset(
                         )
                     )
                 except AdbError as e:
-                    entry.status = "stale"
-                    cache.upsert(entry)
-                    cache.save()
+                    # Do not fall through to launch_package — that would overwrite
+                    # manually edited adb_commands (e.g. am start; sleep; tap).
                     print(
-                        f"[echo-eval][warn] cache replay failed, mark stale "
-                        f"and fall through: {e}",
+                        f"[echo-eval][warn] cache replay failed for "
+                        f"step={text!r}: {e}",
                         flush=True,
                     )
-                    status = "stale"
+                    summary.results.append(
+                        StepCalibrateResult(
+                            case_id=case.case_id,
+                            step_text=text,
+                            key=key,
+                            status="failed",
+                            error=f"回放已 pass 缓存失败: {e}",
+                            commands=list(entry.adb_commands),
+                        )
+                    )
+                    abort_case = True
+                    break
                 else:
                     if settle:
                         print(

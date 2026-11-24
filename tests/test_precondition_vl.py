@@ -57,6 +57,28 @@ def test_run_cached_launch_commands_honors_manual_edits():
     assert [x["cmd"] for x in logs] == cmds
 
 
+def test_run_cached_splits_semicolon_chain():
+    class FakeAdb:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def shell(self, cmd: str, *, check: bool = True, timeout: float = 30):
+            self.calls.append(cmd)
+            return None
+
+    adb = FakeAdb()
+    chained = (
+        "am start -n com.qiyi.video.speaker/.activity.WelcomeActivity; "
+        "sleep 2; input tap 1832 1098"
+    )
+    run_cached_step_commands(adb, [chained], kind="launch")  # type: ignore[arg-type]
+    assert adb.calls == [
+        "am start -n com.qiyi.video.speaker/.activity.WelcomeActivity",
+        "sleep 2",
+        "input tap 1832 1098",
+    ]
+
+
 def test_run_cached_vl_still_rejects_am_start():
     class FakeAdb:
         def shell(self, cmd: str, *, check: bool = True, timeout: float = 30):

@@ -57,6 +57,33 @@ def run_allowed_commands(adb: AdbClient, commands: list[str]) -> list[dict]:
 
 
 _SLEEP = re.compile(r"^sleep\s+(\d+(?:\.\d+)?)\s*$", re.I)
+_SLEEP_ANY = re.compile(r"sleep\s+(\d+(?:\.\d+)?)", re.I)
+
+
+def _split_shell_chain(cmd: str) -> list[str]:
+    """Split a; b; c into separate adb shell invocations.
+
+    adb.shell(one_string) often does not run through `sh -c`, so semicolons
+    inside a single cache entry would not execute as a sequence.
+    """
+    s = (cmd or "").strip()
+    if not s:
+        return []
+    if ";" in s:
+        return [p.strip() for p in s.split(";") if p.strip()]
+    if "&&" in s:
+        return [p.strip() for p in s.split("&&") if p.strip()]
+    return [s]
+
+
+def _shell_timeout(cmd: str) -> float:
+    m = _SLEEP.match(cmd.strip())
+    if m:
+        return float(m.group(1)) + 15.0
+    timeout = 30.0
+    for m in _SLEEP_ANY.finditer(cmd):
+        timeout += float(m.group(1)) + 15.0
+    return timeout
 
 
 def run_cached_step_commands(
@@ -70,20 +97,22 @@ def run_cached_step_commands(
     - kind=vl: input whitelist only
     - other kinds (launch/volume/...): run shell commands as stored, so manual
       edits like am start / sleep / input tap are honored
+
+    Prefer listing steps as separate array items. A single string with
+    ``;`` / ``&&`` is split and executed sequentially for adb compatibility.
     """
     if (kind or "").strip().lower() == "vl":
         return run_allowed_commands(adb, commands)
     logs: list[dict] = []
     for raw in commands:
-        cmd = str(raw).strip()
-        if not cmd:
-            continue
-        timeout = 30.0
-        m = _SLEEP.match(cmd)
-        if m:
-            timeout = float(m.group(1)) + 15.0
-        adb.shell(cmd, check=True, timeout=timeout)
-        logs.append({"cmd": cmd, "ok": True})
+        for cmd in _split_shell_chain(str(raw)):
+            timeout = _shell_timeout(cmd)
+            print(
+                f"[echo-eval]   exec cache cmd ({timeout:g}s): {cmd}",
+                flush=True,
+            )
+            adb.shell(cmd, check=True, timeout=timeout)
+            logs.append({"cmd": cmd, "ok": True})
     if not logs:
         raise AdbError("缓存中没有可执行命令")
     return logs
