@@ -137,6 +137,8 @@ def calibrate_gui_step(
         wm = ""
 
     feedback = ""
+    prior_commands: list[str] = []
+    prior_screenshot: Path | None = None
     last_cmds: list[str] = []
     last_err = ""
     for attempt in range(1, max_retries + 1):
@@ -147,8 +149,13 @@ def calibrate_gui_step(
             f"attempt={attempt}/{max_retries} key={key} shots={shots}",
             flush=True,
         )
-        if feedback:
-            print(f"[echo-eval]   prior_feedback: {_clip(feedback, 400)}", flush=True)
+        if feedback or prior_commands:
+            print(
+                f"[echo-eval]   prior_cmds={prior_commands} "
+                f"prior_shot={prior_screenshot} "
+                f"prior_feedback: {_clip(feedback, 400)}",
+                flush=True,
+            )
         try:
             adb.screencap_png(before)
             print(f"[echo-eval]   screencap before: {before}", flush=True)
@@ -158,6 +165,8 @@ def calibrate_gui_step(
                 prefix=prefix,
                 wm_size=wm,
                 feedback=feedback,
+                prior_commands=prior_commands,
+                prior_screenshot=prior_screenshot,
                 model_cfg=model_cfg,
             )
             cmds = list(act.get("adb_commands") or [])
@@ -178,6 +187,8 @@ def calibrate_gui_step(
                     "prefix": prefix,
                     "wm_size": wm,
                     "feedback_in": feedback,
+                    "prior_commands_in": list(prior_commands),
+                    "prior_screenshot_in": str(prior_screenshot) if prior_screenshot else "",
                     "adb_commands": cmds,
                     "rejected": rejected,
                     "reason": act_reason,
@@ -189,11 +200,14 @@ def calibrate_gui_step(
             if rejected:
                 feedback = f"模型给出非法命令已拒绝: {rejected[:3]}"
                 last_err = feedback
+                prior_commands = [str(c) for c in rejected[:6]]
+                prior_screenshot = before if before.is_file() else prior_screenshot
                 print(f"[echo-eval][warn] {feedback}", flush=True)
                 continue
             if not cmds:
                 feedback = "模型未给出任何 input 命令"
                 last_err = feedback
+                prior_screenshot = before if before.is_file() else prior_screenshot
                 print(f"[echo-eval][warn] {feedback}", flush=True)
                 continue
             last_cmds = cmds
@@ -262,6 +276,9 @@ def calibrate_gui_step(
                 )
             feedback = v_reason or "VL 判定未达成"
             last_err = feedback
+            # Carry only the latest failed attempt: cmds + before shot (not full history).
+            prior_commands = list(cmds)
+            prior_screenshot = before
             print(f"[echo-eval][warn] verify not achieved: {feedback}", flush=True)
         except (
             AdbError,
@@ -272,6 +289,10 @@ def calibrate_gui_step(
         ) as e:
             last_err = str(e)
             feedback = last_err
+            if before.is_file():
+                prior_screenshot = before
+            if last_cmds:
+                prior_commands = list(last_cmds)
             print(f"[echo-eval][warn] calibrate attempt failed: {e}", flush=True)
             _write_attempt_log(
                 shots / f"try{attempt}_error.json",

@@ -48,13 +48,22 @@ def vl_propose_commands(
     prefix: list[str],
     wm_size: str,
     feedback: str = "",
+    prior_commands: list[str] | None = None,
+    prior_screenshot: Path | None = None,
     model_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Ask VL for whitelisted input commands to achieve step_text."""
+    """Ask VL for whitelisted input commands to achieve step_text.
+
+    On retries, pass prior_commands (text) and at most one prior_screenshot
+    (usually the previous attempt's before image) so the model can adjust
+    coordinates without shipping a full multi-turn image history.
+    """
     cfg = model_cfg or load_vl_eval_config()
     mime, b64 = _encode_image(Path(screenshot))
     prefix_txt = " → ".join(prefix) if prefix else "（无，当前为第一步）"
-    feedback_txt = feedback.strip() or "（无）"
+    feedback_txt = (feedback or "").strip()[:500] or "（无）"
+    prior_cmds = [str(c).strip() for c in (prior_commands or []) if str(c).strip()]
+    prior_cmds_txt = "；".join(prior_cmds[:6]) if prior_cmds else "（无）"
     system = (
         "你是 Android UI 自动化助手。根据截图给出完成「当前预置步骤」所需的 "
         "adb shell 命令。只允许使用：\n"
@@ -62,29 +71,46 @@ def vl_propose_commands(
         "- input swipe X1 Y1 X2 Y2 [duration_ms]\n"
         "- input keyevent CODE\n"
         "禁止 am/pm/settings/rm 等其它命令。坐标必须落在屏幕范围内。"
+        "若提供了上一轮失败信息，请在当前画面上修正坐标/手势，不要重复无效命令。"
         "只输出一个 JSON 对象，不要其它说明。"
     )
     user_text = (
         f"屏幕信息: {wm_size or 'unknown'}\n"
         f"已完成前缀: {prefix_txt}\n"
         f"当前步骤: {step_text}\n"
+        f"上一轮执行命令: {prior_cmds_txt}\n"
         f"上一轮失败反馈: {feedback_txt}\n"
         "返回 JSON 字段:\n"
         '  "adb_commands": ["input tap 100 200", ...],\n'
         '  "reason": "简短中文说明"\n'
     )
+    content: list[dict[str, Any]] = [{"type": "text", "text": user_text}]
+    # At most one historical image (previous attempt before) + current before.
+    prior_path = Path(prior_screenshot) if prior_screenshot else None
+    if prior_path is not None and prior_path.is_file() and prior_path.resolve() != Path(screenshot).resolve():
+        mime_p, b64_p = _encode_image(prior_path)
+        content.append(
+            {
+                "type": "text",
+                "text": "上一轮操作时画面（对照上次命令纠偏；仅作参考）：",
+            }
+        )
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime_p};base64,{b64_p}"},
+            }
+        )
+    content.append({"type": "text", "text": "当前画面："})
+    content.append(
+        {
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime};base64,{b64}"},
+        }
+    )
     messages = [
         {"role": "system", "content": system},
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": user_text},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime};base64,{b64}"},
-                },
-            ],
-        },
+        {"role": "user", "content": content},
     ]
     timeout = float(cfg.get("timeout_sec") or cfg.get("timeout") or 120)
     text = chat_vision(cfg, messages, temperature=0.0, max_tokens=1024, timeout_sec=timeout)
@@ -171,9 +197,12 @@ def mock_propose_commands(
     prefix: list[str],
     wm_size: str,
     feedback: str = "",
+    prior_commands: list[str] | None = None,
+    prior_screenshot: Path | None = None,
     model_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     # Center-ish tap; tests / offline dry-run only.
+    _ = (feedback, prior_commands, prior_screenshot, model_cfg, screenshot, prefix, wm_size)
     return {
         "raw": "",
         "parsed": {},

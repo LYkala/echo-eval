@@ -1,8 +1,9 @@
 from pathlib import Path
+from unittest.mock import patch
 
 from echo_eval.precondition.commands import filter_allowed_commands, is_allowed_input_command
 from echo_eval.precondition.steps import step_cache_key
-from echo_eval.precondition.vl_act import extract_json_object
+from echo_eval.precondition.vl_act import extract_json_object, vl_propose_commands
 from echo_eval.precondition.cache import PreconditionCache, StepCacheEntry
 
 
@@ -48,3 +49,65 @@ def test_cache_retry_failed_semantics(tmp_path: Path):
     cache.upsert(e)
     cache.save()
     assert cache.status_for(key) == "passed"
+
+
+def test_vl_propose_includes_prior_context(tmp_path: Path):
+    current = tmp_path / "try2_before.png"
+    prior = tmp_path / "try1_before.png"
+    current.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+    prior.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x01" * 16)
+    captured: dict = {}
+
+    def fake_chat(_cfg, messages, **_kwargs):
+        captured["messages"] = messages
+        return '{"adb_commands": ["input tap 100 200"], "reason": "retry"}'
+
+    with patch("echo_eval.precondition.vl_act.chat_vision", side_effect=fake_chat), patch(
+        "echo_eval.precondition.vl_act.load_vl_eval_config",
+        return_value={"timeout": 30},
+    ):
+        out = vl_propose_commands(
+            screenshot=current,
+            step_text="点击筛选",
+            prefix=["打开爱奇艺"],
+            wm_size="1080x2340",
+            feedback="未出现筛选面板",
+            prior_commands=["input tap 50 60"],
+            prior_screenshot=prior,
+        )
+
+    assert out["adb_commands"] == ["input tap 100 200"]
+    content = captured["messages"][1]["content"]
+    texts = [p.get("text", "") for p in content if p.get("type") == "text"]
+    images = [p for p in content if p.get("type") == "image_url"]
+    joined = "\n".join(texts)
+    assert "上一轮执行命令: input tap 50 60" in joined
+    assert "未出现筛选面板" in joined
+    assert "上一轮操作时画面" in joined
+    assert "当前画面" in joined
+    assert len(images) == 2
+
+
+def test_vl_propose_first_attempt_single_image(tmp_path: Path):
+    current = tmp_path / "try1_before.png"
+    current.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+    captured: dict = {}
+
+    def fake_chat(_cfg, messages, **_kwargs):
+        captured["messages"] = messages
+        return '{"adb_commands": ["input tap 10 20"], "reason": "first"}'
+
+    with patch("echo_eval.precondition.vl_act.chat_vision", side_effect=fake_chat), patch(
+        "echo_eval.precondition.vl_act.load_vl_eval_config",
+        return_value={"timeout": 30},
+    ):
+        vl_propose_commands(
+            screenshot=current,
+            step_text="点击筛选",
+            prefix=[],
+            wm_size="1080x2340",
+        )
+
+    content = captured["messages"][1]["content"]
+    images = [p for p in content if p.get("type") == "image_url"]
+    assert len(images) == 1
