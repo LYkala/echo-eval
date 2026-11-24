@@ -97,7 +97,9 @@ function readProgress(id: string): JobProgress | undefined {
 export function readJob(id: string): JobMeta | null {
   const p = path.join(jobDir(id), "job.json");
   if (!fs.existsSync(p)) return null;
-  const job = JSON.parse(fs.readFileSync(p, "utf-8")) as JobMeta;
+  const raw = JSON.parse(fs.readFileSync(p, "utf-8")) as JobMeta & { kind?: string };
+  if (raw.kind === "precondition_calibrate") return null;
+  const job = raw as JobMeta;
   const progress = readProgress(id);
   if (progress) {
     job.progress = progress;
@@ -127,9 +129,15 @@ export function listJobs(): JobMeta[] {
   const out: JobMeta[] = [];
   for (const id of fs.readdirSync(root)) {
     const j = readJob(id);
+    // Skip calibrate jobs stored alongside run jobs.
+    if (j && (j as { kind?: string }).kind === "precondition_calibrate") continue;
     if (j) out.push(j);
   }
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function hasActiveRunJob(): boolean {
+  return listJobs().some((j) => j.status === "queued" || j.status === "running");
 }
 
 function newJobId(): string {
@@ -237,6 +245,15 @@ export function createAndStartJob(opts: {
 }): JobMeta {
   if (opts.forceDemo || process.env.ECHO_EVAL_DEMO === "1") {
     return ensureDemoJob();
+  }
+
+  // Lazy import to avoid circular init with calibrate-jobs.
+  const { hasActiveCalibrateJob } = require("./calibrate-jobs") as typeof import("./calibrate-jobs");
+  if (hasActiveCalibrateJob()) {
+    throw new Error("有预置校准任务正在运行，请先停止后再开测（设备互斥）");
+  }
+  if (hasActiveRunJob()) {
+    throw new Error("已有测试任务在运行");
   }
 
   const ds = getDataset(opts.datasetId);

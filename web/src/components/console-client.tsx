@@ -90,7 +90,46 @@ type Job = {
   progress?: JobProgress;
 };
 
+type CoverageStep = {
+  index: number;
+  text: string;
+  status: string;
+  deterministic: boolean;
+  ready: boolean;
+  reason: string;
+};
+type CoverageCase = {
+  case_id: string;
+  name: string;
+  skip: boolean;
+  skip_reason: string;
+  ready: boolean;
+  steps: CoverageStep[];
+};
+type CoverageReport = {
+  counts?: Record<string, number>;
+  skip_case_ids?: string[];
+  cases?: CoverageCase[];
+  error?: string;
+};
+
+type CalibrateJob = {
+  id: string;
+  kind?: string;
+  datasetName: string;
+  status: string;
+  backend: string;
+  retryFailed?: boolean;
+  passed?: number;
+  failed?: number;
+  skipped?: number;
+  error?: string;
+  logTail?: string;
+  steps?: { status: string; case_id: string; step_text: string; attempts?: number; error?: string }[];
+};
+
 const ACTIVE_JOB_KEY = "echo_eval_active_job";
+const ACTIVE_CAL_KEY = "echo_eval_active_calibrate";
 
 type StepRow = {
   id: string;
@@ -123,12 +162,17 @@ export function ConsoleClient() {
   const [envProgress, setEnvProgress] = useState("脚本加载后将自动检查");
   const [envError, setEnvError] = useState("");
   const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [datasetId, setDatasetId] = useState("__builtin_sample__");
+  const [datasetId, setDatasetId] = useState("__builtin_v011__");
   const [caseId, setCaseId] = useState("");
   const [backend, setBackend] = useState<"auto" | "vl" | "mock">("mock");
+  const [calBackend, setCalBackend] = useState<"auto" | "vl" | "mock">("vl");
+  const [retryFailed, setRetryFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [active, setActive] = useState<Job | null>(null);
+  const [calJob, setCalJob] = useState<CalibrateJob | null>(null);
+  const [coverage, setCoverage] = useState<CoverageReport | null>(null);
+  const [coverageWarn, setCoverageWarn] = useState("");
   const [hostPing, setHostPing] = useState<{
     hostRole?: string;
     hostLabel?: string;
@@ -343,6 +387,23 @@ export function ConsoleClient() {
         }
       })();
     }
+    const savedCal = sessionStorage.getItem(ACTIVE_CAL_KEY);
+    if (savedCal) {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/precondition/calibrate/${savedCal}`, { cache: "no-store" });
+          if (!res.ok) {
+            sessionStorage.removeItem(ACTIVE_CAL_KEY);
+            return;
+          }
+          const job = (await res.json()) as CalibrateJob;
+          setCalJob(job);
+          pushLog(`恢复校准任务 ${job.id} status=${job.status}`);
+        } catch (e) {
+          pushLog(`恢复校准失败 ${String(e)}`);
+        }
+      })();
+    }
   }, [mounted, refreshEnv, refreshDatasets, pushLog]);
 
   useEffect(() => {
@@ -358,6 +419,18 @@ export function ConsoleClient() {
     }, 1000);
     return () => clearInterval(t);
   }, [active]);
+
+  useEffect(() => {
+    if (!calJob || !["queued", "running"].includes(calJob.status)) return;
+    const t = setInterval(async () => {
+      const res = await fetch(`/api/precondition/calibrate/${calJob.id}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const job = (await res.json()) as CalibrateJob;
+      setCalJob(job);
+      sessionStorage.setItem(ACTIVE_CAL_KEY, job.id);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [calJob]);
 
   async function onUpload(file: File | null) {
     if (!file) return;
@@ -402,7 +475,7 @@ export function ConsoleClient() {
       setMsg(`已删除：${d.name}`);
       await refreshDatasets();
       if (datasetId === d.id) {
-        setDatasetId("__builtin_sample__");
+        setDatasetId("__builtin_v011__");
       }
     } catch (e) {
       setMsg(String(e));
@@ -412,10 +485,104 @@ export function ConsoleClient() {
     }
   }
 
-  async function startRun(demo = false) {
+  const calibrateRunning = !!(calJob && ["queued", "running"].includes(calJob.status));
+  const runRunning = !!(active && ["queued", "running"].includes(active.status));
+
+  async function checkCoverage() {
+    setBusy(true);
+    setMsg("");
+    setCoverageWarn("");
+    try {
+      pushLog(`POST /api/precondition/coverage dataset=${datasetId}`);
+      const res = await fetch("/api/precondition/coverage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datasetId, caseId: caseId || null }),
+      });
+      const data = (await res.json()) as CoverageReport & { error?: string };
+      if (!res.ok) throw new Error(data.error || "覆盖检查失败");
+      setCoverage(data);
+      const skips = data.skip_case_ids || [];
+      if (skips.length) {
+        setCoverageWarn(
+          `有 ${skips.length} 条用例预置未就绪（将在开测时跳过）。建议先「开始校准」。`
+        );
+      } else {
+        setCoverageWarn("");
+        setMsg("覆盖检查：全部预置步骤就绪");
+      }
+      pushLog(
+        `coverage OK skip=${skips.length} counts=${JSON.stringify(data.counts || {})}`
+      );
+    } catch (e) {
+      setMsg(String(e));
+      pushLog(`coverage FAIL ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startCalibrate() {
+    if (runRunning) {
+      setMsg("有测试任务正在运行，请先停止后再校准");
+      return;
+    }
     setBusy(true);
     setMsg("");
     try {
+      pushLog(
+        `POST /api/precondition/calibrate backend=${calBackend} retryFailed=${retryFailed}`
+      );
+      const res = await fetch("/api/precondition/calibrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          datasetId,
+          caseId: caseId || null,
+          backend: calBackend,
+          retryFailed,
+        }),
+      });
+      const data = (await res.json()) as CalibrateJob & { error?: string };
+      if (!res.ok) throw new Error(data.error || "启动校准失败");
+      setCalJob(data);
+      sessionStorage.setItem(ACTIVE_CAL_KEY, data.id);
+      setMsg(`预置校准已启动：${data.id}`);
+    } catch (e) {
+      setMsg(String(e));
+      pushLog(`calibrate FAIL ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function stopCalibrate() {
+    if (!calJob) return;
+    setBusy(true);
+    try {
+      await fetch(`/api/precondition/calibrate/${calJob.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/precondition/calibrate/${calJob.id}`);
+      const job = (await res.json()) as CalibrateJob;
+      setCalJob(job);
+      sessionStorage.setItem(ACTIVE_CAL_KEY, job.id);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startRun(demo = false) {
+    if (!demo && calibrateRunning) {
+      setMsg("有预置校准正在运行，请先停止后再开测");
+      return;
+    }
+    setBusy(true);
+    setMsg("");
+    try {
+      if (!demo && coverage && (coverage.skip_case_ids || []).length) {
+        setCoverageWarn(
+          `提示：仍有 ${(coverage.skip_case_ids || []).length} 条用例预置未就绪，开测时会跳过这些用例。`
+        );
+      }
       const res = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -692,8 +859,18 @@ export function ConsoleClient() {
                 </select>
               </div>
             </div>
+            {coverageWarn ? (
+              <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                {coverageWarn}
+              </p>
+            ) : null}
             <div className="flex flex-wrap gap-3">
-              <Button type="button" disabled={busy} onClick={() => void startRun(false)}>
+              <Button
+                type="button"
+                disabled={busy || calibrateRunning}
+                title={calibrateRunning ? "请先停止预置校准" : undefined}
+                onClick={() => void startRun(false)}
+              >
                 {busy ? "处理中…" : "开始测试"}
               </Button>
               <Button type="button" variant="secondary" disabled={busy} onClick={() => void startRun(true)}>
@@ -701,11 +878,130 @@ export function ConsoleClient() {
               </Button>
               {active && ["running", "queued"].includes(active.status) ? (
                 <Button type="button" variant="destructive" disabled={busy} onClick={() => void stopRun()}>
-                  停止
+                  停止测试
                 </Button>
               ) : null}
             </div>
             {msg ? <p className="text-sm text-muted-foreground">{msg}</p> : null}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-2xl">预置校准</CardTitle>
+            <CardDescription>
+              正式开测前独立校准预置条件（截屏+VL→ADB）。与「开始测试」互斥占用设备。已通过步骤默认复用缓存。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="cal-backend">校准后端</Label>
+                <select
+                  id="cal-backend"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={calBackend}
+                  onChange={(e) => setCalBackend(e.target.value as "auto" | "vl" | "mock")}
+                >
+                  <option value="vl">vl</option>
+                  <option value="auto">auto</option>
+                  <option value="mock">mock（仅联调）</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={retryFailed}
+                    onChange={(e) => setRetryFailed(e.target.checked)}
+                  />
+                  强制重试 failed（--retry-failed）
+                </label>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              使用上方「选用数据集 / 用例编号」。推荐内置{" "}
+              <code>sample_v011_android_iqiyi_10.csv</code>。
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Button type="button" variant="outline" disabled={busy} onClick={() => void checkCoverage()}>
+                查看覆盖情况
+              </Button>
+              <Button
+                type="button"
+                disabled={busy || runRunning}
+                title={runRunning ? "请先停止测试任务" : undefined}
+                onClick={() => void startCalibrate()}
+              >
+                开始校准
+              </Button>
+              {calibrateRunning ? (
+                <Button type="button" variant="destructive" disabled={busy} onClick={() => void stopCalibrate()}>
+                  停止校准
+                </Button>
+              ) : null}
+              {calJob ? statusBadge(calJob.status) : null}
+            </div>
+
+            {calJob ? (
+              <div className="space-y-3 rounded-md border border-border/80 bg-secondary/40 px-3 py-3">
+                <div className="text-sm font-medium">
+                  {calJob.datasetName} · {calJob.backend}
+                  {calJob.retryFailed ? " · retry-failed" : ""}
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                  <div className="rounded-md bg-background px-2 py-2">
+                    <div className="text-xs text-muted-foreground">通过步</div>
+                    <div className="text-lg font-semibold">{calJob.passed ?? "—"}</div>
+                  </div>
+                  <div className="rounded-md bg-background px-2 py-2">
+                    <div className="text-xs text-muted-foreground">失败步</div>
+                    <div className="text-lg font-semibold">{calJob.failed ?? "—"}</div>
+                  </div>
+                  <div className="rounded-md bg-background px-2 py-2">
+                    <div className="text-xs text-muted-foreground">跳过步</div>
+                    <div className="text-lg font-semibold">{calJob.skipped ?? "—"}</div>
+                  </div>
+                </div>
+                {calJob.error ? <p className="text-sm text-rose-700">{calJob.error}</p> : null}
+                <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
+                  {(calJob.steps || []).slice(-40).map((s, i) => (
+                    <li key={`${s.case_id}-${i}`} className="truncate">
+                      <span className="font-medium uppercase">{s.status}</span> {s.case_id} · {s.step_text}
+                      {s.error ? ` · ${s.error}` : ""}
+                    </li>
+                  ))}
+                </ul>
+                <div>
+                  <div className="mb-1 text-xs font-medium text-muted-foreground">校准日志（尾部）</div>
+                  <pre
+                    className="max-h-48 overflow-auto rounded-md border p-2 text-xs leading-5"
+                    style={{ background: "#1e1e1e", color: "#d4d4d4" }}
+                  >
+                    {calJob.logTail || "（等待日志…）"}
+                  </pre>
+                </div>
+              </div>
+            ) : null}
+
+            {coverage?.cases?.length ? (
+              <div className="space-y-2">
+                <div className="text-sm font-medium">
+                  覆盖摘要
+                  {coverage.counts
+                    ? ` · passed=${coverage.counts.passed ?? 0} untested=${coverage.counts.untested ?? 0} failed=${coverage.counts.failed ?? 0} skip_cases=${coverage.counts.skip_cases ?? 0}`
+                    : ""}
+                </div>
+                <ul className="max-h-48 space-y-1 overflow-y-auto text-xs">
+                  {coverage.cases.map((c) => (
+                    <li key={c.case_id} className={c.skip ? "text-amber-800" : "text-emerald-800"}>
+                      {c.skip ? "SKIP" : "OK"} {c.case_id} {c.name}
+                      {c.skip_reason ? ` — ${c.skip_reason}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </section>
