@@ -13,7 +13,7 @@ from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.judge.client import JudgeClientError
 from echo_eval.judge.model_config import ModelConfigError, find_model_config_path, load_vl_eval_config
 from echo_eval.precondition.cache import PreconditionCache, StepCacheEntry
-from echo_eval.precondition.commands import run_allowed_commands
+from echo_eval.precondition.commands import run_cached_step_commands
 from echo_eval.precondition.coverage import build_coverage_report, print_coverage_report
 from echo_eval.precondition.deterministic import plan_deterministic_step
 from echo_eval.precondition.replay import resolve_opened_package
@@ -426,7 +426,49 @@ def calibrate_dataset(
                 flush=True,
             )
 
-            # Deterministic system commands
+            # Prefer passed cache (incl. manually edited launch commands) over
+            # re-deriving via launch_package / deterministic plans.
+            if status == "passed" and pre.reuse_passed and entry and entry.adb_commands:
+                try:
+                    print(
+                        f"[echo-eval]   reuse cache kind={entry.kind} "
+                        f"cmds={list(entry.adb_commands)}",
+                        flush=True,
+                    )
+                    run_cached_step_commands(
+                        adb, list(entry.adb_commands), kind=str(entry.kind or "")
+                    )
+                    summary.results.append(
+                        StepCalibrateResult(
+                            case_id=case.case_id,
+                            step_text=text,
+                            key=key,
+                            status="passed",
+                            attempts=0,
+                            commands=list(entry.adb_commands),
+                        )
+                    )
+                except AdbError as e:
+                    entry.status = "stale"
+                    cache.upsert(entry)
+                    cache.save()
+                    print(
+                        f"[echo-eval][warn] cache replay failed, mark stale "
+                        f"and fall through: {e}",
+                        flush=True,
+                    )
+                    status = "stale"
+                else:
+                    if settle:
+                        print(
+                            f"[echo-eval]   settle {settle:g}s after step={text!r}",
+                            flush=True,
+                        )
+                        time.sleep(settle)
+                    prefix.append(text)
+                    continue
+
+            # Deterministic system commands (only when no reusable cache)
             if plan is not None:
                 try:
                     used_cmds = list(plan.commands)
@@ -487,40 +529,6 @@ def calibrate_dataset(
                     time.sleep(settle)
                 prefix.append(text)
                 continue
-
-            # Reuse passed cache
-            if status == "passed" and pre.reuse_passed and entry and entry.adb_commands:
-                try:
-                    run_allowed_commands(adb, list(entry.adb_commands))
-                    summary.results.append(
-                        StepCalibrateResult(
-                            case_id=case.case_id,
-                            step_text=text,
-                            key=key,
-                            status="passed",
-                            attempts=0,
-                            commands=list(entry.adb_commands),
-                        )
-                    )
-                except AdbError as e:
-                    # mark stale and try VL if possible
-                    entry.status = "stale"
-                    cache.upsert(entry)
-                    cache.save()
-                    print(
-                        f"[echo-eval][warn] replay failed, mark stale and recalibrate: {e}",
-                        flush=True,
-                    )
-                    status = "stale"
-                else:
-                    if settle:
-                        print(
-                            f"[echo-eval]   settle {settle:g}s after step={text!r}",
-                            flush=True,
-                        )
-                        time.sleep(settle)
-                    prefix.append(text)
-                    continue
 
             if status == "failed" and not retry_failed:
                 msg = (

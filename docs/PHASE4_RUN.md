@@ -87,6 +87,8 @@ precondition:
 
 `step_settle_overrides` 在校准与正式回放中，于**该步执行完之后**生效；匹配顺序为规范化后精确匹配 → 最长子串包含。未命中则用 `step_settle_sec`。
 
+当 `reuse_passed: true` 且 cache 中该步已是 `passed` 时，校准/回放会**原样执行** `adb_commands`（含手改的 `am start` / `sleep` / `input tap`），不再调用 `launch_package` 覆盖。仅在无可用 cache 时才自动推导并写回。
+
 样例数据集：`cases/examples/sample_v012_system_iqiyi_10.csv`（v0.12 精简预置；新列名）。
 
 点击类预置需先独立校准（写入 `artifacts/precondition_cache/`，跨数据集按「前缀+当前步」复用；默认不自动清理）：

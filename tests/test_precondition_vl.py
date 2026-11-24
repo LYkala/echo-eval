@@ -1,7 +1,11 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from echo_eval.precondition.commands import filter_allowed_commands, is_allowed_input_command
+from echo_eval.precondition.commands import (
+    filter_allowed_commands,
+    is_allowed_input_command,
+    run_cached_step_commands,
+)
 from echo_eval.precondition.steps import resolve_step_settle_sec, step_cache_key
 from echo_eval.precondition.vl_act import extract_json_object, vl_propose_commands
 from echo_eval.precondition.cache import PreconditionCache, StepCacheEntry
@@ -30,6 +34,43 @@ def test_whitelist_commands():
     )
     assert ok == ["input tap 1 2", "input swipe 0 1 0 2"]
     assert bad == ["settings put system x 1"]
+
+
+def test_run_cached_launch_commands_honors_manual_edits():
+    class FakeAdb:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, float]] = []
+
+        def shell(self, cmd: str, *, check: bool = True, timeout: float = 30):
+            self.calls.append((cmd, float(timeout)))
+            return None
+
+    adb = FakeAdb()
+    cmds = [
+        "am start -n com.qiyi.video.speaker/.activity.WelcomeActivity",
+        "sleep 2",
+        "input tap 1832 1098",
+    ]
+    logs = run_cached_step_commands(adb, cmds, kind="launch")  # type: ignore[arg-type]
+    assert [c for c, _ in adb.calls] == cmds
+    assert adb.calls[1][1] >= 17.0  # sleep gets a longer timeout
+    assert [x["cmd"] for x in logs] == cmds
+
+
+def test_run_cached_vl_still_rejects_am_start():
+    class FakeAdb:
+        def shell(self, cmd: str, *, check: bool = True, timeout: float = 30):
+            raise AssertionError("should not run")
+
+    try:
+        run_cached_step_commands(
+            FakeAdb(),  # type: ignore[arg-type]
+            ["am start -n com.x/.Y"],
+            kind="vl",
+        )
+        assert False, "expected AdbError"
+    except Exception as e:
+        assert "白名单" in str(e) or "拒绝" in str(e)
 
 
 def test_extract_json_object_fence():

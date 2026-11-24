@@ -54,3 +54,36 @@ def run_allowed_commands(adb: AdbClient, commands: list[str]) -> list[dict]:
         adb.shell(cmd, check=True, timeout=30)
         logs.append({"cmd": cmd, "ok": True})
     return logs
+
+
+_SLEEP = re.compile(r"^sleep\s+(\d+(?:\.\d+)?)\s*$", re.I)
+
+
+def run_cached_step_commands(
+    adb: AdbClient,
+    commands: list[str],
+    *,
+    kind: str = "",
+) -> list[dict]:
+    """Execute commands from a passed cache entry without rewriting them.
+
+    - kind=vl: input whitelist only
+    - other kinds (launch/volume/...): run shell commands as stored, so manual
+      edits like am start / sleep / input tap are honored
+    """
+    if (kind or "").strip().lower() == "vl":
+        return run_allowed_commands(adb, commands)
+    logs: list[dict] = []
+    for raw in commands:
+        cmd = str(raw).strip()
+        if not cmd:
+            continue
+        timeout = 30.0
+        m = _SLEEP.match(cmd)
+        if m:
+            timeout = float(m.group(1)) + 15.0
+        adb.shell(cmd, check=True, timeout=timeout)
+        logs.append({"cmd": cmd, "ok": True})
+    if not logs:
+        raise AdbError("缓存中没有可执行命令")
+    return logs
