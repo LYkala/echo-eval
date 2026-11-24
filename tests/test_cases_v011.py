@@ -58,10 +58,27 @@ def test_deterministic_open_and_volume():
     assert click is None
 
 
-def test_coverage_skips_gui_without_cache():
+def test_coverage_skips_gui_without_cache(tmp_path: Path):
     path = Path("cases/examples/sample_v011_android_iqiyi_10.csv")
     cases = load_cases(path)
-    cfg = load_config()
+    # Use an isolated config so local device.yaml (or stash conflict markers) cannot break CI/local runs.
+    cfg_path = tmp_path / "device.yaml"
+    cfg_path.write_text(
+        """
+adb:
+  host: "127.0.0.1"
+capture: {}
+precondition:
+  enabled: true
+  coverage_check: true
+  reuse_passed: true
+  verify_after_replay: false
+  cache_dir: artifacts/precondition_cache
+  packages_path: configs/packages.yaml
+""",
+        encoding="utf-8",
+    )
+    cfg = load_config(cfg_path)
     report = build_coverage_report(cases, cfg=cfg.precondition)
     # Cases with only deterministic steps can be ready (e.g. 回桌面 / 仅打开爱奇艺)
     ready_ids = {c.case_id for c in report.cases if c.ready}
