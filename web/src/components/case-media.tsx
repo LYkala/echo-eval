@@ -5,15 +5,24 @@ import { useState } from "react";
 export function CaseMedia({
   audios,
   frames,
+  video,
 }: {
   audios: { name: string; url: string }[];
   frames: string[];
+  video?: { name: string; url: string } | null;
 }) {
   const [idx, setIdx] = useState(0);
   const frame = frames[idx] || frames[0];
 
   return (
     <div className="space-y-4">
+      {video ? (
+        <div className="rounded-md border bg-card/70 px-3 py-2">
+          <div className="mb-1 text-xs text-muted-foreground">{video.name}</div>
+          <video controls preload="metadata" src={video.url} className="max-h-[360px] w-full rounded bg-black" />
+        </div>
+      ) : null}
+
       {audios.length ? (
         <div className="space-y-2">
           {audios.map((a) => (

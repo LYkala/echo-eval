@@ -1,0 +1,22 @@
+{
+  "enabled": true,
+  "total": 1,
+  "passed": 1,
+  "failed": 0,
+  "accuracy": 1.0,
+  "utterances": [
+    {
+      "index": 1,
+      "spoken_text": "点击热播榜",
+      "recognized_text": "点击热播榜",
+      "passed": true,
+      "reason": "演示仿真：多帧截图中底部识别气泡与播报文一致（忽略“我还在听，说再见退出”）",
+      "frames": [
+        "step_01_00.jpg",
+        "step_01_01.jpg",
+        "step_01_02.jpg",
+        "step_01_03.jpg"
+      ]
+    }
+  ]
+}

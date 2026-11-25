@@ -252,167 +252,76 @@ function newJobId(): string {
   return `job_${stamp}`;
 }
 
-function writeDemoMetricFiles(caseDir: string): void {
-  const asrDir = path.join(caseDir, "asr_frames");
-  ensureDir(asrDir);
-  const png = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-    "base64"
-  );
-  fs.writeFileSync(path.join(asrDir, "step_01_00.png"), png);
-  fs.writeFileSync(path.join(asrDir, "step_02_00.png"), png);
-  fs.writeFileSync(
-    path.join(caseDir, "asr_summary.json"),
-    JSON.stringify(
-      {
-        enabled: true,
-        total: 2,
-        passed: 2,
-        failed: 0,
-        accuracy: 1,
-        utterances: [
-          {
-            index: 1,
-            spoken_text: "小艺小艺",
-            recognized_text: "小艺小艺",
-            passed: true,
-            reason: "演示：识别一致",
-          },
-          {
-            index: 2,
-            spoken_text: "今天西安天气怎么样",
-            recognized_text: "今天西安天气怎么样",
-            passed: true,
-            reason: "演示：识别一致",
-          },
-        ],
-      },
-      null,
-      2
-    )
-  );
-  fs.writeFileSync(
-    path.join(caseDir, "latency_summary.json"),
-    JSON.stringify(
-      {
-        enabled: true,
-        total: 2,
-        measured: 2,
-        no_action: 0,
-        mean_sec: 1.2,
-        utterances: [
-          { index: 1, status: "measured", latency_sec: 0.9, action_frame: "step_01_03.png" },
-          { index: 2, status: "measured", latency_sec: 1.5, action_frame: "step_02_05.png" },
-        ],
-      },
-      null,
-      2
-    )
-  );
-  fs.writeFileSync(
-    path.join(caseDir, "mos_summary.json"),
-    JSON.stringify(
-      {
-        enabled: true,
-        total: 2,
-        scored: 1,
-        na: 1,
-        mean_mos: 4.0,
-        utterances: [
-          { index: 1, status: "no_speech", mos: null, reason: "演示：唤醒句无回复语音 → N/A" },
-          { index: 2, status: "scored", mos: 4.0, reason: "演示：启发式流畅度" },
-        ],
-      },
-      null,
-      2
-    )
-  );
-  fs.writeFileSync(
-    path.join(caseDir, "report.md"),
-    "# 样例报告\n\nGUI PASS；ASR 100%；时延均 1.2s；MOS 均 4.0（演示数据）。\n"
-  );
+const DEMO_FIXTURE_ID = "iq-scr-026-v1";
+
+/** Packaged real run under web/fixtures/demo_iq_scr_026 (IQ-SCR-026). */
+function demoFixtureRoot(): string {
+  return path.join(repoRoot(), "web", "fixtures", "demo_iq_scr_026");
 }
 
-/** Seed a browsable demo job when no device (cloud / preview). */
+function copyDirRecursive(src: string, dest: string): void {
+  ensureDir(dest);
+  for (const name of fs.readdirSync(src)) {
+    const from = path.join(src, name);
+    const to = path.join(dest, name);
+    const st = fs.statSync(from);
+    if (st.isDirectory()) copyDirRecursive(from, to);
+    else fs.copyFileSync(from, to);
+  }
+}
+
+/** Seed a browsable demo job from the IQ-SCR-026 fixture (GUI FAIL + ASR/latency). MOS omitted. */
 export function ensureDemoJob(): JobMeta {
   const id = "job_demo_sample";
   const dir = jobDir(id);
   ensureDir(dir);
   const caseDir = path.join(dir, "demo_case");
-  const framesDir = path.join(caseDir, "frames");
-  const stepsDir = path.join(caseDir, "steps");
-  ensureDir(framesDir);
-  ensureDir(stepsDir);
+  const fixture = demoFixtureRoot();
+  const markerPath = path.join(caseDir, "DEMO_FIXTURE.txt");
+  const needSeed =
+    !fs.existsSync(markerPath) ||
+    fs.readFileSync(markerPath, "utf-8").trim() !== DEMO_FIXTURE_ID ||
+    !fs.existsSync(path.join(caseDir, "capture.mp4")) ||
+    !fs.existsSync(path.join(caseDir, "frames"));
 
-  // Minimal 1x1 PNG
-  const png = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-    "base64"
-  );
-  fs.writeFileSync(path.join(framesDir, "frame_0001.png"), png);
-  fs.writeFileSync(path.join(framesDir, "frame_0002.png"), png);
-  fs.writeFileSync(
-    path.join(caseDir, "case.json"),
-    JSON.stringify(
-      {
-        case_id: "demo_weather_001",
-        name: "询问天气（样例）",
-        steps: [
-          { text: "小艺小艺", wait_sec: 2 },
-          { text: "今天西安天气怎么样", wait_sec: 3 },
-        ],
-        expected: "界面出现天气相关结果",
-        exceptions: ["界面出现天气相关结果"],
-      },
-      null,
-      2
-    )
-  );
-  fs.writeFileSync(
-    path.join(caseDir, "evaluation.json"),
-    JSON.stringify(
-      {
-        passed: true,
-        backend: "mock",
-        result_parsed: [
-          {
-            expectation: "界面出现天气相关结果",
-            result: "success",
-            reason: "样例数据：截帧与预期均存在",
-            final_result: "界面出现天气相关结果",
-          },
-        ],
-      },
-      null,
-      2
-    )
-  );
-  writeDemoMetricFiles(caseDir);
-  fs.writeFileSync(path.join(stepsDir, "step_01.txt"), "小艺小艺");
+  if (!fs.existsSync(fixture)) {
+    throw new Error(`演示素材缺失: ${fixture}`);
+  }
+  if (needSeed) {
+    fs.rmSync(caseDir, { recursive: true, force: true });
+    copyDirRecursive(fixture, caseDir);
+  }
+
+  const caseJson = readJsonFile(path.join(caseDir, "case.json")) || {};
+  const caseId = String(caseJson.case_id || "IQ-SCR-026");
+  const caseName = String(caseJson.name || "打开热播榜入口");
+  const evalJson = readJsonFile(path.join(caseDir, "evaluation.json"));
+  const guiPassed = evalJson?.passed === true;
 
   const job: JobMeta = {
     id,
-    datasetId: "demo",
-    datasetName: "sample_weather.csv（演示）",
-    caseId: "demo_weather_001",
-    backend: "mock",
-    status: "passed",
-    createdAt: new Date().toISOString(),
-    finishedAt: new Date().toISOString(),
+    datasetId: "demo_iq_scr_026",
+    datasetName: "IQ-SCR-026 热播榜（真实录屏演示）",
+    caseId,
+    backend: "vl",
+    status: guiPassed ? "passed" : "failed",
+    createdAt: "2026-11-24T12:37:58.000Z",
+    finishedAt: "2026-11-24T12:40:05.000Z",
     demo: true,
+    note: "基于现场样例 20261124_123758_IQ-SCR-026；ASR/时延为仿真，MOS 已跳过",
     results: [
       {
-        case_id: "demo_weather_001",
-        name: "询问天气（样例）",
-        passed: true,
+        case_id: caseId,
+        name: caseName,
+        passed: guiPassed,
         run_dir: caseDir,
         report_path: path.join(caseDir, "report.md"),
         evaluation_path: path.join(caseDir, "evaluation.json"),
         metrics: loadCaseMetricsBrief(caseDir),
       },
     ],
-    passed: 1,
-    failed: 0,
+    passed: guiPassed ? 1 : 0,
+    failed: guiPassed ? 0 : 1,
     errors: 0,
   };
   writeJob(job);
@@ -630,6 +539,14 @@ export function getCaseDetail(jobId: string, caseId: string) {
   );
   const mosAudios = listMediaUrls(runDir, jobId, caseId, "mos_audio", /\.wav$/i);
 
+  const capturePath = path.join(runDir, "capture.mp4");
+  const video = fs.existsSync(capturePath)
+    ? {
+        name: "capture.mp4",
+        url: `/api/artifacts?job=${encodeURIComponent(jobId)}&case=${encodeURIComponent(caseId)}&file=capture.mp4`,
+      }
+    : null;
+
   return {
     job,
     result: { ...row, metrics: loadCaseMetricsBrief(runDir) || row.metrics },
@@ -644,6 +561,7 @@ export function getCaseDetail(jobId: string, caseId: string) {
     mosAudios,
     frames,
     audios,
+    video,
     report,
   };
 }

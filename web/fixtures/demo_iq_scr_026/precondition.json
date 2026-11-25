@@ -1,0 +1,59 @@
+{
+  "enabled": true,
+  "case_id": "IQ-SCR-026",
+  "previous_package": "com.qiyi.video.speaker",
+  "force_stop": {
+    "package": "com.qiyi.video.speaker",
+    "ok": true
+  },
+  "home": true,
+  "steps": [
+    {
+      "index": 1,
+      "text": "打开爱奇艺",
+      "key": "ea044201b2de863e:打开爱奇艺",
+      "status": "passed",
+      "source": "cache",
+      "commands": [
+        "am start -n com.qiyi.video.speaker/.activity.WelcomeActivity",
+        "sleep 4.5",
+        "input tap 1832 1098"
+      ],
+      "ok": true,
+      "exec": [
+        {
+          "cmd": "am start -n com.qiyi.video.speaker/.activity.WelcomeActivity",
+          "ok": true
+        },
+        {
+          "cmd": "sleep 4.5",
+          "ok": true
+        },
+        {
+          "cmd": "input tap 1832 1098",
+          "ok": true
+        }
+      ],
+      "settle_sec": 2.0
+    },
+    {
+      "index": 2,
+      "text": "点击筛选",
+      "key": "3854bf7817956e21:点击筛选",
+      "status": "passed",
+      "source": "cache",
+      "commands": [
+        "input tap 1822 181"
+      ],
+      "ok": true,
+      "exec": [
+        {
+          "cmd": "input tap 1822 181",
+          "ok": true
+        }
+      ],
+      "settle_sec": 2.0
+    }
+  ],
+  "opened_package": "com.qiyi.video.speaker"
+}

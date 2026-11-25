@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "total": 1,
+  "measured": 0,
+  "no_action": 1,
+  "mean_sec": null,
+  "timeout_sec": 4.0,
+  "bottom_band_ratio": 0.22,
+  "utterances": [
+    {
+      "index": 1,
+      "spoken_text": "点击热播榜",
+      "status": "no_action",
+      "latency_sec": null,
+      "action_frame": null,
+      "reason": "演示仿真：忽略底部文字带后，超时未见有效操控画面变化（与 GUI FAIL 一致）"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "record_started_at": "2026-11-24T12:38:10.540000+00:00",
+  "head_delay_sec": 1.0,
+  "tail_sec": 5.0,
+  "planned_duration_sec": 14,
+  "steps": [
+    {
+      "index": 1,
+      "text": "点击热播榜",
+      "wait_sec": 3.0,
+      "wav": "steps/step_01.wav",
+      "backend": "sapi",
+      "duration_sec": 2.004,
+      "play_started_at": "2026-11-24T12:38:11.551412+00:00",
+      "play_offset_sec": 1.011,
+      "play_ended_at": "2026-11-24T12:38:13.555412+00:00",
+      "play_end_offset_sec": 3.015
+    }
+  ],
+  "return_home_after_pull": {
+    "enabled": true,
+    "phase": "after_pull",
+    "case_id": "IQ-SCR-026",
+    "ok": true,
+    "error": "",
+    "wait_sec": 2.0
+  }
+}

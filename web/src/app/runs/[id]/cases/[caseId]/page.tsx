@@ -59,7 +59,7 @@ export default async function CaseDetailPage({
             </li>
           ))}
         </ol>
-        <CaseMedia audios={detail.audios} frames={detail.frames} />
+        <CaseMedia audios={detail.audios} frames={detail.frames} video={detail.video} />
       </section>
 
       <section className="space-y-3">
