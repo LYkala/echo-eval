@@ -212,6 +212,26 @@ class RunConfig:
 
 
 @dataclass
+class AsrConfig:
+    """ASR 准确率：句后按间隔截屏，多帧 VL 对照播报文案（与 GUI 成功率互不影响）。"""
+
+    enabled: bool = True
+    # 截屏间隔（秒）
+    interval_sec: float = 0.5
+    # 最长采图窗口（秒）；默认 4s → 最多约 8 张
+    window_sec: float = 4.0
+    # 底部条相对首帧连续变化达到该帧数则提前停采（像素启发式，非 OCR）
+    early_stop: bool = True
+    early_stop_stable_frames: int = 2
+    # 用于早停的底部区域高度占比；P2 时延「忽略底部文字」将复用该带
+    bottom_band_ratio: float = 0.22
+    # 底部固定提示（不算识别结果）
+    ignore_texts: list[str] = field(
+        default_factory=lambda: ["我还在听，说再见退出"]
+    )
+
+
+@dataclass
 class PreconditionConfig:
     """预置条件：开跑前覆盖检查 + 每条用例前的 ADB 回放。"""
 
@@ -253,6 +273,7 @@ class AppConfig:
     tts: TtsConfig
     run: RunConfig
     precondition: PreconditionConfig
+    asr: AsrConfig
     path: Path
 
 
@@ -274,6 +295,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     tts_raw = _as_dict(raw.get("tts"))
     run_raw = _as_dict(raw.get("run"))
     pre_raw = _as_dict(raw.get("precondition"))
+    asr_raw = _as_dict(raw.get("asr"))
 
     adb = AdbConfig(
         host=str(adb_raw.get("host") or ""),
@@ -374,6 +396,55 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         cache_dir=str(pre_raw.get("cache_dir") or "artifacts/precondition_cache"),
         packages_path=str(pre_raw.get("packages_path") or "configs/packages.yaml"),
     )
+    if "enabled" in asr_raw:
+        asr_enabled = bool(asr_raw.get("enabled"))
+    else:
+        asr_enabled = True
+    if "early_stop" in asr_raw:
+        asr_early = bool(asr_raw.get("early_stop"))
+    else:
+        asr_early = True
+    ignore_raw = asr_raw.get("ignore_texts")
+    if isinstance(ignore_raw, list):
+        ignore_texts = [str(x).strip() for x in ignore_raw if str(x).strip()]
+    elif isinstance(ignore_raw, str) and ignore_raw.strip():
+        # 支持 "a|b" 或单条字符串（兼容无列表语法的简易 YAML 解析器）
+        parts = [p.strip() for p in ignore_raw.split("|")]
+        ignore_texts = [p for p in parts if p]
+    else:
+        ignore_texts = ["我还在听，说再见退出"]
+    asr = AsrConfig(
+        enabled=asr_enabled,
+        interval_sec=float(
+            asr_raw.get("interval_sec")
+            if asr_raw.get("interval_sec") is not None
+            else 0.5
+        ),
+        window_sec=float(
+            asr_raw.get("window_sec") if asr_raw.get("window_sec") is not None else 4.0
+        ),
+        early_stop=asr_early,
+        early_stop_stable_frames=max(
+            1,
+            int(
+                asr_raw.get("early_stop_stable_frames")
+                if asr_raw.get("early_stop_stable_frames") is not None
+                else 2
+            ),
+        ),
+        bottom_band_ratio=min(
+            0.5,
+            max(
+                0.05,
+                float(
+                    asr_raw.get("bottom_band_ratio")
+                    if asr_raw.get("bottom_band_ratio") is not None
+                    else 0.22
+                ),
+            ),
+        ),
+        ignore_texts=ignore_texts or ["我还在听，说再见退出"],
+    )
     return AppConfig(
         adb=adb,
         capture=capture,
@@ -381,6 +452,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         tts=tts,
         run=run,
         precondition=precondition,
+        asr=asr,
         path=cfg_path.resolve(),
     )
 
@@ -482,6 +554,15 @@ def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
             "step_settle_overrides": dict(cfg.precondition.step_settle_overrides),
             "cache_dir": cfg.precondition.cache_dir,
             "packages_path": cfg.precondition.packages_path,
+        },
+        "asr": {
+            "enabled": cfg.asr.enabled,
+            "interval_sec": cfg.asr.interval_sec,
+            "window_sec": cfg.asr.window_sec,
+            "early_stop": cfg.asr.early_stop,
+            "early_stop_stable_frames": cfg.asr.early_stop_stable_frames,
+            "bottom_band_ratio": cfg.asr.bottom_band_ratio,
+            "ignore_texts": list(cfg.asr.ignore_texts),
         },
     }
 

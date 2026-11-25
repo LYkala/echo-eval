@@ -56,6 +56,17 @@ run:
   judge_async: true
   judge_parallel: 3
 
+# ASR 准确率（P1）：句后 0.5s 截屏，窗口 4s，可早停；与 GUI 成功率互不影响
+asr:
+  enabled: true
+  interval_sec: 0.5
+  window_sec: 4.0
+  early_stop: true
+  early_stop_stable_frames: 2
+  bottom_band_ratio: 0.22
+  # 多条用 | 分隔（简易 YAML 解析器不支持列表）
+  ignore_texts: "我还在听，说再见退出"
+
 # 预置条件：开跑前覆盖检查；每条正式测前 force-stop→Home→回放 ADB
 precondition:
   enabled: true

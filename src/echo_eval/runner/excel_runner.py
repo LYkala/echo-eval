@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+from echo_eval.capture.asr_poll import asr_poll_meta, poll_asr_screenshots
 from echo_eval.capture.frames import extract_frames
 from echo_eval.cases.excel_cases import EvalCase, load_cases
 from echo_eval.config import (
@@ -18,6 +19,7 @@ from echo_eval.config import (
     load_packages_map,
 )
 from echo_eval.device.adb import AdbClient, AdbError
+from echo_eval.judge.asr import judge_asr_utterance
 from echo_eval.judge.service import JudgeError, judge_images
 from echo_eval.precondition import (
     PreconditionSkip,
@@ -120,7 +122,7 @@ def _write_report(path: Path, case: EvalCase, payload: dict[str, Any]) -> None:
     lines = [
         f"# 用例报告：{case.case_id} — {case.name}",
         "",
-        f"- passed: `{payload.get('passed')}`",
+        f"- passed (GUI成功率): `{payload.get('passed')}`",
         f"- backend: `{payload.get('judge_backend')}`",
         f"- run_dir: `{payload.get('run_dir')}`",
         "",
@@ -129,7 +131,7 @@ def _write_report(path: Path, case: EvalCase, payload: dict[str, Any]) -> None:
     ]
     for i, step in enumerate(case.steps, 1):
         lines.append(f"{i}. {step.text}（wait={step.wait_sec}s）")
-    lines.extend(["", "## 预期结果", "", case.expected or "(空)", "", "## 评判摘要", ""])
+    lines.extend(["", "## 预期结果", "", case.expected or "(空)", "", "## GUI 评判摘要", ""])
     parsed = (payload.get("evaluation") or {}).get("result_parsed")
     if isinstance(parsed, list):
         for item in parsed:
@@ -142,6 +144,31 @@ def _write_report(path: Path, case: EvalCase, payload: dict[str, Any]) -> None:
             )
     else:
         lines.append("(无解析结果)")
+
+    asr = payload.get("asr") or {}
+    if asr:
+        lines.extend(
+            [
+                "",
+                "## ASR 准确率（与 GUI 成功率互不影响）",
+                "",
+                f"- utterances: `{asr.get('total')}`",
+                f"- passed: `{asr.get('passed')}`",
+                f"- failed: `{asr.get('failed')}`",
+                f"- accuracy: `{asr.get('accuracy')}`",
+                "",
+            ]
+        )
+        for row in asr.get("utterances") or []:
+            if not isinstance(row, dict):
+                continue
+            ok = row.get("passed")
+            mark = "PASS" if ok is True else ("FAIL" if ok is False else "—")
+            lines.append(
+                f"- [{mark}] step{row.get('index')}: spoken=`{row.get('spoken_text')}` "
+                f"recognized=`{row.get('recognized_text')}` — {row.get('reason') or ''}"
+            )
+
     if payload.get("error"):
         lines.extend(["", "## 错误", "", str(payload["error"])])
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -334,7 +361,11 @@ def capture_one_case(
             step_index=i,
         )
         dur = tts.duration_sec or wav_duration_sec(Path(tts.path))
-        total_play += dur + float(step.wait_sec)
+        # ASR 采图窗口与 step.wait 取较大值，避免录屏时长不够
+        post = float(step.wait_sec)
+        if cfg.asr.enabled:
+            post = max(post, float(cfg.asr.window_sec))
+        total_play += dur + post
         tts_meta.append(
             {
                 "index": i,
@@ -395,14 +426,44 @@ def capture_one_case(
             play_started = datetime.now(timezone.utc).isoformat()
             play_offset = round(time.time() - t0, 3)
             play_audio_file(item["wav"], ffmpeg_path=cfg.capture.ffmpeg_path)
+            play_ended = datetime.now(timezone.utc).isoformat()
+            play_end_offset = round(time.time() - t0, 3)
+            asr_info: dict[str, Any] = {"enabled": bool(cfg.asr.enabled)}
+            asr_elapsed = 0.0
+            if cfg.asr.enabled:
+                _prog_device(
+                    case,
+                    index=case_index,
+                    total=case_total,
+                    device_status="running",
+                    device_label=(
+                        f"ASR截屏 第 {step_i}/{len(tts_meta)} 句"
+                        f"（{case_index}/{case_total}）"
+                    ),
+                    status="running",
+                )
+                asr_dir = run_dir / "asr_frames"
+                poll = poll_asr_screenshots(
+                    adb,
+                    asr_dir,
+                    asr=cfg.asr,
+                    ffmpeg_path=cfg.capture.ffmpeg_path,
+                    step_index=step_i,
+                )
+                asr_info.update(asr_poll_meta(poll))
+                asr_elapsed = float(poll.elapsed_sec or 0.0)
             wait_sec = float(item["wait_sec"])
-            if wait_sec > 0:
-                time.sleep(wait_sec)
+            remain_wait = max(0.0, wait_sec - asr_elapsed)
+            if remain_wait > 0:
+                time.sleep(remain_wait)
             timeline["steps"].append(
                 {
                     **item,
                     "play_started_at": play_started,
                     "play_offset_sec": play_offset,
+                    "play_ended_at": play_ended,
+                    "play_end_offset_sec": play_end_offset,
+                    "asr_poll": asr_info,
                 }
             )
         if tail > 0:
@@ -519,12 +580,90 @@ def judge_one_capture(
             write=True,
         )
         passed = evaluation.get("passed")
+
+        asr_summary: dict[str, Any] = {
+            "enabled": bool(cfg.asr.enabled),
+            "total": 0,
+            "passed": 0,
+            "failed": 0,
+            "accuracy": None,
+            "utterances": [],
+        }
+        if cfg.asr.enabled:
+            _prog_judge(
+                case,
+                index=idx,
+                judge_status="running",
+                judge_label="ASR 准确率评判中",
+                status="running",
+            )
+            step_rows = (cap.timeline or {}).get("steps") or []
+            asr_out_dir = cap.run_dir / "asr"
+            asr_out_dir.mkdir(parents=True, exist_ok=True)
+            for step in step_rows:
+                if not isinstance(step, dict):
+                    continue
+                spoken = str(step.get("text") or "")
+                poll = step.get("asr_poll") or {}
+                paths = [str(p) for p in (poll.get("paths") or []) if p]
+                try:
+                    asr_eval = judge_asr_utterance(
+                        spoken_text=spoken,
+                        image_paths=paths,
+                        backend=judge_backend,
+                        ignore_texts=list(cfg.asr.ignore_texts),
+                        write_path=asr_out_dir / f"step_{int(step.get('index') or 0):02d}.json",
+                    )
+                except Exception as e:
+                    asr_eval = {
+                        "passed": False,
+                        "result_parsed": {
+                            "match": False,
+                            "recognized_text": "",
+                            "spoken_text": spoken,
+                            "reason": f"ASR 评判异常: {e}",
+                        },
+                        "backend": judge_backend,
+                    }
+                parsed = asr_eval.get("result_parsed") if isinstance(asr_eval, dict) else {}
+                if not isinstance(parsed, dict):
+                    parsed = {}
+                ok = bool(asr_eval.get("passed")) if isinstance(asr_eval, dict) else False
+                asr_summary["total"] += 1
+                if ok:
+                    asr_summary["passed"] += 1
+                else:
+                    asr_summary["failed"] += 1
+                asr_summary["utterances"].append(
+                    {
+                        "index": step.get("index"),
+                        "spoken_text": spoken,
+                        "recognized_text": parsed.get("recognized_text") or "",
+                        "passed": ok,
+                        "reason": parsed.get("reason") or "",
+                        "backend": asr_eval.get("backend") if isinstance(asr_eval, dict) else "",
+                        "image_count": len(paths),
+                        "early_stopped": bool(poll.get("early_stopped")),
+                        "evaluation_path": (
+                            asr_eval.get("evaluation_path") if isinstance(asr_eval, dict) else ""
+                        ),
+                    }
+                )
+            if asr_summary["total"] > 0:
+                asr_summary["accuracy"] = round(
+                    asr_summary["passed"] / float(asr_summary["total"]), 4
+                )
+            (cap.run_dir / "asr_summary.json").write_text(
+                json.dumps(asr_summary, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+
         report_path = cap.run_dir / "report.md"
         payload = {
             "passed": passed,
             "judge_backend": evaluation.get("backend"),
             "run_dir": str(cap.run_dir),
             "evaluation": evaluation,
+            "asr": asr_summary,
             "tts": cap.tts_meta,
             "frame_count": len(frame_paths),
             "return_home_after_pull": cap.home_after_pull,

@@ -7,22 +7,23 @@
 
 两者共用 `configs/model.yaml`（`models.vl_eval`），但**输入、输出、判定字段、调用时机**不同，不可混用。
 
-更细的实现与 CLI 见 [JUDGE.md](./JUDGE.md)、[PHASE4_RUN.md](./PHASE4_RUN.md)、[CASE_TIMELINE.md](./CASE_TIMELINE.md)。
+更细的实现与 CLI 见 [JUDGE.md](./JUDGE.md)、[PHASE4_RUN.md](./PHASE4_RUN.md)、[CASE_TIMELINE.md](./CASE_TIMELINE.md)。  
+ASR 准确率（与 GUI 成功率并行）见 [ASR_JUDGE.md](./ASR_JUDGE.md)。
 
 ---
 
 ## 1. 总览对比
 
-| 维度 | 预置条件评判 | 正式测试评判 |
-|------|--------------|--------------|
-| 目的 | 单步 UI 是否到位（可缓存 ADB） | 整段语音任务是否满足预期 |
-| 入口 | `precondition-calibrate` / 覆盖检查 | `run --excel`（抽帧后自动评判） |
-| 视觉输入 | 通常 1～2 张**实时截屏**（before / after） | 录屏抽帧后的**多帧**序列（最多约 16 张） |
-| 文本依据 | 当前预置步骤文案 + 前缀路径 | 用例「预期结果」解析出的 `exceptions` |
-| 模型角色 | Act：提议点击坐标；Verify：是否达成 | GUI Poll：对照预期判 success/failed |
-| 成功字段 | Verify：`achieved: true/false` | `evaluation.json` → `passed` / `result_parsed` |
-| 无 VL 时 | 系统类步骤走确定性 ADB；GUI 需校准 | `--backend mock` 可联调 |
-| 产物 | `artifacts/precondition_cache/steps.json` + shots | `artifacts/<run>/evaluation.json` + `report.md` |
+| 维度 | 预置条件评判 | 正式测试评判 | ASR 准确率（P1） |
+|------|--------------|--------------|------------------|
+| 目的 | 单步 UI 是否到位（可缓存 ADB） | 整段语音任务是否满足预期 | 屏上识别文是否与播报文案一致 |
+| 入口 | `precondition-calibrate` / 覆盖检查 | `run --excel`（抽帧后自动评判） | 同 `run`，句后截屏 |
+| 视觉输入 | 通常 1～2 张**实时截屏**（before / after） | 录屏抽帧后的**多帧**序列（最多约 16 张） | 句后 0.5s 间隔截屏（≤约 8 张） |
+| 文本依据 | 当前预置步骤文案 + 前缀路径 | 用例「预期结果」解析出的 `exceptions` | 该句播报文案；忽略固定提示 |
+| 模型角色 | Act：提议点击坐标；Verify：是否达成 | GUI Poll：对照预期判 success/failed | 读底部气泡，判是否一致 |
+| 成功字段 | Verify：`achieved: true/false` | `evaluation.json` → `passed` | `asr_summary.json`（不影响 GUI passed） |
+| 无 VL 时 | 系统类步骤走确定性 ADB；GUI 需校准 | `--backend mock` 可联调 | `--backend mock` 可联调 |
+| 产物 | `artifacts/precondition_cache/steps.json` + shots | `evaluation.json` + `report.md` | `asr_frames/` + `asr/` + `asr_summary.json` |
 
 时间关系（单条用例）：
 
@@ -31,9 +32,9 @@
     ↓
 预置回放 / 校准（GUI 步才调 VL Act+Verify）
     ↓
-TTS 播报 + 录屏 + pull
+TTS 播报 + 句后 ASR 截屏 + 录屏 + pull
     ↓
-抽帧 → 正式 VL 评判（多帧 + 预期结果）
+抽帧 → GUI VL 评判 ‖ ASR VL 评判（互不影响）
 ```
 
 ---
