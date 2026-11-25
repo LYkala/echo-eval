@@ -401,6 +401,109 @@ def _parse_settle_overrides(raw: Any) -> dict[str, float]:
     return out
 
 
+def public_run_defaults(cfg: AppConfig | None = None) -> dict[str, float | int]:
+    """Frontend-facing defaults from device.yaml (or given AppConfig)."""
+    c = cfg or load_config()
+    return {
+        "step_wait_sec": float(c.run.step_wait_sec),
+        "head_delay_sec": float(c.run.head_delay_sec),
+        "tail_sec": float(c.run.tail_sec),
+        "fps": float(c.capture.fps),
+        "max_retries": int(c.precondition.max_retries),
+        "step_settle_sec": float(c.precondition.step_settle_sec),
+    }
+
+
+def apply_runtime_overrides(cfg: AppConfig, overrides: dict[str, Any] | None) -> AppConfig:
+    """Mutate cfg from a flat dict of optional frontend/CLI overrides. Returns cfg."""
+    if not overrides:
+        return cfg
+    if overrides.get("step_wait_sec") is not None:
+        cfg.run.step_wait_sec = max(0.0, float(overrides["step_wait_sec"]))
+    if overrides.get("head_delay_sec") is not None:
+        cfg.run.head_delay_sec = max(0.0, float(overrides["head_delay_sec"]))
+    if overrides.get("tail_sec") is not None:
+        cfg.run.tail_sec = max(0.0, float(overrides["tail_sec"]))
+    if overrides.get("fps") is not None:
+        cfg.capture.fps = max(0.0, float(overrides["fps"]))
+    if overrides.get("max_retries") is not None:
+        cfg.precondition.max_retries = max(1, int(overrides["max_retries"]))
+    if overrides.get("step_settle_sec") is not None:
+        cfg.precondition.step_settle_sec = max(0.0, float(overrides["step_settle_sec"]))
+    return cfg
+
+
+def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
+    """Serialize AppConfig to a JSON-friendly mapping (for per-job --config)."""
+    return {
+        "adb": {
+            "host": cfg.adb.host,
+            "port": cfg.adb.port,
+            "serial": cfg.adb.serial,
+            "adb_path": cfg.adb.adb_path,
+            "connect_timeout_sec": cfg.adb.connect_timeout_sec,
+        },
+        "capture": {
+            "duration_sec": cfg.capture.duration_sec,
+            "remote_dir": cfg.capture.remote_dir,
+            "remote_filename": cfg.capture.remote_filename,
+            "local_dir": cfg.capture.local_dir,
+            "fps": cfg.capture.fps,
+            "ffmpeg_path": cfg.capture.ffmpeg_path,
+        },
+        "stimulus": {
+            "enabled": cfg.stimulus.enabled,
+            "type": cfg.stimulus.type,
+            "path": cfg.stimulus.path,
+            "play_device": cfg.stimulus.play_device,
+            "start_delay_sec": cfg.stimulus.start_delay_sec,
+        },
+        "tts": {
+            "backend": cfg.tts.backend,
+            "voice": cfg.tts.voice,
+            "rate": cfg.tts.rate,
+            "lookup_dir": cfg.tts.lookup_dir,
+        },
+        "run": {
+            "step_wait_sec": cfg.run.step_wait_sec,
+            "head_delay_sec": cfg.run.head_delay_sec,
+            "tail_sec": cfg.run.tail_sec,
+            "return_home_after_case": cfg.run.return_home_after_case,
+            "return_home_wait_sec": cfg.run.return_home_wait_sec,
+            "judge_async": cfg.run.judge_async,
+            "judge_parallel": cfg.run.judge_parallel,
+        },
+        "precondition": {
+            "enabled": cfg.precondition.enabled,
+            "coverage_check": cfg.precondition.coverage_check,
+            "verify_after_replay": cfg.precondition.verify_after_replay,
+            "max_retries": cfg.precondition.max_retries,
+            "step_settle_sec": cfg.precondition.step_settle_sec,
+            "step_settle_overrides": dict(cfg.precondition.step_settle_overrides),
+            "cache_dir": cfg.precondition.cache_dir,
+            "packages_path": cfg.precondition.packages_path,
+        },
+    }
+
+
+def materialize_config(
+    out_path: Path | str,
+    overrides: dict[str, Any] | None = None,
+    *,
+    base_path: Path | str | None = None,
+) -> Path:
+    """Write a full JSON config (base + overrides) for a single job. Does not touch device.yaml."""
+    cfg = load_config(base_path)
+    apply_runtime_overrides(cfg, overrides)
+    dest = Path(out_path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        json.dumps(export_config_dict(cfg), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return dest.resolve()
+
+
 def load_packages_map(path: Path | str | None = None) -> dict[str, str]:
     """Load display-name → package map from configs/packages.yaml."""
     pkg_path = Path(path) if path else (REPO_ROOT / "configs" / "packages.yaml")

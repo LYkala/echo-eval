@@ -119,6 +119,7 @@ type CalibrateJob = {
   datasetName: string;
   status: string;
   backend: string;
+  scope?: "pending" | "all";
   retryFailed?: boolean;
   force?: boolean;
   passed?: number;
@@ -127,6 +128,24 @@ type CalibrateJob = {
   error?: string;
   logTail?: string;
   steps?: { status: string; case_id: string; step_text: string; attempts?: number; error?: string }[];
+};
+
+type RunParams = {
+  step_wait_sec: number;
+  head_delay_sec: number;
+  tail_sec: number;
+  fps: number;
+  max_retries: number;
+  step_settle_sec: number;
+};
+
+const PARAM_FALLBACK: RunParams = {
+  step_wait_sec: 3,
+  head_delay_sec: 1,
+  tail_sec: 5,
+  fps: 1,
+  max_retries: 3,
+  step_settle_sec: 1,
 };
 
 const ACTIVE_JOB_KEY = "echo_eval_active_job";
@@ -167,8 +186,10 @@ export function ConsoleClient() {
   const [caseId, setCaseId] = useState("");
   const [backend, setBackend] = useState<"auto" | "vl" | "mock">("mock");
   const [calBackend, setCalBackend] = useState<"auto" | "vl" | "mock">("vl");
-  const [retryFailed, setRetryFailed] = useState(false);
-  const [calForce, setCalForce] = useState(false);
+  /** pending = 只校准未通过（默认）；all = 全部重新校准 */
+  const [calScope, setCalScope] = useState<"pending" | "all">("pending");
+  const [params, setParams] = useState<RunParams>(PARAM_FALLBACK);
+  const [paramSource, setParamSource] = useState("configs/device.yaml");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [active, setActive] = useState<Job | null>(null);
@@ -205,6 +226,33 @@ export function ConsoleClient() {
       setMsg(`加载数据集失败: ${String(e)}`);
     }
   }, [pushLog]);
+
+  const refreshParamDefaults = useCallback(async () => {
+    try {
+      pushLog("GET /api/config/defaults …");
+      const res = await fetch("/api/config/defaults", { cache: "no-store" });
+      const data = (await res.json()) as {
+        defaults?: RunParams;
+        source?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error || "读取配置默认值失败");
+      if (data.defaults) setParams({ ...PARAM_FALLBACK, ...data.defaults });
+      if (data.source) setParamSource(data.source);
+      pushLog(`config defaults OK from ${data.source || "device.yaml"}`);
+    } catch (e) {
+      pushLog(`config defaults FAIL ${String(e)}`);
+    }
+  }, [pushLog]);
+
+  function setParam<K extends keyof RunParams>(key: K, raw: string) {
+    const n = Number(raw);
+    if (Number.isNaN(n)) return;
+    setParams((prev) => ({
+      ...prev,
+      [key]: key === "max_retries" ? Math.max(1, Math.floor(n)) : Math.max(0, n),
+    }));
+  }
 
   const refreshEnv = useCallback(async () => {
     const runId = ++runIdRef.current;
@@ -371,6 +419,7 @@ export function ConsoleClient() {
     autoStarted.current = true;
     void refreshEnv();
     void refreshDatasets();
+    void refreshParamDefaults();
     // Restore in-flight job after leaving/returning to this page.
     const saved = sessionStorage.getItem(ACTIVE_JOB_KEY);
     if (saved) {
@@ -406,7 +455,7 @@ export function ConsoleClient() {
         }
       })();
     }
-  }, [mounted, refreshEnv, refreshDatasets, pushLog]);
+  }, [mounted, refreshEnv, refreshDatasets, refreshParamDefaults, pushLog]);
 
   useEffect(() => {
     if (!active || !["queued", "running"].includes(active.status)) return;
@@ -533,7 +582,7 @@ export function ConsoleClient() {
     setMsg("");
     try {
       pushLog(
-        `POST /api/precondition/calibrate backend=${calBackend} retryFailed=${retryFailed} force=${calForce}`
+        `POST /api/precondition/calibrate backend=${calBackend} scope=${calScope}`
       );
       const res = await fetch("/api/precondition/calibrate", {
         method: "POST",
@@ -542,8 +591,8 @@ export function ConsoleClient() {
           datasetId,
           caseId: caseId || null,
           backend: calBackend,
-          retryFailed,
-          force: calForce,
+          scope: calScope,
+          params,
         }),
       });
       const data = (await res.json()) as CalibrateJob & { error?: string };
@@ -589,7 +638,11 @@ export function ConsoleClient() {
       const res = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(demo ? { demo: true } : { datasetId, caseId: caseId || null, backend }),
+        body: JSON.stringify(
+          demo
+            ? { demo: true }
+            : { datasetId, caseId: caseId || null, backend, params }
+        ),
       });
       const data = (await res.json()) as Job;
       if (!res.ok) throw new Error((data as { error?: string }).error || "启动失败");
@@ -862,6 +915,77 @@ export function ConsoleClient() {
                 </select>
               </div>
             </div>
+
+            <div className="space-y-3 rounded-lg border border-border/70 bg-secondary/30 px-3 py-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-sm font-medium">本次节奏</p>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={() => void refreshParamDefaults()}
+                >
+                  恢复配置默认
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                默认来自 {paramSource}，只影响本次任务，不会改写配置文件。
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="p-wait" className="text-xs text-muted-foreground">
+                    步间等待（秒）
+                  </Label>
+                  <Input
+                    id="p-wait"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={params.step_wait_sec}
+                    onChange={(e) => setParam("step_wait_sec", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="p-head" className="text-xs text-muted-foreground">
+                    开录延迟（秒）
+                  </Label>
+                  <Input
+                    id="p-head"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={params.head_delay_sec}
+                    onChange={(e) => setParam("head_delay_sec", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="p-tail" className="text-xs text-muted-foreground">
+                    尾录时长（秒）
+                  </Label>
+                  <Input
+                    id="p-tail"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={params.tail_sec}
+                    onChange={(e) => setParam("tail_sec", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="p-fps" className="text-xs text-muted-foreground">
+                    抽帧 fps
+                  </Label>
+                  <Input
+                    id="p-fps"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={params.fps}
+                    onChange={(e) => setParam("fps", e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
             {coverageWarn ? (
               <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                 {coverageWarn}
@@ -893,7 +1017,7 @@ export function ConsoleClient() {
           <CardHeader>
             <CardTitle className="font-display text-2xl">预置校准</CardTitle>
             <CardDescription>
-              正式开测前独立校准预置条件（截屏+VL→ADB）。与「开始测试」互斥占用设备。已通过步骤默认复用缓存。
+              正式开测前独立校准预置条件（截屏+VL→ADB）。与「开始测试」互斥占用设备。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -911,29 +1035,77 @@ export function ConsoleClient() {
                   <option value="mock">mock（仅联调）</option>
                 </select>
               </div>
-              <div className="flex flex-col justify-end gap-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={retryFailed}
-                    onChange={(e) => setRetryFailed(e.target.checked)}
-                  />
-                  重试 failed（--retry-failed）
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={calForce}
-                    onChange={(e) => setCalForce(e.target.checked)}
-                  />
-                  重训已 pass（--force）
-                </label>
+              <div className="space-y-2">
+                <Label>校准范围</Label>
+                <div
+                  className="grid grid-cols-2 gap-1 rounded-lg border border-border/80 bg-background p-1"
+                  role="radiogroup"
+                  aria-label="校准范围"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={calScope === "pending"}
+                    className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                      calScope === "pending"
+                        ? "bg-foreground text-background shadow-sm"
+                        : "text-muted-foreground hover:bg-secondary"
+                    }`}
+                    onClick={() => setCalScope("pending")}
+                  >
+                    只校准未通过
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={calScope === "all"}
+                    className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                      calScope === "all"
+                        ? "bg-foreground text-background shadow-sm"
+                        : "text-muted-foreground hover:bg-secondary"
+                    }`}
+                    onClick={() => setCalScope("all")}
+                  >
+                    全部重新校准
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {calScope === "pending"
+                    ? "跳过预置已全部通过的用例；失败与未完成的会重训。已通过的步骤只回放 ADB。"
+                    : "含已通过步骤一并重训，耗时更长。"}
+                </p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              默认只校准「预置未全部通过」的用例；前缀已 pass 会回放 ADB。推荐内置{" "}
-              <code>sample_v012_system_iqiyi_10.csv</code>。
-            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="p-retries" className="text-xs text-muted-foreground">
+                  单步最多重试次数
+                </Label>
+                <Input
+                  id="p-retries"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={params.max_retries}
+                  onChange={(e) => setParam("max_retries", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="p-settle" className="text-xs text-muted-foreground">
+                  预置步默认等待（秒）
+                </Label>
+                <Input
+                  id="p-settle"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={params.step_settle_sec}
+                  onChange={(e) => setParam("step_settle_sec", e.target.value)}
+                />
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-3">
               <Button type="button" variant="outline" disabled={busy} onClick={() => void checkCoverage()}>
                 查看覆盖情况
@@ -958,8 +1130,9 @@ export function ConsoleClient() {
               <div className="space-y-3 rounded-md border border-border/80 bg-secondary/40 px-3 py-3">
                 <div className="text-sm font-medium">
                   {calJob.datasetName} · {calJob.backend}
-                  {calJob.retryFailed ? " · retry-failed" : ""}
-                  {calJob.force ? " · force" : ""}
+                  {calJob.scope === "all" || calJob.force
+                    ? " · 全部重新校准"
+                    : " · 只校准未通过"}
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center text-sm">
                   <div className="rounded-md bg-background px-2 py-2">

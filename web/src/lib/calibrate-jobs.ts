@@ -4,6 +4,11 @@ import path from "path";
 import { getDataset } from "./datasets";
 import { hasActiveRunJob } from "./jobs";
 import { ensureDir, jobsRoot, repoRoot, safeId } from "./paths";
+import {
+  materializeJobConfig,
+  sanitizeOverrides,
+  type RunParamOverrides,
+} from "./run-params";
 
 export type CalibrateStatus =
   | "queued"
@@ -21,6 +26,9 @@ export type CalibrateStepRow = {
   error?: string;
 };
 
+/** Console calibrate scope: pending-only (+retry failed) vs force-all. */
+export type CalibrateScope = "pending" | "all";
+
 export type CalibrateJobMeta = {
   id: string;
   kind: "precondition_calibrate";
@@ -28,8 +36,11 @@ export type CalibrateJobMeta = {
   datasetName: string;
   caseId: string | null;
   backend: "auto" | "vl" | "mock";
+  /** @deprecated kept for log display; derived from scope */
   retryFailed: boolean;
+  /** @deprecated kept for log display; derived from scope */
   force: boolean;
+  scope: CalibrateScope;
   status: CalibrateStatus;
   createdAt: string;
   startedAt?: string;
@@ -42,6 +53,7 @@ export type CalibrateJobMeta = {
   skipped?: number;
   steps: CalibrateStepRow[];
   logTail?: string;
+  params?: RunParamOverrides;
 };
 
 const live = new Map<string, ChildProcess>();
@@ -102,6 +114,9 @@ export function readCalibrateJob(id: string): CalibrateJobMeta | null {
   if (!fs.existsSync(p)) return null;
   const job = JSON.parse(fs.readFileSync(p, "utf-8")) as CalibrateJobMeta;
   if (job.kind !== "precondition_calibrate") return null;
+  if (!job.scope) {
+    job.scope = job.force ? "all" : "pending";
+  }
   if (job.logPath && fs.existsSync(job.logPath)) {
     try {
       const log = fs.readFileSync(job.logPath, "utf-8");
@@ -142,8 +157,13 @@ export function createAndStartCalibrateJob(opts: {
   datasetId: string;
   caseId?: string | null;
   backend?: "auto" | "vl" | "mock";
+  /** pending = 只校准未通过（默认，带 --retry-failed）；all = 全部重新校准（--force） */
+  scope?: CalibrateScope;
+  /** @deprecated use scope */
   retryFailed?: boolean;
+  /** @deprecated use scope */
   force?: boolean;
+  params?: RunParamOverrides;
 }): CalibrateJobMeta {
   if (hasActiveRunJob()) {
     throw new Error("有测试任务正在运行，请先停止后再校准（设备互斥）");
@@ -160,6 +180,13 @@ export function createAndStartCalibrateJob(opts: {
   ensureDir(dir);
   const logPath = path.join(dir, "calibrate.log");
 
+  let scope: CalibrateScope = opts.scope === "all" ? "all" : "pending";
+  // Legacy body: force wins as "all"
+  if (opts.scope == null && opts.force) scope = "all";
+  const force = scope === "all";
+  const retryFailed = scope === "pending"; // pending always retries failed steps
+  const params = sanitizeOverrides(opts.params);
+
   const job: CalibrateJobMeta = {
     id,
     kind: "precondition_calibrate",
@@ -167,28 +194,34 @@ export function createAndStartCalibrateJob(opts: {
     datasetName: ds.name,
     caseId: opts.caseId || null,
     backend: opts.backend || "auto",
-    retryFailed: Boolean(opts.retryFailed),
-    force: Boolean(opts.force),
+    scope,
+    retryFailed,
+    force,
     status: "queued",
     createdAt: new Date().toISOString(),
     logPath,
     steps: [],
+    params,
   };
   writeJob(job);
+
+  const configPath = materializeJobConfig(path.join(dir, "device.override.json"), params);
 
   const root = repoRoot();
   const args = [
     "-m",
     "echo_eval",
     "precondition-calibrate",
+    "--config",
+    configPath,
     "--excel",
     ds.storedPath,
     "--backend",
     job.backend,
   ];
   if (job.caseId) args.push("--case-id", job.caseId);
-  if (job.retryFailed) args.push("--retry-failed");
-  if (job.force) args.push("--force");
+  if (force) args.push("--force");
+  else args.push("--retry-failed");
 
   job.status = "running";
   job.startedAt = new Date().toISOString();

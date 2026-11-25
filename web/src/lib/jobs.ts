@@ -3,6 +3,11 @@ import fs from "fs";
 import path from "path";
 import { getDataset } from "./datasets";
 import { ensureDir, jobsRoot, repoRoot, safeId } from "./paths";
+import {
+  materializeJobConfig,
+  sanitizeOverrides,
+  type RunParamOverrides,
+} from "./run-params";
 
 export type JobStatus = "queued" | "running" | "passed" | "failed" | "error" | "cancelled";
 
@@ -66,6 +71,8 @@ export type JobMeta = {
   demo?: boolean;
   note?: string;
   progress?: JobProgress;
+  /** Per-job overrides (not written to device.yaml). */
+  params?: RunParamOverrides;
 };
 
 const live = new Map<string, ChildProcess>();
@@ -242,6 +249,7 @@ export function createAndStartJob(opts: {
   caseId?: string | null;
   backend?: "auto" | "vl" | "mock";
   forceDemo?: boolean;
+  params?: RunParamOverrides;
 }): JobMeta {
   if (opts.forceDemo || process.env.ECHO_EVAL_DEMO === "1") {
     return ensureDemoJob();
@@ -263,6 +271,7 @@ export function createAndStartJob(opts: {
   const dir = jobDir(id);
   ensureDir(dir);
   const logPath = path.join(dir, "run.log");
+  const params = sanitizeOverrides(opts.params);
 
   const job: JobMeta = {
     id,
@@ -274,14 +283,19 @@ export function createAndStartJob(opts: {
     createdAt: new Date().toISOString(),
     logPath,
     results: [],
+    params,
   };
   writeJob(job);
+
+  const configPath = materializeJobConfig(path.join(dir, "device.override.json"), params);
 
   const root = repoRoot();
   const args = [
     "-m",
     "echo_eval",
     "run",
+    "--config",
+    configPath,
     "--excel",
     ds.storedPath,
     "--backend",

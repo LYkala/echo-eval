@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import {
   createAndStartCalibrateJob,
   listCalibrateJobs,
+  type CalibrateScope,
 } from "@/lib/calibrate-jobs";
 import { runEnvCheck } from "@/lib/env-check";
+import { sanitizeOverrides, type RunParamOverrides } from "@/lib/run-params";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,8 +19,12 @@ export async function POST(req: Request) {
     datasetId?: string;
     caseId?: string | null;
     backend?: "auto" | "vl" | "mock";
+    scope?: CalibrateScope;
+    /** @deprecated use scope */
     retryFailed?: boolean;
+    /** @deprecated use scope */
     force?: boolean;
+    params?: RunParamOverrides;
   };
   if (!body.datasetId) {
     return NextResponse.json({ error: "缺少 datasetId" }, { status: 400 });
@@ -36,13 +42,16 @@ export async function POST(req: Request) {
     );
   }
 
+  const scope: CalibrateScope =
+    body.scope === "all" || body.force ? "all" : "pending";
+
   try {
     const job = createAndStartCalibrateJob({
       datasetId: body.datasetId,
       caseId: body.caseId || null,
       backend,
-      retryFailed: Boolean(body.retryFailed),
-      force: Boolean(body.force),
+      scope,
+      params: sanitizeOverrides(body.params),
     });
     return NextResponse.json(job);
   } catch (e) {

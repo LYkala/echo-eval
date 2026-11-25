@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { BUILTIN_DATASET_ID, BUILTIN_V012_ID, getDataset } from "@/lib/datasets";
 import { createAndStartJob, ensureDemoJob, listJobs, readJob } from "@/lib/jobs";
 import { runEnvCheck } from "@/lib/env-check";
+import { sanitizeOverrides, type RunParamOverrides } from "@/lib/run-params";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export async function POST(req: Request) {
     caseId?: string | null;
     backend?: "auto" | "vl" | "mock";
     demo?: boolean;
+    params?: RunParamOverrides;
   };
 
   if (body.demo) {
@@ -62,6 +64,7 @@ export async function POST(req: Request) {
       datasetId,
       caseId: body.caseId || null,
       backend,
+      params: sanitizeOverrides(body.params),
     });
     return NextResponse.json(job);
   } catch (e) {
