@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MetricsChips } from "@/components/case-metrics";
+import { aggregateJobMetrics } from "@/lib/metrics-aggregate";
 
 type EnvItem = { key: string; label: string; ok: boolean; detail: string; required: boolean };
 type EnvResult = {
@@ -58,6 +59,7 @@ type JobProgressCase = {
   device_label?: string;
   judge_status?: string;
   judge_label?: string;
+  run_dir?: string;
 };
 
 type JobProgress = {
@@ -80,8 +82,10 @@ type CaseMetrics = {
   asr_passed?: number;
   asr_total?: number;
   latency_mean_sec?: number | null;
+  latency_measured?: number;
   latency_no_action?: number;
   mos_mean?: number | null;
+  mos_scored?: number;
   mos_na?: number;
 };
 
@@ -1487,37 +1491,34 @@ export function ConsoleClient() {
                   </div>
                 </div>
                 {(() => {
-                  const scored = (active.results || []).filter((r) => r.metrics);
-                  if (!scored.length) return null;
-                  const asr = scored
-                    .map((r) => r.metrics?.asr_accuracy)
-                    .filter((x): x is number => typeof x === "number");
-                  const lat = scored
-                    .map((r) => r.metrics?.latency_mean_sec)
-                    .filter((x): x is number => typeof x === "number");
-                  const mos = scored
-                    .map((r) => r.metrics?.mos_mean)
-                    .filter((x): x is number => typeof x === "number");
-                  const mean = (xs: number[]) =>
-                    xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+                  const agg = aggregateJobMetrics(active.results || []);
+                  if (!agg.asr_n && !agg.latency_n && !agg.mos_n) return null;
                   return (
                     <div className="grid grid-cols-3 gap-2 text-center text-sm">
                       <div className="rounded-md border border-border/70 bg-card/50 px-2 py-2">
-                        <div className="text-[11px] text-muted-foreground">ASR 均</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          ASR 均{agg.asr_n ? ` · n=${agg.asr_n}` : ""}
+                        </div>
                         <div className="font-semibold">
-                          {mean(asr) != null ? `${(mean(asr)! * 100).toFixed(0)}%` : "—"}
+                          {agg.asr_mean != null ? `${(agg.asr_mean * 100).toFixed(0)}%` : "—"}
                         </div>
                       </div>
                       <div className="rounded-md border border-border/70 bg-card/50 px-2 py-2">
-                        <div className="text-[11px] text-muted-foreground">时延均</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          时延均{agg.latency_n ? ` · n=${agg.latency_n}` : ""}
+                        </div>
                         <div className="font-semibold">
-                          {mean(lat) != null ? `${mean(lat)!.toFixed(1)}s` : "—"}
+                          {agg.latency_mean_sec != null
+                            ? `${agg.latency_mean_sec.toFixed(1)}s`
+                            : "—"}
                         </div>
                       </div>
                       <div className="rounded-md border border-border/70 bg-card/50 px-2 py-2">
-                        <div className="text-[11px] text-muted-foreground">MOS 均</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          MOS 均{agg.mos_n ? ` · n=${agg.mos_n}` : ""}
+                        </div>
                         <div className="font-semibold">
-                          {mean(mos) != null ? mean(mos)!.toFixed(1) : "—"}
+                          {agg.mos_mean != null ? agg.mos_mean.toFixed(1) : "—"}
                         </div>
                       </div>
                     </div>
@@ -1527,9 +1528,16 @@ export function ConsoleClient() {
                 <ul className="max-h-72 space-y-2 overflow-y-auto">
                   {(active.progress?.cases?.length
                     ? active.progress.cases.map((c) => {
-                        const metrics = (active.results || []).find(
+                        const result = (active.results || []).find(
                           (r) => r.case_id === c.case_id
-                        )?.metrics;
+                        );
+                        const hasRun = Boolean(result?.run_dir) || Boolean(c.run_dir);
+                        const started =
+                          hasRun ||
+                          !["pending", ""].includes(c.device_status || "pending") ||
+                          ["passed", "failed", "error", "skipped"].includes(
+                            c.judge_status || c.status
+                          );
                         return {
                           key: `${c.index}-${c.case_id}`,
                           case_id: c.case_id,
@@ -1537,8 +1545,12 @@ export function ConsoleClient() {
                           status: c.status,
                           device_label: c.device_label || c.device_status || "",
                           judge_label: c.judge_label || c.judge_status || "",
-                          linkable: ["passed", "failed"].includes(c.status),
-                          metrics,
+                          linkable: hasRun || ["passed", "failed"].includes(c.status),
+                          show:
+                            started ||
+                            active.status === "running" ||
+                            active.status === "queued",
+                          metrics: result?.metrics,
                         };
                       })
                     : (active.results || []).map((r) => ({
@@ -1549,10 +1561,13 @@ export function ConsoleClient() {
                           r.passed === true ? "passed" : r.passed === false ? "failed" : "pending",
                         device_label: "",
                         judge_label: "",
-                        linkable: r.passed === true || r.passed === false,
+                        linkable: Boolean(r.run_dir) || r.passed === true || r.passed === false,
+                        show: true,
                         metrics: r.metrics,
                       }))
-                  ).map((row) => {
+                  )
+                    .filter((row) => row.show)
+                    .map((row) => {
                     const body = (
                       <>
                         <span className="min-w-0">

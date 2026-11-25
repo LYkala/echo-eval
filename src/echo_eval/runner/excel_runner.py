@@ -310,6 +310,7 @@ def _prog_judge(
     judge_status: str,
     judge_label: str,
     status: str | None = None,
+    run_dir: str | Path | None = None,
 ) -> None:
     update_case(
         index=index,
@@ -318,6 +319,7 @@ def _prog_judge(
         status=status,
         judge_status=judge_status,
         judge_label=judge_label,
+        run_dir=str(run_dir) if run_dir else None,
         phase="judge",
         phase_label=f"评判:{judge_label}",
         touch_judge_current=True,
@@ -665,6 +667,7 @@ def capture_one_case(
         device_label="设备执行完成",
         judge_status="queued",
         judge_label="排队等待评判",
+        run_dir=str(run_dir),
         phase="queued_judge",
         phase_label="设备完成 · 评判排队",
         touch_device_current=True,
@@ -985,6 +988,7 @@ def judge_one_capture(
             judge_status=final_status,
             judge_label="评判完成",
             status=final_status,
+            run_dir=cap.run_dir,
         )
         return RunResult(
             case_id=case.case_id,
@@ -1003,6 +1007,7 @@ def judge_one_capture(
             judge_status="error",
             judge_label=f"评判失败: {err[:80]}",
             status="error",
+            run_dir=cap.run_dir,
         )
         report_path = cap.run_dir / "report.md"
         payload = {

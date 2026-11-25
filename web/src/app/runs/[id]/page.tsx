@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { readJob } from "@/lib/jobs";
+import { aggregateJobMetrics } from "@/lib/metrics-aggregate";
 import { Badge } from "@/components/ui/badge";
 import { MetricsChips } from "@/components/case-metrics";
 
@@ -11,21 +12,45 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   const job = readJob(id);
   if (!job) notFound();
 
-  const withMetrics = job.results.filter((r) => r.metrics);
-  const asrAcc =
-    withMetrics
-      .map((r) => r.metrics?.asr_accuracy)
-      .filter((x): x is number => typeof x === "number") || [];
-  const latMeans =
-    withMetrics
-      .map((r) => r.metrics?.latency_mean_sec)
-      .filter((x): x is number => typeof x === "number") || [];
-  const mosMeans =
-    withMetrics
-      .map((r) => r.metrics?.mos_mean)
-      .filter((x): x is number => typeof x === "number") || [];
-  const avg = (xs: number[]) =>
-    xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length) : null;
+  const agg = aggregateJobMetrics(job.results || []);
+  const progressCases = job.progress?.cases || [];
+  const resultById = new Map((job.results || []).map((r) => [r.case_id, r]));
+
+  // Prefer progress order (includes in-flight / cancelled partial); fall back to results.
+  const rows =
+    progressCases.length > 0
+      ? progressCases
+          .map((c) => {
+            const r = resultById.get(c.case_id);
+            const started =
+              Boolean(r?.run_dir) ||
+              Boolean(c.run_dir) ||
+              (c.device_status && c.device_status !== "pending") ||
+              ["passed", "failed", "error", "skipped"].includes(c.judge_status || c.status);
+            if (!started && job.status === "cancelled") return null;
+            return {
+              case_id: c.case_id,
+              name: c.name,
+              passed: r?.passed ?? null,
+              run_dir: r?.run_dir || c.run_dir || "",
+              metrics: r?.metrics,
+              device_label: c.device_label || c.device_status || "",
+              judge_label: c.judge_label || c.judge_status || "",
+              status: c.status,
+            };
+          })
+          .filter((x): x is NonNullable<typeof x> => Boolean(x))
+      : (job.results || []).map((r) => ({
+          case_id: r.case_id,
+          name: r.name,
+          passed: r.passed,
+          run_dir: r.run_dir,
+          metrics: r.metrics,
+          device_label: "",
+          judge_label: "",
+          status:
+            r.passed === true ? "passed" : r.passed === false ? "failed" : "pending",
+        }));
 
   return (
     <div className="animate-rise space-y-6">
@@ -38,12 +63,15 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           <p className="mt-1 text-sm text-muted-foreground">
             {job.datasetName} · backend={job.backend}
             {job.caseId ? ` · case=${job.caseId}` : " · 全表"}
+            {job.status === "cancelled" ? " · 已取消（保留已完成用例）" : ""}
           </p>
         </div>
         {job.status === "passed" ? (
           <Badge variant="pass">PASS</Badge>
         ) : job.status === "failed" ? (
           <Badge variant="fail">FAIL</Badge>
+        ) : job.status === "cancelled" ? (
+          <Badge variant="secondary">已取消</Badge>
         ) : (
           <Badge variant="secondary">{job.status}</Badge>
         )}
@@ -64,24 +92,30 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      {withMetrics.length ? (
+      {agg.asr_n || agg.latency_n || agg.mos_n ? (
         <div className="grid gap-3 text-center sm:grid-cols-3">
           <div className="rounded-lg border bg-card/80 px-3 py-4">
-            <div className="text-xs text-muted-foreground">ASR 准确率（均）</div>
+            <div className="text-xs text-muted-foreground">
+              ASR 准确率（均）{agg.asr_n ? ` · n=${agg.asr_n}` : ""}
+            </div>
             <div className="text-2xl font-semibold">
-              {avg(asrAcc) != null ? `${(avg(asrAcc)! * 100).toFixed(0)}%` : "—"}
+              {agg.asr_mean != null ? `${(agg.asr_mean * 100).toFixed(0)}%` : "—"}
             </div>
           </div>
           <div className="rounded-lg border bg-card/80 px-3 py-4">
-            <div className="text-xs text-muted-foreground">时延均值</div>
+            <div className="text-xs text-muted-foreground">
+              时延均值{agg.latency_n ? ` · n=${agg.latency_n}` : ""}
+            </div>
             <div className="text-2xl font-semibold">
-              {avg(latMeans) != null ? `${avg(latMeans)!.toFixed(1)}s` : "—"}
+              {agg.latency_mean_sec != null ? `${agg.latency_mean_sec.toFixed(1)}s` : "—"}
             </div>
           </div>
           <div className="rounded-lg border bg-card/80 px-3 py-4">
-            <div className="text-xs text-muted-foreground">MOS 均值</div>
+            <div className="text-xs text-muted-foreground">
+              MOS 均值{agg.mos_n ? ` · n=${agg.mos_n}` : ""}
+            </div>
             <div className="text-2xl font-semibold">
-              {avg(mosMeans) != null ? avg(mosMeans)!.toFixed(1) : "—"}
+              {agg.mos_mean != null ? agg.mos_mean.toFixed(1) : "—"}
             </div>
           </div>
         </div>
@@ -89,31 +123,55 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
 
       {job.error ? <p className="text-sm text-rose-700">{job.error}</p> : null}
 
-      <ul className="space-y-2">
-        {job.results.map((r) => (
-          <li key={r.case_id}>
-            <Link
-              href={`/runs/${job.id}/cases/${encodeURIComponent(r.case_id)}`}
-              className="flex items-center justify-between gap-3 rounded-lg border bg-card/80 px-4 py-3 text-sm hover:border-primary/40"
-            >
-              <span className="min-w-0">
-                <span className="font-medium">{r.case_id}</span>
-                <span className="ml-2 text-muted-foreground">{r.name}</span>
-                <span className="mt-0.5 block">
-                  <MetricsChips metrics={r.metrics} />
+      {!rows.length ? (
+        <p className="text-sm text-muted-foreground">暂无已执行用例记录。</p>
+      ) : (
+        <ul className="space-y-2">
+          {rows.map((r) => {
+            const body = (
+              <>
+                <span className="min-w-0">
+                  <span className="font-medium">{r.case_id}</span>
+                  <span className="ml-2 text-muted-foreground">{r.name}</span>
+                  {(r.device_label || r.judge_label) && (
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      设备：{r.device_label || "—"}
+                      <span className="mx-1.5 opacity-40">|</span>
+                      GUI：{r.judge_label || "—"}
+                    </span>
+                  )}
+                  <span className="mt-0.5 block">
+                    <MetricsChips metrics={r.metrics} />
+                  </span>
                 </span>
-              </span>
-              {r.passed === true ? (
-                <Badge variant="pass">GUI PASS</Badge>
-              ) : r.passed === false ? (
-                <Badge variant="fail">GUI FAIL</Badge>
-              ) : (
-                <Badge variant="secondary">—</Badge>
-              )}
-            </Link>
-          </li>
-        ))}
-      </ul>
+                {r.passed === true ? (
+                  <Badge variant="pass">GUI PASS</Badge>
+                ) : r.passed === false ? (
+                  <Badge variant="fail">GUI FAIL</Badge>
+                ) : (
+                  <Badge variant="secondary">{r.status || "—"}</Badge>
+                )}
+              </>
+            );
+            return (
+              <li key={r.case_id}>
+                {r.run_dir ? (
+                  <Link
+                    href={`/runs/${job.id}/cases/${encodeURIComponent(r.case_id)}`}
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-card/80 px-4 py-3 text-sm hover:border-primary/40"
+                  >
+                    {body}
+                  </Link>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 rounded-lg border bg-card/80 px-4 py-3 text-sm">
+                    {body}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

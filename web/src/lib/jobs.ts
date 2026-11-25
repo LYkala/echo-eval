@@ -9,6 +9,8 @@ import {
   type RunParamOverrides,
 } from "./run-params";
 
+export { aggregateJobMetrics } from "./metrics-aggregate";
+
 export type JobStatus = "queued" | "running" | "passed" | "failed" | "error" | "cancelled";
 
 /** Parallel metrics (ASR / latency / MOS) brief for list views. */
@@ -49,6 +51,8 @@ export type JobProgressCase = {
   device_label?: string;
   judge_status?: string;
   judge_label?: string;
+  /** Populated once device capture finishes (for cancel/partial history). */
+  run_dir?: string;
 };
 
 export type JobProgress = {
@@ -152,21 +156,166 @@ export function loadCaseMetricsBrief(runDir: string): CaseMetricsBrief | undefin
     brief.latency_total = Number(latSrc.total ?? 0);
     brief.latency_measured = Number(latSrc.measured ?? 0);
     brief.latency_no_action = Number(latSrc.no_action ?? 0);
+    // Only expose a mean when at least one utterance was measured.
     brief.latency_mean_sec =
-      latSrc.mean_sec === null || latSrc.mean_sec === undefined
-        ? null
-        : Number(latSrc.mean_sec);
+      brief.latency_measured > 0 &&
+      latSrc.mean_sec !== null &&
+      latSrc.mean_sec !== undefined
+        ? Number(latSrc.mean_sec)
+        : null;
   }
   if (mosSrc) {
     brief.mos_total = Number(mosSrc.total ?? 0);
     brief.mos_scored = Number(mosSrc.scored ?? 0);
     brief.mos_na = Number(mosSrc.na ?? 0);
+    // Only expose a mean when at least one utterance was scored.
     brief.mos_mean =
-      mosSrc.mean_mos === null || mosSrc.mean_mos === undefined
-        ? null
-        : Number(mosSrc.mean_mos);
+      brief.mos_scored > 0 &&
+      mosSrc.mean_mos !== null &&
+      mosSrc.mean_mos !== undefined
+        ? Number(mosSrc.mean_mos)
+        : null;
   }
   return brief;
+}
+
+function safeCaseFolderSuffix(caseId: string): string {
+  return (
+    String(caseId || "")
+      .split("")
+      .map((ch) => (/[a-zA-Z0-9\-_.]/.test(ch) ? ch : "_"))
+      .join("")
+      .slice(0, 80) || "case"
+  );
+}
+
+/** Locate capture/judge run_dir under artifacts/ for a case (cancel / partial). */
+function findCaseRunDir(caseId: string, startedAt?: string): string {
+  const root = path.join(repoRoot(), "artifacts");
+  if (!fs.existsSync(root)) return "";
+  const suffix = `_${safeCaseFolderSuffix(caseId)}`;
+  const minMs = startedAt ? Date.parse(startedAt) - 60_000 : 0;
+  let best = "";
+  let bestMs = 0;
+  let names: string[] = [];
+  try {
+    names = fs.readdirSync(root);
+  } catch {
+    return "";
+  }
+  for (const name of names) {
+    if (!name.endsWith(suffix) && name !== safeCaseFolderSuffix(caseId)) continue;
+    const dir = path.join(root, name);
+    let st: fs.Stats;
+    try {
+      st = fs.statSync(dir);
+    } catch {
+      continue;
+    }
+    if (!st.isDirectory()) continue;
+    if (minMs && st.mtimeMs < minMs) continue;
+    const caseJson = readJsonFile(path.join(dir, "case.json"));
+    if (caseJson && String(caseJson.case_id || "") && String(caseJson.case_id) !== caseId) {
+      continue;
+    }
+    // Prefer dirs that look like a real capture.
+    const hasCapture =
+      fs.existsSync(path.join(dir, "capture.mp4")) ||
+      fs.existsSync(path.join(dir, "timeline.json")) ||
+      fs.existsSync(path.join(dir, "run_meta.json")) ||
+      fs.existsSync(path.join(dir, "evaluation.json"));
+    if (!hasCapture && !caseJson) continue;
+    if (st.mtimeMs >= bestMs) {
+      bestMs = st.mtimeMs;
+      best = dir;
+    }
+  }
+  return best;
+}
+
+function passedFromJudgeStatus(judge?: string): boolean | null {
+  if (judge === "passed") return true;
+  if (judge === "failed") return false;
+  return null;
+}
+
+function recountJob(job: JobMeta, results: JobCaseResult[]): void {
+  job.results = results;
+  job.passed = results.filter((r) => r.passed === true).length;
+  job.failed = results.filter((r) => r.passed === false).length;
+  job.errors = results.filter(
+    (r) => r.passed === null && (Boolean(r.error) || !r.run_dir)
+  ).length;
+}
+
+/**
+ * Build/merge case results from progress.json + artifacts so running/cancelled
+ * jobs still show finished cases in history.
+ */
+export function harvestJobResults(job: JobMeta): JobCaseResult[] {
+  const byId = new Map<string, JobCaseResult>();
+  for (const r of job.results || []) {
+    if (r?.case_id) byId.set(r.case_id, { ...r });
+  }
+
+  const progress = job.progress || readProgress(job.id);
+  const cases = progress?.cases || [];
+  for (const c of cases) {
+    const device = c.device_status || "";
+    const judge = c.judge_status || "";
+    const started =
+      device !== "pending" ||
+      !["pending", ""].includes(judge) ||
+      Boolean(c.run_dir);
+    if (!started) continue;
+
+    const existing = byId.get(c.case_id);
+    let runDir = (c.run_dir || existing?.run_dir || "").trim();
+    if (!runDir || !fs.existsSync(runDir)) {
+      runDir = findCaseRunDir(c.case_id, job.startedAt || job.createdAt);
+    }
+
+    let passed = passedFromJudgeStatus(judge);
+    if (passed === null && runDir) {
+      const ev = readJsonFile(path.join(runDir, "evaluation.json"));
+      if (ev && typeof ev.passed === "boolean") passed = ev.passed;
+      else if (existing && typeof existing.passed === "boolean") passed = existing.passed;
+    } else if (passed === null && existing && typeof existing.passed === "boolean") {
+      passed = existing.passed;
+    }
+
+    const row: JobCaseResult = {
+      case_id: c.case_id,
+      name: c.name || existing?.name || c.case_id,
+      passed,
+      run_dir: runDir || existing?.run_dir || "",
+      error: existing?.error,
+      report_path:
+        existing?.report_path ||
+        (runDir && fs.existsSync(path.join(runDir, "report.md"))
+          ? path.join(runDir, "report.md")
+          : undefined),
+      evaluation_path:
+        existing?.evaluation_path ||
+        (runDir && fs.existsSync(path.join(runDir, "evaluation.json"))
+          ? path.join(runDir, "evaluation.json")
+          : undefined),
+    };
+    byId.set(c.case_id, row);
+  }
+
+  // Keep summary-only results that progress may not list (shouldn't happen).
+  const out = Array.isArray(progress?.cases) && progress.cases.length
+    ? progress.cases
+        .map((c) => byId.get(c.case_id))
+        .filter((r): r is JobCaseResult => Boolean(r))
+    : Array.from(byId.values());
+
+  return out.map((r) => {
+    if (!r.run_dir) return r;
+    const metrics = loadCaseMetricsBrief(r.run_dir);
+    return metrics ? { ...r, metrics } : r;
+  });
 }
 
 function artifactUrl(jobId: string, caseId: string, file: string): string {
@@ -199,29 +348,28 @@ export function readJob(id: string): JobMeta | null {
   if (raw.kind === "precondition_calibrate") return null;
   const job = raw as JobMeta;
   const progress = readProgress(id);
-  if (progress) {
-    job.progress = progress;
-    // While running, surface judged cases into results for the console list.
-    if ((!job.results || job.results.length === 0) && Array.isArray(progress.cases)) {
-      job.results = progress.cases
-        .filter((c) =>
-          ["passed", "failed", "error"].includes(c.judge_status || c.status)
-        )
-        .map((c) => {
-          const st = c.judge_status || c.status;
-          return {
-            case_id: c.case_id,
-            name: c.name,
-            passed: st === "passed" ? true : st === "failed" ? false : null,
-            run_dir: "",
-          };
-        });
+  if (progress) job.progress = progress;
+
+  // Running / cancelled / incomplete: merge progress + artifacts so history
+  // shows cases that already finished device/judge even without summary.json.
+  const needsHarvest =
+    job.status === "running" ||
+    job.status === "queued" ||
+    job.status === "cancelled" ||
+    !job.results?.length ||
+    job.results.some((r) => !r.run_dir);
+  if (needsHarvest) {
+    const harvested = harvestJobResults(job);
+    if (harvested.length) {
+      recountJob(job, harvested);
     }
   }
+
   // Attach parallel metrics from each case run_dir when available.
   if (Array.isArray(job.results)) {
     job.results = job.results.map((r) => {
       if (!r.run_dir) return r;
+      if (r.metrics) return r;
       const metrics = loadCaseMetricsBrief(r.run_dir);
       return metrics ? { ...r, metrics } : r;
     });
@@ -482,8 +630,16 @@ export function createAndStartJob(opts: {
   child.on("close", (code) => {
     live.delete(id);
     fs.closeSync(logFd);
-    const latest = readJob(id) || job;
+    // Read raw job.json (avoid harvest side-effects before merging summary).
+    const rawPath = path.join(jobDir(id), "job.json");
+    let latest: JobMeta = job;
+    try {
+      latest = JSON.parse(fs.readFileSync(rawPath, "utf-8")) as JobMeta;
+    } catch {
+      latest = { ...job };
+    }
     latest.finishedAt = new Date().toISOString();
+    latest.progress = readProgress(id);
 
     // Parse summary from log or newest batch summary
     try {
@@ -506,6 +662,23 @@ export function createAndStartJob(opts: {
       }
     } catch (e) {
       latest.error = String(e);
+    }
+
+    // Always harvest partial cases (cancel mid-run, missing summary, empty run_dir).
+    const harvested = harvestJobResults(latest);
+    if (harvested.length) {
+      // Prefer summary rows when present; fill gaps from harvest.
+      if (latest.results?.length) {
+        const byId = new Map(latest.results.map((r) => [r.case_id, r]));
+        for (const h of harvested) {
+          const cur = byId.get(h.case_id);
+          if (!cur) byId.set(h.case_id, h);
+          else if (!cur.run_dir && h.run_dir) byId.set(h.case_id, { ...cur, ...h, passed: cur.passed ?? h.passed });
+        }
+        recountJob(latest, Array.from(byId.values()));
+      } else {
+        recountJob(latest, harvested);
+      }
     }
 
     if (latest.status === "cancelled") {
@@ -539,6 +712,9 @@ export function cancelJob(id: string): JobMeta | null {
   }
   job.status = "cancelled";
   job.finishedAt = new Date().toISOString();
+  job.progress = readProgress(id) || job.progress;
+  const harvested = harvestJobResults(job);
+  if (harvested.length) recountJob(job, harvested);
   writeJob(job);
   live.delete(id);
   return job;
@@ -547,10 +723,23 @@ export function cancelJob(id: string): JobMeta | null {
 export function getCaseDetail(jobId: string, caseId: string) {
   const job = readJob(jobId);
   if (!job) return null;
-  const row = job.results.find((r) => r.case_id === caseId);
-  if (!row || !row.run_dir || !fs.existsSync(row.run_dir)) return null;
-
-  const runDir = row.run_dir;
+  let row = job.results.find((r) => r.case_id === caseId);
+  let runDir = (row?.run_dir || "").trim();
+  if (!runDir || !fs.existsSync(runDir)) {
+    const fromProgress = job.progress?.cases?.find((c) => c.case_id === caseId)?.run_dir;
+    runDir = (fromProgress || findCaseRunDir(caseId, job.startedAt || job.createdAt)).trim();
+  }
+  if (!runDir || !fs.existsSync(runDir)) return null;
+  if (!row) {
+    row = {
+      case_id: caseId,
+      name: caseId,
+      passed: null,
+      run_dir: runDir,
+    };
+  } else if (!row.run_dir) {
+    row = { ...row, run_dir: runDir };
+  }
   const readJson = (name: string) => {
     const p = path.join(runDir, name);
     if (!fs.existsSync(p)) return null;

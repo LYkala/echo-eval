@@ -113,6 +113,7 @@ def update_case(
     device_label: str | None = None,
     judge_status: str | None = None,
     judge_label: str | None = None,
+    run_dir: str | None = None,
     touch_device_current: bool = False,
     touch_judge_current: bool = False,
 ) -> None:
@@ -151,6 +152,8 @@ def update_case(
             row["judge_status"] = judge_status
         if judge_label is not None:
             row["judge_label"] = judge_label
+        if run_dir is not None and str(run_dir).strip():
+            row["run_dir"] = str(run_dir).strip()
         if status is not None:
             row["status"] = status
         if phase is not None:
