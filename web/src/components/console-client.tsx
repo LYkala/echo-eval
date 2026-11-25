@@ -280,6 +280,12 @@ export function ConsoleClient() {
   const [ttsLibraryBusy, setTtsLibraryBusy] = useState(false);
   const [ttsLibraryMsg, setTtsLibraryMsg] = useState("");
   const [ttsCustomText, setTtsCustomText] = useState("");
+  /** Prebuild-only; independent from run/preview tts_* params. */
+  const [libBackend, setLibBackend] = useState("edge");
+  const [libVoice, setLibVoice] = useState("zh-CN-XiaoxiaoNeural");
+  const [libPreviewBusy, setLibPreviewBusy] = useState(false);
+  const [libPreviewUrl, setLibPreviewUrl] = useState<string | null>(null);
+  const [libPreviewError, setLibPreviewError] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [active, setActive] = useState<Job | null>(null);
@@ -387,24 +393,31 @@ export function ConsoleClient() {
     }
   }, [params.tts_library_dir]);
 
-  async function previewTts() {
-    if (params.tts_backend !== "edge") {
-      setTtsPreviewError("试听目前仅支持 edge-tts");
+  async function previewTtsVoice(opts: {
+    backend: string;
+    voice: string;
+    setBusy: (v: boolean) => void;
+    setError: (v: string) => void;
+    url: string | null;
+    setUrl: (v: string | null) => void;
+  }) {
+    if (opts.backend !== "edge") {
+      opts.setError("试听目前仅支持 edge-tts");
       return;
     }
-    setTtsPreviewBusy(true);
-    setTtsPreviewError("");
+    opts.setBusy(true);
+    opts.setError("");
     try {
-      if (ttsPreviewUrl) {
-        URL.revokeObjectURL(ttsPreviewUrl);
-        setTtsPreviewUrl(null);
+      if (opts.url) {
+        URL.revokeObjectURL(opts.url);
+        opts.setUrl(null);
       }
       const res = await fetch("/api/tts/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           backend: "edge",
-          voice: params.tts_voice,
+          voice: opts.voice,
           text: "小翼管家",
         }),
       });
@@ -413,13 +426,34 @@ export function ConsoleClient() {
         throw new Error((err as { error?: string }).error || `preview HTTP ${res.status}`);
       }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      setTtsPreviewUrl(url);
+      opts.setUrl(URL.createObjectURL(blob));
     } catch (e) {
-      setTtsPreviewError(String(e));
+      opts.setError(String(e));
     } finally {
-      setTtsPreviewBusy(false);
+      opts.setBusy(false);
     }
+  }
+
+  async function previewTts() {
+    await previewTtsVoice({
+      backend: params.tts_backend,
+      voice: params.tts_voice,
+      setBusy: setTtsPreviewBusy,
+      setError: setTtsPreviewError,
+      url: ttsPreviewUrl,
+      setUrl: setTtsPreviewUrl,
+    });
+  }
+
+  async function previewLibTts() {
+    await previewTtsVoice({
+      backend: libBackend,
+      voice: libVoice,
+      setBusy: setLibPreviewBusy,
+      setError: setLibPreviewError,
+      url: libPreviewUrl,
+      setUrl: setLibPreviewUrl,
+    });
   }
 
   async function prebuildTtsLibrary(force = false) {
@@ -432,8 +466,8 @@ export function ConsoleClient() {
         body: JSON.stringify({
           action: "prebuild",
           datasetId,
-          backend: params.tts_backend,
-          voice: params.tts_voice,
+          backend: libBackend,
+          voice: libVoice,
           library_dir: params.tts_library_dir,
           wake_enabled: params.wake_enabled,
           wake_text: params.wake_text,
@@ -451,7 +485,7 @@ export function ConsoleClient() {
       if (!res.ok) throw new Error(data.error || `prebuild HTTP ${res.status}`);
       const errN = (data.errors || []).length;
       setTtsLibraryMsg(
-        `预合成完成：新建 ${data.created ?? 0} / 已有 ${data.exists ?? 0} / 合计 ${data.total ?? 0}` +
+        `预合成完成（${libBackend}/${libVoice}）：新建 ${data.created ?? 0} / 已有 ${data.exists ?? 0} / 合计 ${data.total ?? 0}` +
           (errN ? `，失败 ${errN}` : "") +
           `，库内 ${data.entry_count ?? "?"} 条`
       );
@@ -478,8 +512,8 @@ export function ConsoleClient() {
         body: JSON.stringify({
           action: "custom",
           text,
-          backend: params.tts_backend,
-          voice: params.tts_voice,
+          backend: libBackend,
+          voice: libVoice,
           library_dir: params.tts_library_dir,
         }),
       });
@@ -492,7 +526,7 @@ export function ConsoleClient() {
       setTtsLibraryMsg(
         data.status === "exists"
           ? `已存在：${data.entry?.text || text}`
-          : `已写入库：${data.entry?.text || text}`
+          : `已写入库（${libBackend}/${libVoice}）：${data.entry?.text || text}`
       );
       setTtsCustomText("");
       await refreshTtsLibrary();
@@ -1371,26 +1405,26 @@ export function ConsoleClient() {
                 </div>
               </div>
               <div className="space-y-2 border-t border-border/60 pt-3">
-                <p className="text-sm font-medium">播报音色（TTS）</p>
+                <p className="text-sm font-medium">开测音色</p>
                 <p className="text-xs text-muted-foreground">
-                  建议先预合成进语音库再开测：运行时优先读库，未命中则用本机系统语音（Windows SAPI）。预合成可用
-                  edge-tts（需出网）或 SAPI。
+                  仅影响「开始测试」与试听。开启「优先用库」时先读语音库；未命中再用下方后端（Windows 上库未命中走系统
+                  SAPI）。
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">TTS 后端（预合成）</Label>
+                    <Label className="text-xs text-muted-foreground">开测 TTS 后端</Label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                       value={params.tts_backend}
                       onChange={(e) => setParam("tts_backend", e.target.value)}
                     >
-                      <option value="edge">edge-tts（推荐）</option>
+                      <option value="edge">edge-tts</option>
                       <option value="sapi">本机 SAPI</option>
                       <option value="file">预录 file</option>
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">音色</Label>
+                    <Label className="text-xs text-muted-foreground">开测音色</Label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                       disabled={params.tts_backend !== "edge"}
@@ -1415,86 +1449,135 @@ export function ConsoleClient() {
                     disabled={ttsPreviewBusy || params.tts_backend !== "edge"}
                     onClick={() => void previewTts()}
                   >
-                    {ttsPreviewBusy ? "合成中…" : "试听当前音色"}
+                    {ttsPreviewBusy ? "合成中…" : "试听开测音色"}
                   </Button>
                   {ttsPreviewUrl ? (
                     <audio controls src={ttsPreviewUrl} className="h-8 max-w-full" />
                   ) : null}
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={params.tts_prefer_library}
+                      onChange={(e) => setBoolParam("tts_prefer_library", e.target.checked)}
+                    />
+                    运行时优先用语音库
+                  </label>
                 </div>
                 {ttsPreviewError ? (
                   <p className="text-xs text-rose-700">{ttsPreviewError}</p>
                 ) : null}
-                <div className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-medium">语音库</p>
-                    <label className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        checked={params.tts_prefer_library}
-                        onChange={(e) => setBoolParam("tts_prefer_library", e.target.checked)}
-                      />
-                      运行时优先用库（未命中→系统语音）
-                    </label>
+              </div>
+
+              <div className="space-y-2 border-t border-border/60 pt-3">
+                <p className="text-sm font-medium">预合成音色（语音库）</p>
+                <p className="text-xs text-muted-foreground">
+                  与开测音色独立。预合成 / 自定义写入只看这里的后端与音色，不会改开测参数。
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">预合成后端</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={libBackend}
+                      onChange={(e) => setLibBackend(e.target.value)}
+                    >
+                      <option value="edge">edge-tts（推荐）</option>
+                      <option value="sapi">本机 SAPI</option>
+                    </select>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    库内 {ttsLibrary?.entry_count ?? "—"} 条
-                    {ttsLibrary?.missing_files
-                      ? `（缺文件 ${ttsLibrary.missing_files}）`
-                      : ""}
-                    {ttsLibrary?.updated_at ? ` · 更新 ${ttsLibrary.updated_at}` : ""}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={ttsLibraryBusy || !datasetId}
-                      onClick={() => void prebuildTtsLibrary(false)}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">预合成音色</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      disabled={libBackend !== "edge"}
+                      value={libVoice}
+                      onChange={(e) => setLibVoice(e.target.value)}
                     >
-                      {ttsLibraryBusy ? "处理中…" : "预合成当前数据集"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={ttsLibraryBusy || !datasetId}
-                      onClick={() => void prebuildTtsLibrary(true)}
-                    >
-                      强制重合成
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={ttsLibraryBusy}
-                      onClick={() => void refreshTtsLibrary()}
-                    >
-                      刷新状态
-                    </Button>
+                      {ttsVoices.map((v) => (
+                        <option key={`lib-${v.id}`} value={v.id}>
+                          {v.label || v.id}
+                        </option>
+                      ))}
+                      {!ttsVoices.some((v) => v.id === libVoice) && libVoice ? (
+                        <option value={libVoice}>{libVoice}</option>
+                      ) : null}
+                    </select>
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <Label className="text-xs text-muted-foreground">自定义文本（数据集外）</Label>
-                      <Input
-                        value={ttsCustomText}
-                        placeholder="例如：打开设置"
-                        maxLength={200}
-                        onChange={(e) => setTtsCustomText(e.target.value)}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={ttsLibraryBusy || !ttsCustomText.trim()}
-                      onClick={() => void addCustomTts()}
-                    >
-                      写入语音库
-                    </Button>
-                  </div>
-                  {ttsLibraryMsg ? (
-                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">{ttsLibraryMsg}</p>
-                  ) : null}
-                  {ttsLibrary?.error ? (
-                    <p className="text-xs text-rose-700">{ttsLibrary.error}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={libPreviewBusy || libBackend !== "edge"}
+                    onClick={() => void previewLibTts()}
+                  >
+                    {libPreviewBusy ? "合成中…" : "试听预合成音色"}
+                  </Button>
+                  {libPreviewUrl ? (
+                    <audio controls src={libPreviewUrl} className="h-8 max-w-full" />
                   ) : null}
                 </div>
+                {libPreviewError ? (
+                  <p className="text-xs text-rose-700">{libPreviewError}</p>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  库内 {ttsLibrary?.entry_count ?? "—"} 条
+                  {ttsLibrary?.missing_files
+                    ? `（缺文件 ${ttsLibrary.missing_files}）`
+                    : ""}
+                  {ttsLibrary?.updated_at ? ` · 更新 ${ttsLibrary.updated_at}` : ""}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={ttsLibraryBusy || !datasetId}
+                    onClick={() => void prebuildTtsLibrary(false)}
+                  >
+                    {ttsLibraryBusy ? "处理中…" : "预合成当前数据集"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={ttsLibraryBusy || !datasetId}
+                    onClick={() => void prebuildTtsLibrary(true)}
+                  >
+                    强制重合成
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={ttsLibraryBusy}
+                    onClick={() => void refreshTtsLibrary()}
+                  >
+                    刷新状态
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Label className="text-xs text-muted-foreground">自定义文本（数据集外）</Label>
+                    <Input
+                      value={ttsCustomText}
+                      placeholder="例如：打开设置"
+                      maxLength={200}
+                      onChange={(e) => setTtsCustomText(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={ttsLibraryBusy || !ttsCustomText.trim()}
+                    onClick={() => void addCustomTts()}
+                  >
+                    写入语音库
+                  </Button>
+                </div>
+                {ttsLibraryMsg ? (
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{ttsLibraryMsg}</p>
+                ) : null}
+                {ttsLibrary?.error ? (
+                  <p className="text-xs text-rose-700">{ttsLibrary.error}</p>
+                ) : null}
               </div>
             </div>
 

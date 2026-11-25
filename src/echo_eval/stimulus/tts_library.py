@@ -106,7 +106,9 @@ def find_entry(
     key = entry_key(case_id=case_id, step_index=step_index, text=text, profile=profile)
     th = text_hash(text)
     soft_case: dict[str, Any] | None = None
+    soft_case_any: dict[str, Any] | None = None
     soft_text: dict[str, Any] | None = None
+    soft_text_any: dict[str, Any] | None = None
     for e in data.get("entries") or []:
         if not isinstance(e, dict):
             continue
@@ -115,23 +117,25 @@ def find_entry(
             continue
         if e.get("key") == key:
             return e
-        # Soft match: same case/step/profile and text hash
-        if (
-            soft_case is None
-            and str(e.get("case_id") or "") == case_id
+        same_case_step = (
+            str(e.get("case_id") or "") == case_id
             and int(e.get("step_index") or -1) == int(step_index)
-            and str(e.get("voice_profile") or "") == profile
             and str(e.get("text_hash") or "") == th
-        ):
+        )
+        same_text = str(e.get("text_hash") or "") == th
+        same_profile = str(e.get("voice_profile") or "") == profile
+        # Soft match: same case/step/profile and text hash
+        if soft_case is None and same_case_step and same_profile:
             soft_case = e
+        # Prebuild voice may differ from run voice — still prefer same case/step/text
+        if soft_case_any is None and same_case_step:
+            soft_case_any = e
         # Custom / cross-case: same profile + text (e.g. UI-added utterance)
-        if (
-            soft_text is None
-            and str(e.get("voice_profile") or "") == profile
-            and str(e.get("text_hash") or "") == th
-        ):
+        if soft_text is None and same_text and same_profile:
             soft_text = e
-    return soft_case or soft_text
+        if soft_text_any is None and same_text:
+            soft_text_any = e
+    return soft_case or soft_case_any or soft_text or soft_text_any
 
 
 def resolve_wav(
