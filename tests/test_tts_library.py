@@ -84,8 +84,8 @@ def test_add_and_resolve(tmp_path: Path, monkeypatch):
     )["key"] == key
 
 
-def test_find_entry_ignores_profile_mismatch(tmp_path: Path, monkeypatch):
-    """Prebuild voice A can still hit when run looks up with voice B."""
+def test_find_entry_is_profile_strict(tmp_path: Path, monkeypatch):
+    """Different prebuild voice must not satisfy another profile lookup."""
 
     def _fake_synth(text, out_path, **_kw):
         out_path = Path(out_path)
@@ -108,14 +108,56 @@ def test_find_entry_ignores_profile_mismatch(tmp_path: Path, monkeypatch):
         backend="edge",
         voice="zh-CN-XiaoxiaoNeural",
     )
-    hit = resolve_wav(
+    miss = resolve_wav(
         root,
         case_id="C1",
         step_index=1,
         text="打开设置",
         profile=voice_profile("edge", "zh-CN-YunxiNeural"),
     )
+    assert miss is None
+    hit = resolve_wav(
+        root,
+        case_id="C1",
+        step_index=1,
+        text="打开设置",
+        profile=voice_profile("edge", "zh-CN-XiaoxiaoNeural"),
+    )
     assert hit is not None and hit.is_file()
+
+
+def test_list_library_voices(tmp_path: Path, monkeypatch):
+    from echo_eval.stimulus.tts_library import list_library_voices, library_status
+
+    def _fake_synth(text, out_path, **_kw):
+        out_path = Path(out_path)
+        _write_beep_wav(out_path, duration_sec=0.08)
+        return tts_mod.TtsResult(
+            path=str(out_path),
+            backend="edge",
+            text=text,
+            duration_sec=0.08,
+            voice="zh-CN-XiaoxiaoNeural",
+        )
+
+    monkeypatch.setattr("echo_eval.stimulus.tts_library.synthesize", _fake_synth)
+    root = tmp_path / "lib"
+    add_utterance(
+        root, text="一", case_id="A", step_index=1, backend="edge", voice="zh-CN-XiaoxiaoNeural"
+    )
+    add_utterance(
+        root, text="二", case_id="A", step_index=2, backend="edge", voice="zh-CN-XiaoxiaoNeural"
+    )
+    add_utterance(
+        root, text="三", case_id="B", step_index=1, backend="edge", voice="zh-CN-YunxiNeural"
+    )
+    voices = list_library_voices(root)
+    assert len(voices) == 2
+    by_voice = {v["voice"]: v for v in voices}
+    assert by_voice["zh-CN-XiaoxiaoNeural"]["count"] == 2
+    assert "晓晓" in by_voice["zh-CN-XiaoxiaoNeural"]["label"]
+    status = library_status(root)
+    assert len(status["voices"]) == 2
 
 
 def test_synthesize_with_library_hit(tmp_path: Path, monkeypatch):

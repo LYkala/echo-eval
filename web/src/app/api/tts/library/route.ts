@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { spawnSync } from "child_process";
+import fs from "fs";
+import path from "path";
 import {
   BUILTIN_DATASET_ID,
   BUILTIN_V012_ID,
@@ -52,7 +54,43 @@ function resolveExcelPath(datasetId: string): string {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const libraryDir = (url.searchParams.get("library_dir") || "").trim() || "assets/tts_library";
+  const sampleProfile = (url.searchParams.get("sample_profile") || "").trim();
   try {
+    if (sampleProfile) {
+      const data = runPythonJson(
+        "from echo_eval.stimulus.tts_library import resolve_library_root, list_library_voices\n" +
+          "import json, sys\n" +
+          "root = resolve_library_root(sys.argv[1])\n" +
+          "profile = sys.argv[2]\n" +
+          "voices = list_library_voices(root)\n" +
+          "hit = next((v for v in voices if v.get('profile') == profile), None)\n" +
+          "print(json.dumps({'root': str(root), 'voice': hit}, ensure_ascii=False))",
+        [libraryDir, sampleProfile],
+        30_000
+      ) as { root?: string; voice?: { sample_rel_path?: string } | null };
+      const rel = data.voice?.sample_rel_path || "";
+      const root = data.root || "";
+      if (!rel || !root) {
+        return NextResponse.json({ error: "该音色在库中无样例" }, { status: 404 });
+      }
+      const wavPath = path.resolve(root, rel);
+      const rootResolved = path.resolve(root);
+      if (!wavPath.startsWith(rootResolved + path.sep) && wavPath !== rootResolved) {
+        return NextResponse.json({ error: "非法路径" }, { status: 400 });
+      }
+      if (!fs.existsSync(wavPath)) {
+        return NextResponse.json({ error: "样例文件缺失" }, { status: 404 });
+      }
+      const buf = fs.readFileSync(wavPath);
+      return new NextResponse(buf, {
+        headers: {
+          "Content-Type": "audio/wav",
+          "Cache-Control": "no-store",
+          "X-Echo-Eval-Profile": encodeURIComponent(sampleProfile),
+        },
+      });
+    }
+
     const data = runPythonJson(
       "from echo_eval.stimulus.tts_library import resolve_library_root, library_status\n" +
         "import json, sys\n" +
