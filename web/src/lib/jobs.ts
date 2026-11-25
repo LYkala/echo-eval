@@ -431,6 +431,7 @@ export function createAndStartJob(opts: {
   }
 
   // Lazy import to avoid circular init with calibrate-jobs.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- break jobs↔calibrate-jobs cycle
   const { hasActiveCalibrateJob } = require("./calibrate-jobs") as typeof import("./calibrate-jobs");
   if (hasActiveCalibrateJob()) {
     throw new Error("有预置校准任务正在运行，请先停止后再开测（设备互斥）");

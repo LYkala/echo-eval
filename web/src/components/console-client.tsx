@@ -192,7 +192,10 @@ function blankSteps(): StepRow[] {
 
 export function ConsoleClient() {
   const [mounted, setMounted] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
+  // Seed a line so SSR/HTML is not stuck on “（暂无日志）”; effects append more.
+  const [logs, setLogs] = useState<string[]>([
+    "[boot] ConsoleClient 已渲染。若本行之后没有新日志，说明浏览器 JS 未完成加载（请强刷或看 F12）。",
+  ]);
   const [env, setEnv] = useState<EnvResult | null>(null);
   const [steps, setSteps] = useState<StepRow[]>(blankSteps);
   const [envChecking, setEnvChecking] = useState(false);
@@ -429,7 +432,16 @@ export function ConsoleClient() {
   useEffect(() => {
     setMounted(true);
     pushLog("浏览器脚本已加载（hydration OK）");
-  }, [pushLog]);
+    // Expose a manual hook for F12 debugging when clicks seem dead.
+    try {
+      (window as unknown as { __echoEvalRefreshEnv?: () => void }).__echoEvalRefreshEnv = () => {
+        pushLog("F12 手动触发 refreshEnv");
+        void refreshEnv();
+      };
+    } catch {
+      /* ignore */
+    }
+  }, [pushLog, refreshEnv]);
 
   useEffect(() => {
     if (!mounted || autoStarted.current) return;
