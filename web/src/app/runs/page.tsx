@@ -8,10 +8,10 @@ export default function RunsPage() {
   ensureDemoJob();
   const jobs = listJobs();
   return (
-    <div className="animate-rise space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-semibold">历史任务</h1>
-        <p className="mt-1 text-sm text-muted-foreground">本机 artifacts/web/jobs 下的评测记录</p>
+    <div className="mx-auto max-w-4xl animate-rise space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-xl font-semibold tracking-tight">任务管理</h1>
+        <p className="text-sm text-muted-foreground">本机 artifacts/web/jobs 下的评测记录</p>
       </div>
       <ul className="space-y-3">
         {jobs.map((j) => (
