@@ -294,6 +294,7 @@ def synthesize(
     case_id: str = "",
     step_index: int = 1,
     ffmpeg_path: str = "",
+    fallback_sapi: bool = True,
 ) -> TtsResult:
     backend = (backend or "sapi").strip().lower()
     text = (text or "").strip()
@@ -326,13 +327,35 @@ def synthesize(
         )
 
     if backend == "edge":
-        return synthesize_edge(
-            text,
-            out_path,
-            voice=voice,
-            rate=rate,
-            ffmpeg_path=ffmpeg_path,
-        )
+        try:
+            return synthesize_edge(
+                text,
+                out_path,
+                voice=voice,
+                rate=rate,
+                ffmpeg_path=ffmpeg_path,
+            )
+        except TtsError as e:
+            # Network / Edge service unavailable → Windows SAPI when enabled.
+            if not fallback_sapi:
+                raise
+            if not sys.platform.startswith("win"):
+                raise TtsError(
+                    f"{e}；非 Windows 无法回退 SAPI（可改 tts.backend=file）"
+                ) from e
+            print(
+                f"[echo-eval][warn] edge-tts 失败，回退本机 SAPI: {e}",
+                flush=True,
+            )
+            # SAPI voice names differ from edge ShortName; use system default.
+            result = synthesize_sapi(text, out_path, voice="", rate=rate)
+            return TtsResult(
+                path=result.path,
+                backend="edge_fallback_sapi",
+                text=result.text,
+                duration_sec=result.duration_sec,
+                voice=result.voice or "sapi_default",
+            )
 
     if backend == "http":
         raise TtsError(

@@ -1253,7 +1253,7 @@ export function ConsoleClient() {
               <div className="space-y-2 border-t border-border/60 pt-3">
                 <p className="text-sm font-medium">播报音色（TTS）</p>
                 <p className="text-xs text-muted-foreground">
-                  edge-tts 走微软在线神经音色（需出网，约 0.2–0.7s/句）；也可切回本机 SAPI。
+                  edge-tts 走微软在线神经音色（需出网）。连不上时自动回退本机 SAPI（Windows）；也可手动选 SAPI。
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">

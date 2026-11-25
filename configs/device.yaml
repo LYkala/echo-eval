@@ -41,6 +41,8 @@ tts:
   voice: zh-CN-XiaoxiaoNeural
   rate: 0
   lookup_dir: ""
+  # edge 连不上时回退本机 SAPI（仅 Windows）
+  fallback_sapi: true
 
 run:
   # Excel 步骤默认等待（表内「等待时间」列可覆盖）

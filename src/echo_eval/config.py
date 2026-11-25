@@ -196,6 +196,8 @@ class TtsConfig:
     voice: str
     rate: int
     lookup_dir: str
+    # edge 连不上微软服务时，回退 Windows SAPI（仅 Windows）
+    fallback_sapi: bool = True
 
 
 @dataclass
@@ -360,11 +362,16 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             else 1.0
         ),
     )
+    if "fallback_sapi" in tts_raw:
+        tts_fallback = bool(tts_raw.get("fallback_sapi"))
+    else:
+        tts_fallback = True
     tts = TtsConfig(
         backend=str(tts_raw.get("backend") or "edge").strip().lower(),
         voice=str(tts_raw.get("voice") or "zh-CN-XiaoxiaoNeural").strip(),
         rate=int(tts_raw.get("rate") or 0),
         lookup_dir=str(tts_raw.get("lookup_dir") or "").strip(),
+        fallback_sapi=tts_fallback,
     )
     if "return_home_after_case" in run_raw:
         return_home = bool(run_raw.get("return_home_after_case"))
@@ -684,6 +691,7 @@ def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
             "voice": cfg.tts.voice,
             "rate": cfg.tts.rate,
             "lookup_dir": cfg.tts.lookup_dir,
+            "fallback_sapi": bool(cfg.tts.fallback_sapi),
         },
         "run": {
             "step_wait_sec": cfg.run.step_wait_sec,

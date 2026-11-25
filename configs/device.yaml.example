@@ -28,6 +28,8 @@ tts:
   voice: zh-CN-XiaoxiaoNeural
   rate: 0
   lookup_dir: ""
+  # edge 连不上时回退本机 SAPI（仅 Windows）
+  fallback_sapi: true
 
 run:
   step_wait_sec: 3

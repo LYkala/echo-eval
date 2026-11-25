@@ -74,7 +74,7 @@ pip install "edge-tts>=7.0.0"
 # 或：pip install -e .
 ```
 
-默认 `backend: edge`，音色如 `zh-CN-XiaoxiaoNeural`。控制台可切换后端/音色并试听。edge 需访问 `speech.platform.bing.com`；断网请改 `sapi` 或 `file`。
+默认 `backend: edge`，音色如 `zh-CN-XiaoxiaoNeural`。控制台可切换后端/音色并试听。edge 需访问 `speech.platform.bing.com`；连不上时默认 **回退本机 SAPI**（`tts.fallback_sapi: true`，仅 Windows），日志会打 `[warn] edge-tts 失败，回退本机 SAPI`。
 
 ## 预置条件（v0.11）
 

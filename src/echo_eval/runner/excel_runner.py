@@ -417,6 +417,7 @@ def capture_one_case(
             case_id=case.case_id,
             step_index=i,
             ffmpeg_path=cfg.capture.ffmpeg_path,
+            fallback_sapi=bool(cfg.tts.fallback_sapi),
         )
         dur = tts.duration_sec or wav_duration_sec(Path(tts.path))
         # 现场仅 ASR 短采图 + MOS 麦；时延改离线，不拉长录屏
@@ -501,6 +502,7 @@ def capture_one_case(
                 case_id=case.case_id,
                 step_index=0,
                 ffmpeg_path=cfg.capture.ffmpeg_path,
+                fallback_sapi=bool(cfg.tts.fallback_sapi),
             )
             wake_play_started = datetime.now(timezone.utc).isoformat()
             wake_offset = round(time.time() - t0, 3)
