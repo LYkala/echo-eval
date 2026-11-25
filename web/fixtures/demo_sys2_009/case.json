@@ -1,0 +1,22 @@
+{
+  "case_id": "SYS2-009",
+  "name": "取消静音",
+  "description": "词表／语法基准\r\n确认播放进度仍在推进。",
+  "case_type": "GUI",
+  "object": "系统操控",
+  "scene": "静音",
+  "priority": "P0",
+  "precondition_steps": [
+    "静音"
+  ],
+  "steps": [
+    {
+      "text": "取消静音",
+      "wait_sec": 3.0
+    }
+  ],
+  "expected": "解除静音，实际恢复输出，恢复的音量档记录为设备实测。",
+  "exceptions": [
+    "解除静音，实际恢复输出，恢复的音量档记录为设备实测。"
+  ]
+}

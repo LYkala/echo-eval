@@ -2,7 +2,7 @@
 
 来源现场产物 `20261124_123758_IQ-SCR-026`（真实录屏 / 截帧 / TTS wav / VL 评判）。
 
-Web 控制台「打开演示任务」会把本目录复制到 `artifacts/web/jobs/job_demo_sample/demo_case/`。
+Web 控制台「打开演示任务」会把本目录复制到 `artifacts/web/jobs/job_demo_sample/IQ-SCR-026/`（与 SYS2-009 同属一个演示任务）。
 
 | 内容 | 说明 |
 |------|------|

@@ -1,0 +1,29 @@
+{
+  "enabled": true,
+  "case_id": "SYS2-009",
+  "previous_package": "",
+  "force_stop": {},
+  "home": true,
+  "steps": [
+    {
+      "index": 1,
+      "text": "静音",
+      "key": "773f95ee7528d19a:静音",
+      "status": "passed",
+      "source": "cache",
+      "commands": [
+        "cmd media_session volume --stream 3 --set 0",
+        "media volume --stream 3 --set 0"
+      ],
+      "ok": true,
+      "exec": [
+        {
+          "cmd": "cmd media_session volume --stream 3 --set 0",
+          "ok": true
+        }
+      ],
+      "settle_sec": 2.0
+    }
+  ],
+  "opened_package": ""
+}

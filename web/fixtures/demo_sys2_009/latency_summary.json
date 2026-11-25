@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "total": 1,
+  "measured": 1,
+  "no_action": 0,
+  "mean_sec": 0.8,
+  "timeout_sec": 4.0,
+  "bottom_band_ratio": 0.22,
+  "utterances": [
+    {
+      "index": 1,
+      "spoken_text": "取消静音",
+      "status": "measured",
+      "latency_sec": 0.8,
+      "action_frame": "frame_005.jpg",
+      "reason": "演示仿真：忽略底部文字带后，约 0.8s 出现非静音喇叭/音量变化"
+    }
+  ]
+}

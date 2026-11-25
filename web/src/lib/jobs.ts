@@ -252,11 +252,21 @@ function newJobId(): string {
   return `job_${stamp}`;
 }
 
-const DEMO_FIXTURE_ID = "iq-scr-026-v1";
+/** Bump when demo fixture set changes so local caches re-seed. */
+const DEMO_FIXTURE_ID = "demo-two-cases-v1";
 
-/** Packaged real run under web/fixtures/demo_iq_scr_026 (IQ-SCR-026). */
-function demoFixtureRoot(): string {
-  return path.join(repoRoot(), "web", "fixtures", "demo_iq_scr_026");
+type DemoFixtureSpec = {
+  fixtureDir: string;
+  caseFolder: string;
+};
+
+/** Real packaged runs under web/fixtures/ (SYS2-009 pass + IQ-SCR-026 fail). */
+function demoFixtureSpecs(): DemoFixtureSpec[] {
+  const fixtures = path.join(repoRoot(), "web", "fixtures");
+  return [
+    { fixtureDir: path.join(fixtures, "demo_sys2_009"), caseFolder: "SYS2-009" },
+    { fixtureDir: path.join(fixtures, "demo_iq_scr_026"), caseFolder: "IQ-SCR-026" },
+  ];
 }
 
 function copyDirRecursive(src: string, dest: string): void {
@@ -270,58 +280,86 @@ function copyDirRecursive(src: string, dest: string): void {
   }
 }
 
-/** Seed a browsable demo job from the IQ-SCR-026 fixture (GUI FAIL + ASR/latency). MOS omitted. */
+function seedDemoCase(jobRoot: string, spec: DemoFixtureSpec): JobCaseResult {
+  if (!fs.existsSync(spec.fixtureDir)) {
+    throw new Error(`演示素材缺失: ${spec.fixtureDir}`);
+  }
+  const caseDir = path.join(jobRoot, spec.caseFolder);
+  fs.rmSync(caseDir, { recursive: true, force: true });
+  copyDirRecursive(spec.fixtureDir, caseDir);
+
+  const caseJson = readJsonFile(path.join(caseDir, "case.json")) || {};
+  const caseId = String(caseJson.case_id || spec.caseFolder);
+  const caseName = String(caseJson.name || caseId);
+  const evalJson = readJsonFile(path.join(caseDir, "evaluation.json"));
+  const guiPassed = evalJson?.passed === true;
+
+  return {
+    case_id: caseId,
+    name: caseName,
+    passed: guiPassed,
+    run_dir: caseDir,
+    report_path: path.join(caseDir, "report.md"),
+    evaluation_path: path.join(caseDir, "evaluation.json"),
+    metrics: loadCaseMetricsBrief(caseDir),
+  };
+}
+
+/** Seed a browsable multi-case demo job from packaged fixtures. MOS omitted. */
 export function ensureDemoJob(): JobMeta {
   const id = "job_demo_sample";
   const dir = jobDir(id);
   ensureDir(dir);
-  const caseDir = path.join(dir, "demo_case");
-  const fixture = demoFixtureRoot();
-  const markerPath = path.join(caseDir, "DEMO_FIXTURE.txt");
+  const markerPath = path.join(dir, "DEMO_JOB.txt");
+  const specs = demoFixtureSpecs();
   const needSeed =
     !fs.existsSync(markerPath) ||
     fs.readFileSync(markerPath, "utf-8").trim() !== DEMO_FIXTURE_ID ||
-    !fs.existsSync(path.join(caseDir, "capture.mp4")) ||
-    !fs.existsSync(path.join(caseDir, "frames"));
+    specs.some((s) => !fs.existsSync(path.join(dir, s.caseFolder, "case.json")));
 
-  if (!fs.existsSync(fixture)) {
-    throw new Error(`演示素材缺失: ${fixture}`);
-  }
+  let results: JobCaseResult[];
   if (needSeed) {
-    fs.rmSync(caseDir, { recursive: true, force: true });
-    copyDirRecursive(fixture, caseDir);
-  }
-
-  const caseJson = readJsonFile(path.join(caseDir, "case.json")) || {};
-  const caseId = String(caseJson.case_id || "IQ-SCR-026");
-  const caseName = String(caseJson.name || "打开热播榜入口");
-  const evalJson = readJsonFile(path.join(caseDir, "evaluation.json"));
-  const guiPassed = evalJson?.passed === true;
-
-  const job: JobMeta = {
-    id,
-    datasetId: "demo_iq_scr_026",
-    datasetName: "IQ-SCR-026 热播榜（真实录屏演示）",
-    caseId,
-    backend: "vl",
-    status: guiPassed ? "passed" : "failed",
-    createdAt: "2026-11-24T12:37:58.000Z",
-    finishedAt: "2026-11-24T12:40:05.000Z",
-    demo: true,
-    note: "基于现场样例 20261124_123758_IQ-SCR-026；ASR/时延为仿真，MOS 已跳过",
-    results: [
-      {
+    // Drop legacy single-case layout (demo_case/).
+    const legacy = path.join(dir, "demo_case");
+    if (fs.existsSync(legacy)) fs.rmSync(legacy, { recursive: true, force: true });
+    results = specs.map((s) => seedDemoCase(dir, s));
+    fs.writeFileSync(markerPath, `${DEMO_FIXTURE_ID}\n`, "utf-8");
+  } else {
+    results = specs.map((s) => {
+      const caseDir = path.join(dir, s.caseFolder);
+      const caseJson = readJsonFile(path.join(caseDir, "case.json")) || {};
+      const caseId = String(caseJson.case_id || s.caseFolder);
+      const caseName = String(caseJson.name || caseId);
+      const evalJson = readJsonFile(path.join(caseDir, "evaluation.json"));
+      return {
         case_id: caseId,
         name: caseName,
-        passed: guiPassed,
+        passed: evalJson?.passed === true,
         run_dir: caseDir,
         report_path: path.join(caseDir, "report.md"),
         evaluation_path: path.join(caseDir, "evaluation.json"),
         metrics: loadCaseMetricsBrief(caseDir),
-      },
-    ],
-    passed: guiPassed ? 1 : 0,
-    failed: guiPassed ? 0 : 1,
+      };
+    });
+  }
+
+  const passed = results.filter((r) => r.passed === true).length;
+  const failed = results.filter((r) => r.passed === false).length;
+
+  const job: JobMeta = {
+    id,
+    datasetId: "demo_field_samples",
+    datasetName: "现场样例演示（SYS2-009 + IQ-SCR-026）",
+    caseId: null,
+    backend: "vl",
+    status: failed > 0 ? "failed" : "passed",
+    createdAt: "2026-11-24T12:36:22.000Z",
+    finishedAt: "2026-11-24T12:40:05.000Z",
+    demo: true,
+    note: "SYS2-009（取消静音 PASS）+ IQ-SCR-026（热播榜 FAIL）；ASR/时延仿真，MOS 跳过",
+    results,
+    passed,
+    failed,
     errors: 0,
   };
   writeJob(job);
