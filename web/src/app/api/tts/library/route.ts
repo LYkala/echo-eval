@@ -92,7 +92,6 @@ export async function POST(req: Request) {
   const libraryDir = String(body.library_dir || "assets/tts_library").trim() || "assets/tts_library";
   const backend = String(body.backend || "edge").trim().toLowerCase() || "edge";
   const voice = String(body.voice || "zh-CN-XiaoxiaoNeural").trim();
-  const rate = Number(body.rate ?? 0) || 0;
   const force = Boolean(body.force);
 
   try {

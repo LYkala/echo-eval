@@ -252,7 +252,11 @@ function blankSteps(): StepRow[] {
   return STEP_DEFS.map((s) => ({ id: s.id, label: s.label, state: "pending" }));
 }
 
-export function ConsoleClient() {
+export type ConsoleSection = "env" | "datasets" | "tts" | "calibrate" | "run";
+
+const DATASET_ID_KEY = "echo_eval_dataset_id";
+
+export function ConsoleClient({ section }: { section: ConsoleSection }) {
   const [mounted, setMounted] = useState(false);
   // Seed a line so SSR/HTML is not stuck on “（暂无日志）”; effects append more.
   const [logs, setLogs] = useState<string[]>([
@@ -264,7 +268,10 @@ export function ConsoleClient() {
   const [envProgress, setEnvProgress] = useState("脚本加载后将自动检查");
   const [envError, setEnvError] = useState("");
   const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [datasetId, setDatasetId] = useState("__builtin_v012__");
+  const [datasetId, setDatasetId] = useState(() => {
+    if (typeof window === "undefined") return "__builtin_v012__";
+    return sessionStorage.getItem(DATASET_ID_KEY) || "__builtin_v012__";
+  });
   const [caseId, setCaseId] = useState("");
   const [backend, setBackend] = useState<"auto" | "vl" | "mock">("mock");
   const [calBackend, setCalBackend] = useState<"auto" | "vl" | "mock">("vl");
@@ -716,11 +723,11 @@ export function ConsoleClient() {
   useEffect(() => {
     if (!mounted || autoStarted.current) return;
     autoStarted.current = true;
-    void refreshEnv();
+    if (section === "env") void refreshEnv();
     void refreshDatasets();
-    void refreshParamDefaults();
-    void loadTtsVoices();
-    void refreshTtsLibrary();
+    if (section === "run" || section === "tts") void refreshParamDefaults();
+    if (section === "run" || section === "tts") void loadTtsVoices();
+    if (section === "tts") void refreshTtsLibrary();
     // Restore in-flight job after leaving/returning to this page.
     const saved = sessionStorage.getItem(ACTIVE_JOB_KEY);
     if (saved) {
@@ -756,7 +763,7 @@ export function ConsoleClient() {
         }
       })();
     }
-  }, [mounted, refreshEnv, refreshDatasets, refreshParamDefaults, loadTtsVoices, refreshTtsLibrary, pushLog]);
+  }, [mounted, section, refreshEnv, refreshDatasets, refreshParamDefaults, loadTtsVoices, refreshTtsLibrary, pushLog]);
 
   useEffect(() => {
     if (!active || !["queued", "running"].includes(active.status)) return;
@@ -837,8 +844,54 @@ export function ConsoleClient() {
     }
   }
 
+  useEffect(() => {
+    if (!mounted) return;
+    sessionStorage.setItem(DATASET_ID_KEY, datasetId);
+  }, [datasetId, mounted]);
+
   const calibrateRunning = !!(calJob && ["queued", "running"].includes(calJob.status));
   const runRunning = !!(active && ["queued", "running"].includes(active.status));
+
+  const datasetPicker = (
+    <div className="space-y-2">
+      <Label>当前数据集</Label>
+      <select
+        className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+        value={datasetId}
+        disabled={busy}
+        onChange={(e) => setDatasetId(e.target.value)}
+      >
+        {datasets.map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.name}
+            {d.builtin ? "（内置）" : ""}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  const pageTitle =
+    section === "env"
+      ? "环境检查"
+      : section === "datasets"
+        ? "数据集"
+        : section === "tts"
+          ? "预合成语音"
+          : section === "calibrate"
+            ? "预置校准"
+            : "开始测试";
+
+  const pageDesc =
+    section === "env"
+      ? "检查本机 ADB / 设备 / FFmpeg / TTS / VL 等依赖。"
+      : section === "datasets"
+        ? "上传、选用、下载或删除 Excel/CSV 用例集。"
+        : section === "tts"
+          ? "将数据集步骤预合成到语音库；可追加自定义文本。"
+          : section === "calibrate"
+            ? "正式开测前校准预置条件（截屏 + VL → ADB）。"
+            : "配置本次节奏与评判项，启动或停止测试。";
 
   async function checkCoverage() {
     setBusy(true);
@@ -990,8 +1043,13 @@ export function ConsoleClient() {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-      {hostPing ? (
+    <div className={section === "run" ? "grid gap-6 lg:grid-cols-[1.1fr_0.9fr]" : "mx-auto max-w-4xl space-y-6"}>
+      <div className={section === "run" ? "lg:col-span-2 space-y-1" : "space-y-1"}>
+        <h1 className="text-xl font-semibold tracking-tight">{pageTitle}</h1>
+        <p className="text-sm text-muted-foreground">{pageDesc}</p>
+      </div>
+
+      {hostPing && (section === "env" || hostPing.hostRole === "cloud_agent") ? (
         <div
           className={`lg:col-span-2 rounded-md border px-3 py-2 text-sm ${
             hostPing.hostRole === "cloud_agent"
@@ -1012,10 +1070,12 @@ export function ConsoleClient() {
           ) : null}
         </div>
       ) : null}
-      <section className="animate-rise space-y-6" style={{ animationDelay: "60ms" }}>
-        <Card>
+
+      {section === "env" ? (
+        <section className="animate-rise space-y-6">
+<Card>
           <CardHeader>
-            <CardTitle className="font-display text-2xl">环境检查</CardTitle>
+            <CardTitle className="text-xl font-semibold">环境检查</CardTitle>
             <CardDescription>
               点击后下方「调试日志」和 Git Bash 的 npm 窗口都会打印进度。请盯着 Bash 里以
               <code className="mx-1">[echo-eval]</code>
@@ -1115,13 +1175,18 @@ export function ConsoleClient() {
             </ul>
           </CardContent>
         </Card>
+        </section>
+      ) : null}
 
+      {section === "datasets" ? (
+        <section className="animate-rise space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle className="font-display text-2xl">数据集与开测</CardTitle>
-            <CardDescription>上传 TestApp 风格 Excel/CSV，选择后端后开始。扬声器请朝向设备麦克风。</CardDescription>
+            <CardTitle className="text-xl font-semibold">数据集</CardTitle>
+            <CardDescription>上传 TestApp 风格 Excel/CSV，选用后供预合成、校准与开测共用。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+
             <div className="space-y-2">
               <Label htmlFor="file">上传数据集</Label>
               <Input
@@ -1192,6 +1257,334 @@ export function ConsoleClient() {
                 )}
               </ul>
             </div>
+            {msg && section === "datasets" ? <p className="text-sm text-muted-foreground">{msg}</p> : null}
+          </CardContent>
+        </Card>
+        </section>
+      ) : null}
+
+      {section === "tts" ? (
+        <section className="animate-rise space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold">预合成语音</CardTitle>
+              <CardDescription>与开测音色独立；写入 assets/tts_library，开测时可优先读库。</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {datasetPicker}
+              <div className="space-y-2 border-t border-border/60 pt-3">
+                <p className="text-sm font-medium">预合成音色（语音库）</p>
+                <p className="text-xs text-muted-foreground">
+                  与开测音色独立。预合成 / 自定义写入只看这里的后端与音色，不会改开测参数。
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">预合成后端</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={libBackend}
+                      onChange={(e) => setLibBackend(e.target.value)}
+                    >
+                      <option value="edge">edge-tts（推荐）</option>
+                      <option value="sapi">本机 SAPI</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">预合成音色</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      disabled={libBackend !== "edge"}
+                      value={libVoice}
+                      onChange={(e) => setLibVoice(e.target.value)}
+                    >
+                      {ttsVoices.map((v) => (
+                        <option key={`lib-${v.id}`} value={v.id}>
+                          {v.label || v.id}
+                        </option>
+                      ))}
+                      {!ttsVoices.some((v) => v.id === libVoice) && libVoice ? (
+                        <option value={libVoice}>{libVoice}</option>
+                      ) : null}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={libPreviewBusy || libBackend !== "edge"}
+                    onClick={() => void previewLibTts()}
+                  >
+                    {libPreviewBusy ? "合成中…" : "试听预合成音色"}
+                  </Button>
+                  {libPreviewUrl ? (
+                    <audio controls src={libPreviewUrl} className="h-8 max-w-full" />
+                  ) : null}
+                </div>
+                {libPreviewError ? (
+                  <p className="text-xs text-rose-700">{libPreviewError}</p>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  库内 {ttsLibrary?.entry_count ?? "—"} 条
+                  {ttsLibrary?.missing_files
+                    ? `（缺文件 ${ttsLibrary.missing_files}）`
+                    : ""}
+                  {ttsLibrary?.updated_at ? ` · 更新 ${ttsLibrary.updated_at}` : ""}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={ttsLibraryBusy || !datasetId}
+                    onClick={() => void prebuildTtsLibrary(false)}
+                  >
+                    {ttsLibraryBusy ? "处理中…" : "预合成当前数据集"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={ttsLibraryBusy || !datasetId}
+                    onClick={() => void prebuildTtsLibrary(true)}
+                  >
+                    强制重合成
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={ttsLibraryBusy}
+                    onClick={() => void refreshTtsLibrary()}
+                  >
+                    刷新状态
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Label className="text-xs text-muted-foreground">自定义文本（数据集外）</Label>
+                    <Input
+                      value={ttsCustomText}
+                      placeholder="例如：打开设置"
+                      maxLength={200}
+                      onChange={(e) => setTtsCustomText(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={ttsLibraryBusy || !ttsCustomText.trim()}
+                    onClick={() => void addCustomTts()}
+                  >
+                    写入语音库
+                  </Button>
+                </div>
+                {ttsLibraryMsg ? (
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{ttsLibraryMsg}</p>
+                ) : null}
+                {ttsLibrary?.error ? (
+                  <p className="text-xs text-rose-700">{ttsLibrary.error}</p>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
+
+      {section === "calibrate" ? (
+        <section className="animate-rise space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold">预置校准</CardTitle>
+              <CardDescription>
+                正式开测前独立校准预置条件（截屏+VL→ADB）。与「开始测试」互斥占用设备。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {datasetPicker}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="cal-backend">校准后端</Label>
+                <select
+                  id="cal-backend"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={calBackend}
+                  onChange={(e) => setCalBackend(e.target.value as "auto" | "vl" | "mock")}
+                >
+                  <option value="vl">vl</option>
+                  <option value="auto">auto</option>
+                  <option value="mock">mock（仅联调）</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>校准范围</Label>
+                <div
+                  className="grid grid-cols-2 gap-1 rounded-lg border border-border/80 bg-background p-1"
+                  role="radiogroup"
+                  aria-label="校准范围"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={calScope === "pending"}
+                    className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                      calScope === "pending"
+                        ? "bg-foreground text-background shadow-sm"
+                        : "text-muted-foreground hover:bg-secondary"
+                    }`}
+                    onClick={() => setCalScope("pending")}
+                  >
+                    只校准未通过
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={calScope === "all"}
+                    className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                      calScope === "all"
+                        ? "bg-foreground text-background shadow-sm"
+                        : "text-muted-foreground hover:bg-secondary"
+                    }`}
+                    onClick={() => setCalScope("all")}
+                  >
+                    全部重新校准
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {calScope === "pending"
+                    ? "跳过预置已全部通过的用例；失败与未完成的会重训。已通过的步骤只回放 ADB。"
+                    : "含已通过步骤一并重训，耗时更长。"}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="p-retries" className="text-xs text-muted-foreground">
+                  单步最多重试次数
+                </Label>
+                <Input
+                  id="p-retries"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={params.max_retries}
+                  onChange={(e) => setParam("max_retries", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="p-settle" className="text-xs text-muted-foreground">
+                  预置步默认等待（秒）
+                </Label>
+                <Input
+                  id="p-settle"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={params.step_settle_sec}
+                  onChange={(e) => setParam("step_settle_sec", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Button type="button" variant="outline" disabled={busy} onClick={() => void checkCoverage()}>
+                查看覆盖情况
+              </Button>
+              <Button
+                type="button"
+                disabled={busy || runRunning}
+                title={runRunning ? "请先停止测试任务" : undefined}
+                onClick={() => void startCalibrate()}
+              >
+                开始校准
+              </Button>
+              {calibrateRunning ? (
+                <Button type="button" variant="destructive" disabled={busy} onClick={() => void stopCalibrate()}>
+                  停止校准
+                </Button>
+              ) : null}
+              {calJob ? statusBadge(calJob.status) : null}
+            </div>
+
+            {calJob ? (
+              <div className="space-y-3 rounded-md border border-border/80 bg-secondary/40 px-3 py-3">
+                <div className="text-sm font-medium">
+                  {calJob.datasetName} · {calJob.backend}
+                  {calJob.scope === "all" || calJob.force
+                    ? " · 全部重新校准"
+                    : " · 只校准未通过"}
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                  <div className="rounded-md bg-background px-2 py-2">
+                    <div className="text-xs text-muted-foreground">通过步</div>
+                    <div className="text-lg font-semibold">{calJob.passed ?? "—"}</div>
+                  </div>
+                  <div className="rounded-md bg-background px-2 py-2">
+                    <div className="text-xs text-muted-foreground">失败步</div>
+                    <div className="text-lg font-semibold">{calJob.failed ?? "—"}</div>
+                  </div>
+                  <div className="rounded-md bg-background px-2 py-2">
+                    <div className="text-xs text-muted-foreground">跳过步</div>
+                    <div className="text-lg font-semibold">{calJob.skipped ?? "—"}</div>
+                  </div>
+                </div>
+                {calJob.error ? <p className="text-sm text-rose-700">{calJob.error}</p> : null}
+                <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
+                  {(calJob.steps || []).slice(-40).map((s, i) => (
+                    <li key={`${s.case_id}-${i}`} className="truncate">
+                      <span className="font-medium uppercase">{s.status}</span> {s.case_id} · {s.step_text}
+                      {s.error ? ` · ${s.error}` : ""}
+                    </li>
+                  ))}
+                </ul>
+                <div>
+                  <div className="mb-1 text-xs font-medium text-muted-foreground">校准日志（尾部）</div>
+                  <pre
+                    className="max-h-48 overflow-auto rounded-md border p-2 text-xs leading-5"
+                    style={{ background: "#1e1e1e", color: "#d4d4d4" }}
+                  >
+                    {calJob.logTail || "（等待日志…）"}
+                  </pre>
+                </div>
+              </div>
+            ) : null}
+
+            {coverage?.cases?.length ? (
+              <div className="space-y-2">
+                <div className="text-sm font-medium">
+                  覆盖摘要
+                  {coverage.counts
+                    ? ` · passed=${coverage.counts.passed ?? 0} untested=${coverage.counts.untested ?? 0} failed=${coverage.counts.failed ?? 0} skip_cases=${coverage.counts.skip_cases ?? 0}`
+                    : ""}
+                  {(coverage as { cache_path?: string }).cache_path
+                    ? ` · cache=${(coverage as { cache_path?: string }).cache_path}`
+                    : ""}
+                </div>
+                <ul className="max-h-48 space-y-1 overflow-y-auto text-xs">
+                  {coverage.cases.map((c) => (
+                    <li key={c.case_id} className={c.skip ? "text-amber-800" : "text-emerald-800"}>
+                      {c.skip ? "SKIP" : "OK"} {c.case_id} {c.name}
+                      {c.skip_reason ? ` — ${c.skip_reason}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
+
+      {section === "run" ? (
+        <>
+        <section className="animate-rise space-y-6" style={{ animationDelay: "60ms" }}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold">测试参数</CardTitle>
+              <CardDescription>扬声器请朝向设备麦克风。参数只影响本次任务。</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {datasetPicker}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="case">用例编号（默认空=跑全部）</Label>
@@ -1404,6 +1797,7 @@ export function ConsoleClient() {
                   />
                 </div>
               </div>
+            </div>
               <div className="space-y-2 border-t border-border/60 pt-3">
                 <p className="text-sm font-medium">开测音色</p>
                 <p className="text-xs text-muted-foreground">
@@ -1468,118 +1862,6 @@ export function ConsoleClient() {
                 ) : null}
               </div>
 
-              <div className="space-y-2 border-t border-border/60 pt-3">
-                <p className="text-sm font-medium">预合成音色（语音库）</p>
-                <p className="text-xs text-muted-foreground">
-                  与开测音色独立。预合成 / 自定义写入只看这里的后端与音色，不会改开测参数。
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">预合成后端</Label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      value={libBackend}
-                      onChange={(e) => setLibBackend(e.target.value)}
-                    >
-                      <option value="edge">edge-tts（推荐）</option>
-                      <option value="sapi">本机 SAPI</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">预合成音色</Label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      disabled={libBackend !== "edge"}
-                      value={libVoice}
-                      onChange={(e) => setLibVoice(e.target.value)}
-                    >
-                      {ttsVoices.map((v) => (
-                        <option key={`lib-${v.id}`} value={v.id}>
-                          {v.label || v.id}
-                        </option>
-                      ))}
-                      {!ttsVoices.some((v) => v.id === libVoice) && libVoice ? (
-                        <option value={libVoice}>{libVoice}</option>
-                      ) : null}
-                    </select>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={libPreviewBusy || libBackend !== "edge"}
-                    onClick={() => void previewLibTts()}
-                  >
-                    {libPreviewBusy ? "合成中…" : "试听预合成音色"}
-                  </Button>
-                  {libPreviewUrl ? (
-                    <audio controls src={libPreviewUrl} className="h-8 max-w-full" />
-                  ) : null}
-                </div>
-                {libPreviewError ? (
-                  <p className="text-xs text-rose-700">{libPreviewError}</p>
-                ) : null}
-                <p className="text-xs text-muted-foreground">
-                  库内 {ttsLibrary?.entry_count ?? "—"} 条
-                  {ttsLibrary?.missing_files
-                    ? `（缺文件 ${ttsLibrary.missing_files}）`
-                    : ""}
-                  {ttsLibrary?.updated_at ? ` · 更新 ${ttsLibrary.updated_at}` : ""}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={ttsLibraryBusy || !datasetId}
-                    onClick={() => void prebuildTtsLibrary(false)}
-                  >
-                    {ttsLibraryBusy ? "处理中…" : "预合成当前数据集"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={ttsLibraryBusy || !datasetId}
-                    onClick={() => void prebuildTtsLibrary(true)}
-                  >
-                    强制重合成
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    disabled={ttsLibraryBusy}
-                    onClick={() => void refreshTtsLibrary()}
-                  >
-                    刷新状态
-                  </Button>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <Label className="text-xs text-muted-foreground">自定义文本（数据集外）</Label>
-                    <Input
-                      value={ttsCustomText}
-                      placeholder="例如：打开设置"
-                      maxLength={200}
-                      onChange={(e) => setTtsCustomText(e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={ttsLibraryBusy || !ttsCustomText.trim()}
-                    onClick={() => void addCustomTts()}
-                  >
-                    写入语音库
-                  </Button>
-                </div>
-                {ttsLibraryMsg ? (
-                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{ttsLibraryMsg}</p>
-                ) : null}
-                {ttsLibrary?.error ? (
-                  <p className="text-xs text-rose-700">{ttsLibrary.error}</p>
-                ) : null}
-              </div>
-            </div>
 
             {coverageWarn ? (
               <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -1605,195 +1887,15 @@ export function ConsoleClient() {
               ) : null}
             </div>
             {msg ? <p className="text-sm text-muted-foreground">{msg}</p> : null}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-display text-2xl">预置校准</CardTitle>
-            <CardDescription>
-              正式开测前独立校准预置条件（截屏+VL→ADB）。与「开始测试」互斥占用设备。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="cal-backend">校准后端</Label>
-                <select
-                  id="cal-backend"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={calBackend}
-                  onChange={(e) => setCalBackend(e.target.value as "auto" | "vl" | "mock")}
-                >
-                  <option value="vl">vl</option>
-                  <option value="auto">auto</option>
-                  <option value="mock">mock（仅联调）</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>校准范围</Label>
-                <div
-                  className="grid grid-cols-2 gap-1 rounded-lg border border-border/80 bg-background p-1"
-                  role="radiogroup"
-                  aria-label="校准范围"
-                >
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={calScope === "pending"}
-                    className={`rounded-md px-3 py-2 text-sm transition-colors ${
-                      calScope === "pending"
-                        ? "bg-foreground text-background shadow-sm"
-                        : "text-muted-foreground hover:bg-secondary"
-                    }`}
-                    onClick={() => setCalScope("pending")}
-                  >
-                    只校准未通过
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={calScope === "all"}
-                    className={`rounded-md px-3 py-2 text-sm transition-colors ${
-                      calScope === "all"
-                        ? "bg-foreground text-background shadow-sm"
-                        : "text-muted-foreground hover:bg-secondary"
-                    }`}
-                    onClick={() => setCalScope("all")}
-                  >
-                    全部重新校准
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {calScope === "pending"
-                    ? "跳过预置已全部通过的用例；失败与未完成的会重训。已通过的步骤只回放 ADB。"
-                    : "含已通过步骤一并重训，耗时更长。"}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="p-retries" className="text-xs text-muted-foreground">
-                  单步最多重试次数
-                </Label>
-                <Input
-                  id="p-retries"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={params.max_retries}
-                  onChange={(e) => setParam("max_retries", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="p-settle" className="text-xs text-muted-foreground">
-                  预置步默认等待（秒）
-                </Label>
-                <Input
-                  id="p-settle"
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={params.step_settle_sec}
-                  onChange={(e) => setParam("step_settle_sec", e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Button type="button" variant="outline" disabled={busy} onClick={() => void checkCoverage()}>
-                查看覆盖情况
-              </Button>
-              <Button
-                type="button"
-                disabled={busy || runRunning}
-                title={runRunning ? "请先停止测试任务" : undefined}
-                onClick={() => void startCalibrate()}
-              >
-                开始校准
-              </Button>
-              {calibrateRunning ? (
-                <Button type="button" variant="destructive" disabled={busy} onClick={() => void stopCalibrate()}>
-                  停止校准
-                </Button>
-              ) : null}
-              {calJob ? statusBadge(calJob.status) : null}
-            </div>
-
-            {calJob ? (
-              <div className="space-y-3 rounded-md border border-border/80 bg-secondary/40 px-3 py-3">
-                <div className="text-sm font-medium">
-                  {calJob.datasetName} · {calJob.backend}
-                  {calJob.scope === "all" || calJob.force
-                    ? " · 全部重新校准"
-                    : " · 只校准未通过"}
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-sm">
-                  <div className="rounded-md bg-background px-2 py-2">
-                    <div className="text-xs text-muted-foreground">通过步</div>
-                    <div className="text-lg font-semibold">{calJob.passed ?? "—"}</div>
-                  </div>
-                  <div className="rounded-md bg-background px-2 py-2">
-                    <div className="text-xs text-muted-foreground">失败步</div>
-                    <div className="text-lg font-semibold">{calJob.failed ?? "—"}</div>
-                  </div>
-                  <div className="rounded-md bg-background px-2 py-2">
-                    <div className="text-xs text-muted-foreground">跳过步</div>
-                    <div className="text-lg font-semibold">{calJob.skipped ?? "—"}</div>
-                  </div>
-                </div>
-                {calJob.error ? <p className="text-sm text-rose-700">{calJob.error}</p> : null}
-                <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
-                  {(calJob.steps || []).slice(-40).map((s, i) => (
-                    <li key={`${s.case_id}-${i}`} className="truncate">
-                      <span className="font-medium uppercase">{s.status}</span> {s.case_id} · {s.step_text}
-                      {s.error ? ` · ${s.error}` : ""}
-                    </li>
-                  ))}
-                </ul>
-                <div>
-                  <div className="mb-1 text-xs font-medium text-muted-foreground">校准日志（尾部）</div>
-                  <pre
-                    className="max-h-48 overflow-auto rounded-md border p-2 text-xs leading-5"
-                    style={{ background: "#1e1e1e", color: "#d4d4d4" }}
-                  >
-                    {calJob.logTail || "（等待日志…）"}
-                  </pre>
-                </div>
-              </div>
-            ) : null}
-
-            {coverage?.cases?.length ? (
-              <div className="space-y-2">
-                <div className="text-sm font-medium">
-                  覆盖摘要
-                  {coverage.counts
-                    ? ` · passed=${coverage.counts.passed ?? 0} untested=${coverage.counts.untested ?? 0} failed=${coverage.counts.failed ?? 0} skip_cases=${coverage.counts.skip_cases ?? 0}`
-                    : ""}
-                  {(coverage as { cache_path?: string }).cache_path
-                    ? ` · cache=${(coverage as { cache_path?: string }).cache_path}`
-                    : ""}
-                </div>
-                <ul className="max-h-48 space-y-1 overflow-y-auto text-xs">
-                  {coverage.cases.map((c) => (
-                    <li key={c.case_id} className={c.skip ? "text-amber-800" : "text-emerald-800"}>
-                      {c.skip ? "SKIP" : "OK"} {c.case_id} {c.name}
-                      {c.skip_reason ? ` — ${c.skip_reason}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="animate-rise space-y-6" style={{ animationDelay: "140ms" }}>
+        <section className="animate-rise space-y-6" style={{ animationDelay: "140ms" }}>
         <Card className="overflow-hidden">
           <CardHeader>
             <div className="flex items-center justify-between gap-2">
-              <CardTitle className="font-display text-2xl">当前任务</CardTitle>
+              <CardTitle className="text-xl font-semibold">当前任务</CardTitle>
               {active ? statusBadge(active.status) : <Badge variant="outline">空闲</Badge>}
             </div>
             <CardDescription>
@@ -2011,7 +2113,9 @@ export function ConsoleClient() {
             )}
           </CardContent>
         </Card>
-      </section>
+        </section>
+        </>
+      ) : null}
     </div>
   );
 }
