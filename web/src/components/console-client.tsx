@@ -305,14 +305,14 @@ export function ConsoleClient() {
           setHostPing(pingJson);
           if (pingJson.hostRole === "cloud_agent") {
             pushLog(
-              `警告：当前打到的是云端 Agent（${pingJson.repoRoot}），不是 Windows 本机。请改用 http://127.0.0.1:47391`
+              `警告：当前打到的是云端 Agent（${pingJson.repoRoot}），不是 Windows 本机。请改用 http://127.0.0.1:58261`
             );
           }
         } catch {
           /* ignore parse */
         }
       } catch (e) {
-        const message = `无法连接本机 API: ${String(e)}。请确认 Git Bash 里 npm run dev 仍在运行，并用 http://127.0.0.1:47391 打开（不要用 file://）。`;
+        const message = `无法连接本机 API: ${String(e)}。请确认 Git Bash 里 npm run dev 仍在运行，并用 http://127.0.0.1:58261 打开（不要用 file://）。`;
         pushLog(message);
         setEnvError(message);
         setEnvProgress("API 不通，已停止");
@@ -735,7 +735,7 @@ export function ConsoleClient() {
             <p className="mt-1 text-xs">
               你打开的不是 Windows 本机控制台。请在本机 Git Bash 执行{" "}
               <code>cd web &amp;&amp; npm run dev</code>，浏览器只用{" "}
-              <code>http://127.0.0.1:47391</code>（不要点 Cursor 云端端口预览）。
+              <code>http://127.0.0.1:58261</code>（不要点 Cursor 云端端口预览）。
             </p>
           ) : null}
         </div>
