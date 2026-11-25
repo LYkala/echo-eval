@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "Wireless ADB capture and voice-assistant evaluation toolkit"
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+  "edge-tts>=7.0.0",
+]
 
 [project.optional-dependencies]
 yaml = ["PyYAML>=6.0"]

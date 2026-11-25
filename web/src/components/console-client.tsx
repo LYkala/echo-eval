@@ -169,7 +169,11 @@ type RunParams = {
   wake_enabled: boolean;
   wake_text: string;
   wake_wait_sec: number;
+  tts_backend: string;
+  tts_voice: string;
 };
+
+type TtsVoiceOption = { id: string; label: string; gender?: string; locale?: string };
 
 const PARAM_FALLBACK: RunParams = {
   step_wait_sec: 3,
@@ -189,7 +193,18 @@ const PARAM_FALLBACK: RunParams = {
   wake_enabled: true,
   wake_text: "小翼管家",
   wake_wait_sec: 3,
+  tts_backend: "edge",
+  tts_voice: "zh-CN-XiaoxiaoNeural",
 };
+
+const TTS_VOICE_FALLBACK: TtsVoiceOption[] = [
+  { id: "zh-CN-XiaoxiaoNeural", label: "晓晓（女·温暖）", gender: "Female" },
+  { id: "zh-CN-XiaoyiNeural", label: "晓伊（女·活泼）", gender: "Female" },
+  { id: "zh-CN-YunxiNeural", label: "云希（男·阳光）", gender: "Male" },
+  { id: "zh-CN-YunyangNeural", label: "云扬（男·新闻）", gender: "Male" },
+  { id: "zh-CN-YunjianNeural", label: "云健（男·热情）", gender: "Male" },
+  { id: "zh-CN-YunxiaNeural", label: "云夏（男·可爱）", gender: "Male" },
+];
 
 const ACTIVE_JOB_KEY = "echo_eval_active_job";
 const ACTIVE_CAL_KEY = "echo_eval_active_calibrate";
@@ -237,6 +252,10 @@ export function ConsoleClient() {
   const [calScope, setCalScope] = useState<"pending" | "all">("pending");
   const [params, setParams] = useState<RunParams>(PARAM_FALLBACK);
   const [paramSource, setParamSource] = useState("configs/device.yaml");
+  const [ttsVoices, setTtsVoices] = useState<TtsVoiceOption[]>(TTS_VOICE_FALLBACK);
+  const [ttsPreviewBusy, setTtsPreviewBusy] = useState(false);
+  const [ttsPreviewUrl, setTtsPreviewUrl] = useState<string | null>(null);
+  const [ttsPreviewError, setTtsPreviewError] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [active, setActive] = useState<Job | null>(null);
@@ -293,7 +312,12 @@ export function ConsoleClient() {
   }, [pushLog]);
 
   function setParam<K extends keyof RunParams>(key: K, raw: string) {
-    if (key === "mos_input_device" || key === "wake_text") {
+    if (
+      key === "mos_input_device" ||
+      key === "wake_text" ||
+      key === "tts_backend" ||
+      key === "tts_voice"
+    ) {
       setParams((prev) => ({ ...prev, [key]: raw }));
       return;
     }
@@ -311,6 +335,53 @@ export function ConsoleClient() {
       ...prev,
       [key]: key === "max_retries" ? Math.max(1, Math.floor(n)) : Math.max(0, n),
     }));
+  }
+
+  const loadTtsVoices = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tts/voices?curated=1&locale=zh-CN", { cache: "no-store" });
+      const data = (await res.json()) as { voices?: TtsVoiceOption[]; error?: string };
+      if (res.ok && Array.isArray(data.voices) && data.voices.length) {
+        setTtsVoices(data.voices);
+      }
+    } catch {
+      /* keep fallback list */
+    }
+  }, []);
+
+  async function previewTts() {
+    if (params.tts_backend !== "edge") {
+      setTtsPreviewError("试听目前仅支持 edge-tts");
+      return;
+    }
+    setTtsPreviewBusy(true);
+    setTtsPreviewError("");
+    try {
+      if (ttsPreviewUrl) {
+        URL.revokeObjectURL(ttsPreviewUrl);
+        setTtsPreviewUrl(null);
+      }
+      const res = await fetch("/api/tts/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          backend: "edge",
+          voice: params.tts_voice,
+          text: params.wake_text || "小翼管家，打开爱奇艺",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || `preview HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setTtsPreviewUrl(url);
+    } catch (e) {
+      setTtsPreviewError(String(e));
+    } finally {
+      setTtsPreviewBusy(false);
+    }
   }
 
   function setBoolParam(
@@ -495,6 +566,7 @@ export function ConsoleClient() {
     void refreshEnv();
     void refreshDatasets();
     void refreshParamDefaults();
+    void loadTtsVoices();
     // Restore in-flight job after leaving/returning to this page.
     const saved = sessionStorage.getItem(ACTIVE_JOB_KEY);
     if (saved) {
@@ -1177,6 +1249,60 @@ export function ConsoleClient() {
                     onChange={(e) => setParam("wake_text", e.target.value)}
                   />
                 </div>
+              </div>
+              <div className="space-y-2 border-t border-border/60 pt-3">
+                <p className="text-sm font-medium">播报音色（TTS）</p>
+                <p className="text-xs text-muted-foreground">
+                  edge-tts 走微软在线神经音色（需出网，约 0.2–0.7s/句）；也可切回本机 SAPI。
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">TTS 后端</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={params.tts_backend}
+                      onChange={(e) => setParam("tts_backend", e.target.value)}
+                    >
+                      <option value="edge">edge-tts（推荐）</option>
+                      <option value="sapi">本机 SAPI</option>
+                      <option value="file">预录 file</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">音色</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      disabled={params.tts_backend !== "edge"}
+                      value={params.tts_voice}
+                      onChange={(e) => setParam("tts_voice", e.target.value)}
+                    >
+                      {ttsVoices.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.label || v.id}
+                        </option>
+                      ))}
+                      {!ttsVoices.some((v) => v.id === params.tts_voice) && params.tts_voice ? (
+                        <option value={params.tts_voice}>{params.tts_voice}</option>
+                      ) : null}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={ttsPreviewBusy || params.tts_backend !== "edge"}
+                    onClick={() => void previewTts()}
+                  >
+                    {ttsPreviewBusy ? "合成中…" : "试听当前音色"}
+                  </Button>
+                  {ttsPreviewUrl ? (
+                    <audio controls src={ttsPreviewUrl} className="h-8 max-w-full" />
+                  ) : null}
+                </div>
+                {ttsPreviewError ? (
+                  <p className="text-xs text-rose-700">{ttsPreviewError}</p>
+                ) : null}
               </div>
             </div>
 

@@ -361,8 +361,8 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         ),
     )
     tts = TtsConfig(
-        backend=str(tts_raw.get("backend") or "sapi").strip().lower(),
-        voice=str(tts_raw.get("voice") or "").strip(),
+        backend=str(tts_raw.get("backend") or "edge").strip().lower(),
+        voice=str(tts_raw.get("voice") or "zh-CN-XiaoxiaoNeural").strip(),
         rate=int(tts_raw.get("rate") or 0),
         lookup_dir=str(tts_raw.get("lookup_dir") or "").strip(),
     )
@@ -596,6 +596,8 @@ def public_run_defaults(cfg: AppConfig | None = None) -> dict[str, Any]:
         "wake_enabled": bool(c.run.wake_enabled),
         "wake_text": str(c.run.wake_text or "小翼管家"),
         "wake_wait_sec": float(c.run.wake_wait_sec),
+        "tts_backend": str(c.tts.backend or "edge"),
+        "tts_voice": str(c.tts.voice or "zh-CN-XiaoxiaoNeural"),
     }
 
 
@@ -641,6 +643,14 @@ def apply_runtime_overrides(cfg: AppConfig, overrides: dict[str, Any] | None) ->
             cfg.run.wake_text = text
     if overrides.get("wake_wait_sec") is not None:
         cfg.run.wake_wait_sec = max(0.0, float(overrides["wake_wait_sec"]))
+    if overrides.get("tts_backend") is not None:
+        backend = str(overrides["tts_backend"] or "").strip().lower()
+        if backend in ("sapi", "edge", "file", "http"):
+            cfg.tts.backend = backend
+    if overrides.get("tts_voice") is not None:
+        voice = str(overrides["tts_voice"] or "").strip()
+        if voice:
+            cfg.tts.voice = voice
     return cfg
 
 

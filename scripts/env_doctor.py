@@ -204,15 +204,68 @@ def main() -> int:
         )
 
     if want("tts"):
-        items.append(
-            {
-                "key": "tts",
-                "label": "TTS (SAPI)",
-                "ok": sys.platform.startswith("win"),
-                "detail": "Windows SAPI" if sys.platform.startswith("win") else "非 Windows：真机 TTS 需在 PC1 Windows 上跑",
-                "required": False,
-            }
-        )
+        tts_cfg = cfg.tts if cfg else None
+        backend = (tts_cfg.backend if tts_cfg else "edge") or "edge"
+        backend = str(backend).strip().lower()
+        if backend == "edge":
+            detail = ""
+            ok = False
+            try:
+                from echo_eval.stimulus.tts import synthesize_edge
+
+                probe = ROOT / "artifacts" / "_tts_edge_probe.wav"
+                probe.parent.mkdir(parents=True, exist_ok=True)
+                voice = (tts_cfg.voice if tts_cfg else "") or "zh-CN-XiaoxiaoNeural"
+                result = synthesize_edge(
+                    "小翼管家",
+                    probe,
+                    voice=voice,
+                    rate=int(tts_cfg.rate if tts_cfg else 0),
+                    ffmpeg_path=cfg.capture.ffmpeg_path if cfg else "",
+                )
+                ok = True
+                detail = f"edge-tts OK · {result.voice} · {result.duration_sec}s"
+                try:
+                    if probe.is_file():
+                        probe.unlink()
+                except OSError:
+                    pass
+            except Exception as e:
+                ok = False
+                detail = f"edge-tts 失败（需出网）: {e}"
+            items.append(
+                {
+                    "key": "tts",
+                    "label": "TTS (edge-tts)",
+                    "ok": ok,
+                    "detail": detail,
+                    "required": False,
+                }
+            )
+        elif backend == "sapi":
+            items.append(
+                {
+                    "key": "tts",
+                    "label": "TTS (SAPI)",
+                    "ok": sys.platform.startswith("win"),
+                    "detail": (
+                        "Windows SAPI"
+                        if sys.platform.startswith("win")
+                        else "非 Windows：SAPI 不可用，请改用 edge"
+                    ),
+                    "required": False,
+                }
+            )
+        else:
+            items.append(
+                {
+                    "key": "tts",
+                    "label": f"TTS ({backend})",
+                    "ok": True,
+                    "detail": f"backend={backend}（未做深度探测）",
+                    "required": False,
+                }
+            )
 
     if want("vl"):
         mp = find_model_config_path()

@@ -63,7 +63,8 @@ capture: {}
     )
     cfg = load_config(p)
     assert cfg.adb.resolved_serial == "192.168.43.244:37123"
-    assert cfg.tts.backend == "sapi"
+    assert cfg.tts.backend == "edge"
+    assert cfg.tts.voice == "zh-CN-XiaoxiaoNeural"
     assert cfg.run.head_delay_sec == 1.0
     assert cfg.run.return_home_after_case is True
     assert cfg.run.return_home_wait_sec == 2.0

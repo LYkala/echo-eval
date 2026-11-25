@@ -23,8 +23,9 @@ stimulus:
   start_delay_sec: 1.0
 
 tts:
-  backend: sapi
-  voice: ""
+  # sapi | edge | file（edge 需出网，走 Microsoft Edge 在线神经音色）
+  backend: edge
+  voice: zh-CN-XiaoxiaoNeural
   rate: 0
   lookup_dir: ""
 

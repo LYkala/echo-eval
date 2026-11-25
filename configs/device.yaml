@@ -36,9 +36,9 @@ stimulus:
   start_delay_sec: 1.0
 
 tts:
-  # sapi=Windows 系统语音（默认）；file=预生成 wav；edge/http 预留
-  backend: sapi
-  voice: ""
+  # sapi | edge | file（edge 需出网；http 预留）
+  backend: edge
+  voice: zh-CN-XiaoxiaoNeural
   rate: 0
   lookup_dir: ""
 
