@@ -232,6 +232,35 @@ class AsrConfig:
 
 
 @dataclass
+class LatencyConfig:
+    """端到端时延：说完 → 画面首变（忽略底部识别条文字变化）。"""
+
+    enabled: bool = True
+    # 句后采图帧率（需 ≥10 才能到约 0.1s）
+    fps: float = 10.0
+    # 超时窗口；超时记 status=no_action（无操控）
+    window_sec: float = 8.0
+    bottom_band_ratio: float = 0.22
+    # 上半屏灰度指纹平均绝对差阈值
+    change_threshold: float = 6.0
+
+
+@dataclass
+class MosConfig:
+    """TTS MOS：主机麦录设备外放（screenrecord 无音频），启发式流畅度 1–5。"""
+
+    enabled: bool = True
+    # 说完后录音时长
+    window_sec: float = 5.0
+    sample_rate: int = 16000
+    # 有效语音低于该秒数 → N/A
+    min_speech_sec: float = 0.3
+    # ffmpeg -f / -i；留空则按平台默认（Windows 常需填写 dshow 设备名）
+    input_format: str = ""
+    input_device: str = ""
+
+
+@dataclass
 class PreconditionConfig:
     """预置条件：开跑前覆盖检查 + 每条用例前的 ADB 回放。"""
 
@@ -274,6 +303,8 @@ class AppConfig:
     run: RunConfig
     precondition: PreconditionConfig
     asr: AsrConfig
+    latency: LatencyConfig
+    mos: MosConfig
     path: Path
 
 
@@ -296,6 +327,8 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     run_raw = _as_dict(raw.get("run"))
     pre_raw = _as_dict(raw.get("precondition"))
     asr_raw = _as_dict(raw.get("asr"))
+    lat_raw = _as_dict(raw.get("latency"))
+    mos_raw = _as_dict(raw.get("mos"))
 
     adb = AdbConfig(
         host=str(adb_raw.get("host") or ""),
@@ -445,6 +478,58 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         ),
         ignore_texts=ignore_texts or ["我还在听，说再见退出"],
     )
+    if "enabled" in lat_raw:
+        lat_enabled = bool(lat_raw.get("enabled"))
+    else:
+        lat_enabled = True
+    latency = LatencyConfig(
+        enabled=lat_enabled,
+        fps=float(lat_raw.get("fps") if lat_raw.get("fps") is not None else 10.0),
+        window_sec=float(
+            lat_raw.get("window_sec") if lat_raw.get("window_sec") is not None else 8.0
+        ),
+        bottom_band_ratio=min(
+            0.5,
+            max(
+                0.05,
+                float(
+                    lat_raw.get("bottom_band_ratio")
+                    if lat_raw.get("bottom_band_ratio") is not None
+                    else asr.bottom_band_ratio
+                ),
+            ),
+        ),
+        change_threshold=float(
+            lat_raw.get("change_threshold")
+            if lat_raw.get("change_threshold") is not None
+            else 6.0
+        ),
+    )
+    if "enabled" in mos_raw:
+        mos_enabled = bool(mos_raw.get("enabled"))
+    else:
+        mos_enabled = True
+    mos = MosConfig(
+        enabled=mos_enabled,
+        window_sec=float(
+            mos_raw.get("window_sec") if mos_raw.get("window_sec") is not None else 5.0
+        ),
+        sample_rate=max(
+            8000,
+            int(
+                mos_raw.get("sample_rate")
+                if mos_raw.get("sample_rate") is not None
+                else 16000
+            ),
+        ),
+        min_speech_sec=float(
+            mos_raw.get("min_speech_sec")
+            if mos_raw.get("min_speech_sec") is not None
+            else 0.3
+        ),
+        input_format=str(mos_raw.get("input_format") or "").strip(),
+        input_device=str(mos_raw.get("input_device") or "").strip(),
+    )
     return AppConfig(
         adb=adb,
         capture=capture,
@@ -453,6 +538,8 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         run=run,
         precondition=precondition,
         asr=asr,
+        latency=latency,
+        mos=mos,
         path=cfg_path.resolve(),
     )
 
@@ -563,6 +650,21 @@ def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
             "early_stop_stable_frames": cfg.asr.early_stop_stable_frames,
             "bottom_band_ratio": cfg.asr.bottom_band_ratio,
             "ignore_texts": list(cfg.asr.ignore_texts),
+        },
+        "latency": {
+            "enabled": cfg.latency.enabled,
+            "fps": cfg.latency.fps,
+            "window_sec": cfg.latency.window_sec,
+            "bottom_band_ratio": cfg.latency.bottom_band_ratio,
+            "change_threshold": cfg.latency.change_threshold,
+        },
+        "mos": {
+            "enabled": cfg.mos.enabled,
+            "window_sec": cfg.mos.window_sec,
+            "sample_rate": cfg.mos.sample_rate,
+            "min_speech_sec": cfg.mos.min_speech_sec,
+            "input_format": cfg.mos.input_format,
+            "input_device": cfg.mos.input_device,
         },
     }
 

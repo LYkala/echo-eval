@@ -8,7 +8,7 @@
 两者共用 `configs/model.yaml`（`models.vl_eval`），但**输入、输出、判定字段、调用时机**不同，不可混用。
 
 更细的实现与 CLI 见 [JUDGE.md](./JUDGE.md)、[PHASE4_RUN.md](./PHASE4_RUN.md)、[CASE_TIMELINE.md](./CASE_TIMELINE.md)。  
-ASR 准确率（与 GUI 成功率并行）见 [ASR_JUDGE.md](./ASR_JUDGE.md)。
+ASR 准确率见 [ASR_JUDGE.md](./ASR_JUDGE.md)；时延与 TTS MOS 见 [LATENCY_MOS.md](./LATENCY_MOS.md)。
 
 ---
 

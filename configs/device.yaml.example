@@ -46,10 +46,28 @@ asr:
   window_sec: 4.0
   early_stop: true
   early_stop_stable_frames: 2
-  # 底部气泡区域；P2 时延「画面首变」将忽略该带文字变化
   bottom_band_ratio: 0.22
   # 多条用 | 分隔
   ignore_texts: "我还在听，说再见退出"
+
+# 端到端时延（P2）
+latency:
+  enabled: true
+  fps: 10
+  window_sec: 8.0
+  bottom_band_ratio: 0.22
+  change_threshold: 6.0
+
+# TTS MOS（P3）：主机麦。Windows 示例：
+#   input_format: dshow
+#   input_device: audio=Microphone (Realtek ...)
+mos:
+  enabled: true
+  window_sec: 5.0
+  sample_rate: 16000
+  min_speech_sec: 0.3
+  input_format: ""
+  input_device: ""
 
 # 预置条件：开跑前覆盖检查；每条正式测前 force-stop→Home→回放 ADB
 precondition:

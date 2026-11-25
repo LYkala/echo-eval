@@ -31,5 +31,4 @@
 | 阶段 | 内容 |
 |------|------|
 | P1（本文） | ASR |
-| P2 | 端到端时延：说完 → 画面首变；**忽略底部文字变化**（复用 `bottom_band_ratio`） |
-| P3 | TTS MOS（需先解决设备外放采音；当前 `screenrecord` **不录音频**） |
+| P2 / P3 | 见 [LATENCY_MOS.md](./LATENCY_MOS.md) |

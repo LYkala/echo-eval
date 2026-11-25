@@ -9,8 +9,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from echo_eval.capture.asr_poll import asr_poll_meta, poll_asr_screenshots
 from echo_eval.capture.frames import extract_frames
+from echo_eval.capture.host_mic import (
+    HostMicError,
+    finish_host_mic_record,
+    host_mic_meta,
+    start_host_mic_record,
+)
+from echo_eval.capture.post_speech import poll_post_speech, post_speech_meta
 from echo_eval.cases.excel_cases import EvalCase, load_cases
 from echo_eval.config import (
     AppConfig,
@@ -20,6 +26,7 @@ from echo_eval.config import (
 )
 from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.judge.asr import judge_asr_utterance
+from echo_eval.judge.mos import judge_mos_utterance
 from echo_eval.judge.service import JudgeError, judge_images
 from echo_eval.precondition import (
     PreconditionSkip,
@@ -167,6 +174,51 @@ def _write_report(path: Path, case: EvalCase, payload: dict[str, Any]) -> None:
             lines.append(
                 f"- [{mark}] step{row.get('index')}: spoken=`{row.get('spoken_text')}` "
                 f"recognized=`{row.get('recognized_text')}` — {row.get('reason') or ''}"
+            )
+
+    lat = payload.get("latency") or {}
+    if lat:
+        lines.extend(
+            [
+                "",
+                "## 端到端时延（说完→画面首变，忽略底部文字）",
+                "",
+                f"- utterances: `{lat.get('total')}`",
+                f"- measured: `{lat.get('measured')}`",
+                f"- no_action: `{lat.get('no_action')}`",
+                f"- mean_sec: `{lat.get('mean_sec')}`",
+                "",
+            ]
+        )
+        for row in lat.get("utterances") or []:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                f"- step{row.get('index')}: status=`{row.get('status')}` "
+                f"latency_sec=`{row.get('latency_sec')}` "
+                f"frame=`{row.get('action_frame') or '—'}`"
+            )
+
+    mos = payload.get("mos") or {}
+    if mos:
+        lines.extend(
+            [
+                "",
+                "## TTS MOS（主机麦录设备外放；无回复记 N/A）",
+                "",
+                f"- utterances: `{mos.get('total')}`",
+                f"- scored: `{mos.get('scored')}`",
+                f"- na: `{mos.get('na')}`",
+                f"- mean_mos: `{mos.get('mean_mos')}`",
+                "",
+            ]
+        )
+        for row in mos.get("utterances") or []:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                f"- step{row.get('index')}: status=`{row.get('status')}` "
+                f"mos=`{row.get('mos')}` — {row.get('reason') or ''}"
             )
 
     if payload.get("error"):
@@ -365,6 +417,10 @@ def capture_one_case(
         post = float(step.wait_sec)
         if cfg.asr.enabled:
             post = max(post, float(cfg.asr.window_sec))
+        if cfg.latency.enabled:
+            post = max(post, float(cfg.latency.window_sec))
+        if cfg.mos.enabled:
+            post = max(post, float(cfg.mos.window_sec))
         total_play += dur + post
         tts_meta.append(
             {
@@ -428,34 +484,74 @@ def capture_one_case(
             play_audio_file(item["wav"], ffmpeg_path=cfg.capture.ffmpeg_path)
             play_ended = datetime.now(timezone.utc).isoformat()
             play_end_offset = round(time.time() - t0, 3)
-            asr_info: dict[str, Any] = {"enabled": bool(cfg.asr.enabled)}
-            asr_elapsed = 0.0
-            if cfg.asr.enabled:
+
+            mos_info: dict[str, Any] = {"enabled": bool(cfg.mos.enabled)}
+            mic_proc = None
+            mic_meta = None
+            if cfg.mos.enabled:
+                mos_wav = run_dir / "mos_audio" / f"step_{step_i:02d}.wav"
+                try:
+                    mic_proc, mic_meta = start_host_mic_record(
+                        mos_wav,
+                        duration_sec=float(cfg.mos.window_sec),
+                        ffmpeg_path=cfg.capture.ffmpeg_path,
+                        input_format=cfg.mos.input_format,
+                        input_device=cfg.mos.input_device,
+                        sample_rate=int(cfg.mos.sample_rate),
+                    )
+                    mos_info.update(host_mic_meta(mic_meta))
+                except HostMicError as e:
+                    mos_info.update({"ok": False, "error": str(e), "path": ""})
+
+            post_info: dict[str, Any] = {
+                "asr_enabled": bool(cfg.asr.enabled),
+                "latency_enabled": bool(cfg.latency.enabled),
+            }
+            post_elapsed = 0.0
+            if cfg.asr.enabled or cfg.latency.enabled:
                 _prog_device(
                     case,
                     index=case_index,
                     total=case_total,
                     device_status="running",
                     device_label=(
-                        f"ASR截屏 第 {step_i}/{len(tts_meta)} 句"
+                        f"句后采图 第 {step_i}/{len(tts_meta)} 句"
                         f"（{case_index}/{case_total}）"
                     ),
                     status="running",
                 )
-                asr_dir = run_dir / "asr_frames"
-                poll = poll_asr_screenshots(
+                poll = poll_post_speech(
                     adb,
-                    asr_dir,
+                    run_dir / "post_speech_frames",
                     asr=cfg.asr,
+                    latency=cfg.latency,
                     ffmpeg_path=cfg.capture.ffmpeg_path,
                     step_index=step_i,
                 )
-                asr_info.update(asr_poll_meta(poll))
-                asr_elapsed = float(poll.elapsed_sec or 0.0)
+                post_info.update(post_speech_meta(poll))
+                post_elapsed = float(poll.elapsed_sec or 0.0)
+
+            mos_elapsed = 0.0
+            if mic_proc is not None and mic_meta is not None:
+                mic_meta = finish_host_mic_record(mic_proc, mic_meta)
+                mos_info.update(host_mic_meta(mic_meta))
+                mos_elapsed = float(cfg.mos.window_sec)
+
             wait_sec = float(item["wait_sec"])
-            remain_wait = max(0.0, wait_sec - asr_elapsed)
+            remain_wait = max(0.0, wait_sec - max(post_elapsed, mos_elapsed))
             if remain_wait > 0:
                 time.sleep(remain_wait)
+
+            asr_poll = post_info.get("asr") or {"enabled": bool(cfg.asr.enabled)}
+            if cfg.asr.enabled:
+                # normalize paths key for judge (compat with P1 field name)
+                asr_poll = {
+                    "enabled": True,
+                    "paths": asr_poll.get("paths") or [],
+                    "offsets_sec": asr_poll.get("offsets_sec") or [],
+                    "early_stopped": asr_poll.get("early_stopped"),
+                    "count": asr_poll.get("count"),
+                }
             timeline["steps"].append(
                 {
                     **item,
@@ -463,7 +559,10 @@ def capture_one_case(
                     "play_offset_sec": play_offset,
                     "play_ended_at": play_ended,
                     "play_end_offset_sec": play_end_offset,
-                    "asr_poll": asr_info,
+                    "asr_poll": asr_poll,
+                    "post_speech": post_info,
+                    "mos_record": mos_info,
+                    "latency": (post_info.get("latency") or {}),
                 }
             )
         if tail > 0:
@@ -657,6 +756,106 @@ def judge_one_capture(
                 json.dumps(asr_summary, ensure_ascii=False, indent=2), encoding="utf-8"
             )
 
+        latency_summary: dict[str, Any] = {
+            "enabled": bool(cfg.latency.enabled),
+            "total": 0,
+            "measured": 0,
+            "no_action": 0,
+            "mean_sec": None,
+            "utterances": [],
+        }
+        if cfg.latency.enabled:
+            vals: list[float] = []
+            for step in (cap.timeline or {}).get("steps") or []:
+                if not isinstance(step, dict):
+                    continue
+                lat = step.get("latency") or {}
+                status = str(lat.get("status") or "no_action")
+                sec = lat.get("latency_sec")
+                latency_summary["total"] += 1
+                if status == "measured" and sec is not None:
+                    latency_summary["measured"] += 1
+                    vals.append(float(sec))
+                elif status == "no_action":
+                    latency_summary["no_action"] += 1
+                latency_summary["utterances"].append(
+                    {
+                        "index": step.get("index"),
+                        "status": status,
+                        "latency_sec": sec,
+                        "action_frame": lat.get("action_frame") or "",
+                        "action_offset_sec": lat.get("action_offset_sec"),
+                    }
+                )
+            if vals:
+                latency_summary["mean_sec"] = round(sum(vals) / len(vals), 2)
+            (cap.run_dir / "latency_summary.json").write_text(
+                json.dumps(latency_summary, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
+        mos_summary: dict[str, Any] = {
+            "enabled": bool(cfg.mos.enabled),
+            "total": 0,
+            "scored": 0,
+            "na": 0,
+            "mean_mos": None,
+            "utterances": [],
+        }
+        if cfg.mos.enabled:
+            _prog_judge(
+                case,
+                index=idx,
+                judge_status="running",
+                judge_label="TTS MOS 评判中",
+                status="running",
+            )
+            mos_out = cap.run_dir / "mos"
+            mos_out.mkdir(parents=True, exist_ok=True)
+            scores: list[float] = []
+            for step in (cap.timeline or {}).get("steps") or []:
+                if not isinstance(step, dict):
+                    continue
+                rec = step.get("mos_record") or {}
+                wav = rec.get("path") if rec.get("ok") else None
+                try:
+                    mos_eval = judge_mos_utterance(
+                        wav_path=wav,
+                        backend="mock" if judge_backend == "mock" else "heuristic",
+                        min_speech_sec=float(cfg.mos.min_speech_sec),
+                        write_path=mos_out / f"step_{int(step.get('index') or 0):02d}.json",
+                    )
+                except Exception as e:
+                    mos_eval = {
+                        "status": "error",
+                        "mos": None,
+                        "reason": str(e),
+                        "na": False,
+                        "passed": False,
+                    }
+                status = str(mos_eval.get("status") or "error")
+                mos_summary["total"] += 1
+                if status == "scored" and mos_eval.get("mos") is not None:
+                    mos_summary["scored"] += 1
+                    scores.append(float(mos_eval["mos"]))
+                elif status == "no_speech" or mos_eval.get("na"):
+                    mos_summary["na"] += 1
+                mos_summary["utterances"].append(
+                    {
+                        "index": step.get("index"),
+                        "status": status,
+                        "mos": mos_eval.get("mos"),
+                        "reason": mos_eval.get("reason") or "",
+                        "wav_path": mos_eval.get("wav_path") or "",
+                        "record_error": rec.get("error") or "",
+                    }
+                )
+            if scores:
+                mos_summary["mean_mos"] = round(sum(scores) / len(scores), 2)
+            (cap.run_dir / "mos_summary.json").write_text(
+                json.dumps(mos_summary, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+
         report_path = cap.run_dir / "report.md"
         payload = {
             "passed": passed,
@@ -664,6 +863,8 @@ def judge_one_capture(
             "run_dir": str(cap.run_dir),
             "evaluation": evaluation,
             "asr": asr_summary,
+            "latency": latency_summary,
+            "mos": mos_summary,
             "tts": cap.tts_meta,
             "frame_count": len(frame_paths),
             "return_home_after_pull": cap.home_after_pull,
