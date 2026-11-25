@@ -94,6 +94,10 @@ export type JobMeta = {
   progress?: JobProgress;
   /** Per-job overrides (not written to device.yaml). */
   params?: RunParamOverrides;
+  /** Large media (mp4/frames/wav) removed; text results kept. */
+  mediaPurged?: boolean;
+  mediaPurgedAt?: string;
+  mediaBytesFreed?: number;
 };
 
 const live = new Map<string, ChildProcess>();
@@ -695,6 +699,168 @@ export function createAndStartJob(opts: {
   });
 
   return job;
+}
+
+/** Subpaths under a case run_dir that dominate disk (safe to drop after judge). */
+const PURGE_MEDIA_FILES = ["capture.mp4"] as const;
+const PURGE_MEDIA_DIRS = [
+  "frames",
+  "asr_frames",
+  "post_speech_frames",
+  "steps",
+  "mos_audio",
+] as const;
+
+function artifactsRoot(): string {
+  return path.resolve(repoRoot(), "artifacts");
+}
+
+function isSafeArtifactsPath(abs: string): boolean {
+  const root = artifactsRoot();
+  const resolved = path.resolve(abs);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) return false;
+  const rel = path.relative(root, resolved).replace(/\\/g, "/");
+  if (!rel || rel.startsWith("..")) return false;
+  if (rel === "precondition_cache" || rel.startsWith("precondition_cache/")) return false;
+  if (rel === "web/datasets" || rel.startsWith("web/datasets/")) return false;
+  return true;
+}
+
+function rmPathBytes(target: string): number {
+  if (!fs.existsSync(target)) return 0;
+  let freed = 0;
+  const st = fs.statSync(target);
+  if (st.isFile()) {
+    freed = st.size;
+    fs.unlinkSync(target);
+    return freed;
+  }
+  if (st.isDirectory()) {
+    for (const name of fs.readdirSync(target)) {
+      freed += rmPathBytes(path.join(target, name));
+    }
+    try {
+      fs.rmdirSync(target);
+    } catch {
+      /* non-empty or race */
+    }
+  }
+  return freed;
+}
+
+function collectJobRunDirs(job: JobMeta): string[] {
+  const dirs = new Set<string>();
+  for (const r of job.results || []) {
+    const d = (r.run_dir || "").trim();
+    if (d) dirs.add(path.resolve(d));
+  }
+  for (const c of job.progress?.cases || []) {
+    const d = (c.run_dir || "").trim();
+    if (d) dirs.add(path.resolve(d));
+  }
+  // Also rediscover under artifacts/ for partial jobs
+  for (const r of harvestJobResults(job)) {
+    const d = (r.run_dir || "").trim();
+    if (d) dirs.add(path.resolve(d));
+  }
+  return [...dirs].filter((d) => isSafeArtifactsPath(d) && fs.existsSync(d));
+}
+
+export type PurgeMediaResult = {
+  jobId: string;
+  ok: boolean;
+  skipped?: boolean;
+  reason?: string;
+  bytesFreed: number;
+  pathsRemoved: number;
+  job?: JobMeta;
+};
+
+/** Delete heavy media for one finished job; keep job.json + evaluation text. */
+export function purgeJobMedia(id: string): PurgeMediaResult {
+  const job = readJob(id);
+  if (!job) {
+    return { jobId: id, ok: false, reason: "not found", bytesFreed: 0, pathsRemoved: 0 };
+  }
+  if (job.status === "queued" || job.status === "running") {
+    return {
+      jobId: id,
+      ok: false,
+      skipped: true,
+      reason: "任务进行中，请先停止后再清理",
+      bytesFreed: 0,
+      pathsRemoved: 0,
+      job,
+    };
+  }
+  if (job.mediaPurged) {
+    return {
+      jobId: id,
+      ok: true,
+      skipped: true,
+      reason: "媒体已清理过",
+      bytesFreed: 0,
+      pathsRemoved: 0,
+      job,
+    };
+  }
+
+  let bytesFreed = 0;
+  let pathsRemoved = 0;
+  for (const runDir of collectJobRunDirs(job)) {
+    for (const name of PURGE_MEDIA_FILES) {
+      const p = path.join(runDir, name);
+      if (!isSafeArtifactsPath(p)) continue;
+      const before = fs.existsSync(p);
+      const n = rmPathBytes(p);
+      if (n > 0 || before) {
+        bytesFreed += n;
+        pathsRemoved += 1;
+      }
+    }
+    for (const name of PURGE_MEDIA_DIRS) {
+      const p = path.join(runDir, name);
+      if (!isSafeArtifactsPath(p)) continue;
+      if (!fs.existsSync(p)) continue;
+      bytesFreed += rmPathBytes(p);
+      pathsRemoved += 1;
+    }
+  }
+
+  job.mediaPurged = true;
+  job.mediaPurgedAt = new Date().toISOString();
+  job.mediaBytesFreed = (job.mediaBytesFreed || 0) + bytesFreed;
+  writeJob(job);
+  return { jobId: id, ok: true, bytesFreed, pathsRemoved, job };
+}
+
+/** Purge media for all finished jobs (not running/queued). */
+export function purgeAllFinishedJobMedia(): {
+  results: PurgeMediaResult[];
+  bytesFreed: number;
+  purged: number;
+  skipped: number;
+} {
+  const results: PurgeMediaResult[] = [];
+  let bytesFreed = 0;
+  let purged = 0;
+  let skipped = 0;
+  for (const job of listJobs()) {
+    const r = purgeJobMedia(job.id);
+    results.push(r);
+    bytesFreed += r.bytesFreed;
+    if (r.skipped || !r.ok) skipped += 1;
+    else purged += 1;
+  }
+  return { results, bytesFreed, purged, skipped };
+}
+
+export function formatBytes(n: number): string {
+  if (!n || n < 0) return "0 B";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 export function cancelJob(id: string): JobMeta | null {

@@ -45,7 +45,7 @@ curl -s http://127.0.0.1:58261/api/ping
 1. **环境检查** `/env`
 2. **数据集管理** → 数据集 `/datasets` · 预合成语音 `/datasets/tts` · 预置校准 `/datasets/calibrate`
 3. **开始测试** `/run`
-4. **任务管理** `/runs`
+4. **任务管理** `/runs`（可「清理媒体」瘦身：删 mp4/截帧/wav，保留结果；不删 precondition_cache）
 
 ## 使用顺序
 

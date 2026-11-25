@@ -59,7 +59,13 @@ export default async function CaseDetailPage({
             </li>
           ))}
         </ol>
-        <CaseMedia audios={detail.audios} frames={detail.frames} video={detail.video} />
+        {detail.job.mediaPurged && !detail.video && !(detail.frames || []).length ? (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            该任务媒体已瘦身清理（录屏/截帧/步骤音频已删除），评判文字结果仍保留。可在「任务管理」查看清理状态。
+          </p>
+        ) : (
+          <CaseMedia audios={detail.audios} frames={detail.frames} video={detail.video} />
+        )}
       </section>
 
       <section className="space-y-3">
