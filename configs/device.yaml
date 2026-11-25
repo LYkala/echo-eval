@@ -55,6 +55,10 @@ run:
   # 设备串行执行；抽帧+VL 后台并行（不挡下一条）
   judge_async: true
   judge_parallel: 3
+  # 每条用例正式步骤前播唤醒词（不参与任何评判）
+  wake_enabled: true
+  wake_text: "小翼管家"
+  wake_wait_sec: 3.0
 
 # ASR 准确率（P1）：句后截屏 + VL；与 GUI 成功率互不影响
 asr:
@@ -68,6 +72,7 @@ asr:
   ignore_texts: "我还在听，说再见退出"
 
 # 端到端时延（P2）：说完→画面首变；忽略底部识别条文案变化；超时=无操控
+# 相对「播报前」上半屏基线比较；慢截屏时用下发时刻而非文件落盘时刻
 latency:
   enabled: true
   fps: 10
@@ -76,12 +81,13 @@ latency:
   change_threshold: 6.0
 
 # TTS MOS（P3）：主机麦录设备外放（screenrecord 无音频）。Windows 请填写 dshow 设备名
+# input_device 可写「audio=名称」或纯名称（代码会自动补 audio=）
 mos:
   enabled: true
   window_sec: 5.0
   sample_rate: 16000
   min_speech_sec: 0.3
-  input_format: ""
+  input_format: "dshow"
   input_device: ""
 
 # 预置条件：开跑前覆盖检查；每条正式测前 force-stop→Home→回放 ADB

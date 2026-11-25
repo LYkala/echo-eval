@@ -47,6 +47,17 @@ def _default_input(platform: str) -> tuple[str, str]:
     return "alsa", "default"
 
 
+def normalize_dshow_audio_device(device: str) -> str:
+    """Ensure Windows dshow mic uses audio=… (plain display names break ffmpeg)."""
+    d = (device or "").strip()
+    if not d:
+        return d
+    low = d.lower()
+    if low.startswith("audio=") or low.startswith("video="):
+        return d
+    return f"audio={d}"
+
+
 def start_host_mic_record(
     out_wav: Path,
     *,
@@ -60,7 +71,7 @@ def start_host_mic_record(
     Start ffmpeg recording host mic to wav; caller should wait/communicate.
 
     Windows: set mos.input_format=dshow and mos.input_device to the device name
-    from `ffmpeg -list_devices true -f dshow -i dummy` (audio=Name).
+    from `ffmpeg -list_devices true -f dshow -i dummy` (audio=Name or bare name).
     """
     out_wav = Path(out_wav)
     out_wav.parent.mkdir(parents=True, exist_ok=True)
@@ -71,6 +82,8 @@ def start_host_mic_record(
     dev = (input_device or "").strip()
     if not fmt or not dev:
         fmt, dev = _default_input(sys.platform)
+    if fmt == "dshow":
+        dev = normalize_dshow_audio_device(dev)
     dur = max(0.5, float(duration_sec))
     sr = max(8000, int(sample_rate))
     cmd = [

@@ -22,7 +22,11 @@ sys.path.insert(0, str(ROOT / "src"))
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="短超时，避免 UI 卡住")
-    ap.add_argument("--step", default="", help="只跑单步: config|python|adb|device|ffmpeg|audio|tts|vl")
+    ap.add_argument(
+        "--step",
+        default="",
+        help="只跑单步: config|python|adb|device|ffmpeg|audio|tts|vl|mos",
+    )
     args = ap.parse_args()
     connect_timeout = 4.0 if args.quick else 12.0
     print(
@@ -221,6 +225,108 @@ def main() -> int:
                 "required": False,
             }
         )
+
+    if want("mos"):
+        # Optional: host-mic path for TTS MOS (does not block env.ok).
+        from echo_eval.capture.host_mic import (
+            HostMicError,
+            finish_host_mic_record,
+            normalize_dshow_audio_device,
+            resolve_ffmpeg_bin,
+            start_host_mic_record,
+        )
+
+        mos_cfg = cfg.mos if cfg else None
+        if mos_cfg is None or not mos_cfg.enabled:
+            items.append(
+                {
+                    "key": "mos_mic",
+                    "label": "MOS 拾音（主机麦）",
+                    "ok": True,
+                    "detail": "mos.enabled=false，跳过拾音检查",
+                    "required": False,
+                }
+            )
+        else:
+            detail = ""
+            ok = False
+            try:
+                ff = resolve_ffmpeg_bin(cfg.capture.ffmpeg_path if cfg else "")
+                fmt = (mos_cfg.input_format or "").strip() or (
+                    "dshow" if sys.platform.startswith("win") else ""
+                )
+                dev = (mos_cfg.input_device or "").strip()
+                if sys.platform.startswith("win"):
+                    if not dev:
+                        ok = False
+                        detail = (
+                            "未配置 mos.input_device。请用 "
+                            "`ffmpeg -list_devices true -f dshow -i dummy` "
+                            "查看 (audio) 设备，填 audio=名称 或纯名称"
+                        )
+                    else:
+                        norm = normalize_dshow_audio_device(dev)
+                        probe = ROOT / "artifacts" / "_mos_mic_probe.wav"
+                        probe.parent.mkdir(parents=True, exist_ok=True)
+                        proc, meta = start_host_mic_record(
+                            probe,
+                            duration_sec=0.8,
+                            ffmpeg_path=ff,
+                            input_format=fmt or "dshow",
+                            input_device=norm,
+                            sample_rate=int(mos_cfg.sample_rate or 16000),
+                        )
+                        meta = finish_host_mic_record(proc, meta, timeout_sec=8.0)
+                        ok = bool(meta.ok)
+                        detail = (
+                            f"试录 OK · {norm}"
+                            if ok
+                            else f"试录失败 · {norm} · {meta.error or 'unknown'}"
+                        )
+                        try:
+                            if probe.is_file():
+                                probe.unlink()
+                        except OSError:
+                            pass
+                else:
+                    # Non-Windows: attempt default pulse/alsa briefly.
+                    probe = ROOT / "artifacts" / "_mos_mic_probe.wav"
+                    probe.parent.mkdir(parents=True, exist_ok=True)
+                    proc, meta = start_host_mic_record(
+                        probe,
+                        duration_sec=0.8,
+                        ffmpeg_path=ff,
+                        input_format=fmt,
+                        input_device=dev,
+                        sample_rate=int(mos_cfg.sample_rate or 16000),
+                    )
+                    meta = finish_host_mic_record(proc, meta, timeout_sec=8.0)
+                    ok = bool(meta.ok)
+                    detail = (
+                        f"试录 OK · {meta.backend}"
+                        if ok
+                        else f"试录失败 · {meta.error or 'unknown'}"
+                    )
+                    try:
+                        if probe.is_file():
+                            probe.unlink()
+                    except OSError:
+                        pass
+            except HostMicError as e:
+                ok = False
+                detail = str(e)
+            except Exception as e:
+                ok = False
+                detail = f"MOS 拾音检查异常: {e}"
+            items.append(
+                {
+                    "key": "mos_mic",
+                    "label": "MOS 拾音（主机麦）",
+                    "ok": ok,
+                    "detail": detail,
+                    "required": False,
+                }
+            )
 
     required_fail = [i for i in items if i.get("required") and not i.get("ok")]
     out = {

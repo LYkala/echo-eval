@@ -435,8 +435,14 @@ def capture_one_case(
 
     head = float(cfg.run.head_delay_sec)
     tail = float(cfg.run.tail_sec)
+    wake_enabled = bool(cfg.run.wake_enabled) and bool(str(cfg.run.wake_text or "").strip())
+    wake_wait = max(0.0, float(cfg.run.wake_wait_sec))
+    wake_dur_est = 2.0 if wake_enabled else 0.0
     buffer_sec = 2.0
-    duration_sec = max(5, int(math_ceil(head + total_play + tail + buffer_sec)))
+    duration_sec = max(
+        5,
+        int(math_ceil(head + wake_dur_est + wake_wait + total_play + tail + buffer_sec)),
+    )
 
     remote_dir = cfg.capture.remote_dir.rstrip("/")
     remote_file = f"{remote_dir}/{cfg.capture.remote_filename.lstrip('/')}"
@@ -451,6 +457,7 @@ def capture_one_case(
         "head_delay_sec": head,
         "tail_sec": tail,
         "planned_duration_sec": duration_sec,
+        "wake": None,
         "steps": [],
     }
 
@@ -470,6 +477,45 @@ def capture_one_case(
         time.sleep(head)
 
     try:
+        if wake_enabled:
+            _prog_device(
+                case,
+                index=case_index,
+                total=case_total,
+                device_status="running",
+                device_label=f"唤醒播报「{cfg.run.wake_text}」（{case_index}/{case_total}）",
+                status="running",
+            )
+            wake_wav = steps_dir / "wake.wav"
+            wake_tts = synthesize(
+                str(cfg.run.wake_text),
+                wake_wav,
+                backend=cfg.tts.backend,
+                voice=cfg.tts.voice,
+                rate=cfg.tts.rate,
+                lookup_dir=Path(cfg.tts.lookup_dir) if cfg.tts.lookup_dir else None,
+                case_id=case.case_id,
+                step_index=0,
+            )
+            wake_play_started = datetime.now(timezone.utc).isoformat()
+            wake_offset = round(time.time() - t0, 3)
+            play_audio_file(wake_tts.path, ffmpeg_path=cfg.capture.ffmpeg_path)
+            wake_play_ended = datetime.now(timezone.utc).isoformat()
+            if wake_wait > 0:
+                time.sleep(wake_wait)
+            timeline["wake"] = {
+                "text": str(cfg.run.wake_text),
+                "wait_sec": wake_wait,
+                "wav": wake_tts.path,
+                "backend": wake_tts.backend,
+                "duration_sec": wake_tts.duration_sec or wav_duration_sec(Path(wake_tts.path)),
+                "play_started_at": wake_play_started,
+                "play_ended_at": wake_play_ended,
+                "play_offset_sec": wake_offset,
+                "judged": False,
+                "note": "仅唤醒，不参与 ASR/GUI/时延/MOS 评判",
+            }
+
         for step_i, item in enumerate(tts_meta, 1):
             _prog_device(
                 case,
@@ -479,6 +525,18 @@ def capture_one_case(
                 device_label=f"播放第 {step_i}/{len(tts_meta)} 句（{case_index}/{case_total}）",
                 status="running",
             )
+            # Pre-speech upper-band baseline for e2e latency (before TTS play).
+            latency_baseline_png: Path | None = None
+            if cfg.latency.enabled:
+                try:
+                    latency_baseline_png = (
+                        run_dir / "post_speech_frames" / f"step_{step_i:02d}_baseline.png"
+                    )
+                    latency_baseline_png.parent.mkdir(parents=True, exist_ok=True)
+                    adb.screencap_png(latency_baseline_png, timeout=25)
+                except AdbError:
+                    latency_baseline_png = None
+
             play_started = datetime.now(timezone.utc).isoformat()
             play_offset = round(time.time() - t0, 3)
             play_audio_file(item["wav"], ffmpeg_path=cfg.capture.ffmpeg_path)
@@ -506,6 +564,7 @@ def capture_one_case(
             post_info: dict[str, Any] = {
                 "asr_enabled": bool(cfg.asr.enabled),
                 "latency_enabled": bool(cfg.latency.enabled),
+                "latency_baseline": str(latency_baseline_png) if latency_baseline_png else "",
             }
             post_elapsed = 0.0
             if cfg.asr.enabled or cfg.latency.enabled:
@@ -527,6 +586,7 @@ def capture_one_case(
                     latency=cfg.latency,
                     ffmpeg_path=cfg.capture.ffmpeg_path,
                     step_index=step_i,
+                    latency_baseline_png=latency_baseline_png,
                 )
                 post_info.update(post_speech_meta(poll))
                 post_elapsed = float(poll.elapsed_sec or 0.0)

@@ -209,6 +209,10 @@ class RunConfig:
     # Device runs serially; frame extract + VL judge run in a background pool.
     judge_async: bool = True
     judge_parallel: int = 3
+    # 正式步骤前播一句唤醒词（不参与 ASR/GUI/时延/MOS 评判）
+    wake_enabled: bool = True
+    wake_text: str = "小翼管家"
+    wake_wait_sec: float = 3.0
 
 
 @dataclass
@@ -370,6 +374,10 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         judge_async = bool(run_raw.get("judge_async"))
     else:
         judge_async = True
+    if "wake_enabled" in run_raw:
+        wake_enabled = bool(run_raw.get("wake_enabled"))
+    else:
+        wake_enabled = True
     run = RunConfig(
         step_wait_sec=float(
             run_raw.get("step_wait_sec") if run_raw.get("step_wait_sec") is not None else 3.0
@@ -392,6 +400,13 @@ def load_config(path: Path | str | None = None) -> AppConfig:
                 if run_raw.get("judge_parallel") is not None
                 else 3
             ),
+        ),
+        wake_enabled=wake_enabled,
+        wake_text=str(run_raw.get("wake_text") or "小翼管家").strip() or "小翼管家",
+        wake_wait_sec=float(
+            run_raw.get("wake_wait_sec")
+            if run_raw.get("wake_wait_sec") is not None
+            else 3.0
         ),
     )
     if "enabled" in pre_raw:
@@ -560,7 +575,7 @@ def _parse_settle_overrides(raw: Any) -> dict[str, float]:
     return out
 
 
-def public_run_defaults(cfg: AppConfig | None = None) -> dict[str, float | int]:
+def public_run_defaults(cfg: AppConfig | None = None) -> dict[str, Any]:
     """Frontend-facing defaults from device.yaml (or given AppConfig)."""
     c = cfg or load_config()
     return {
@@ -570,6 +585,17 @@ def public_run_defaults(cfg: AppConfig | None = None) -> dict[str, float | int]:
         "fps": float(c.capture.fps),
         "max_retries": int(c.precondition.max_retries),
         "step_settle_sec": float(c.precondition.step_settle_sec),
+        "asr_enabled": bool(c.asr.enabled),
+        "asr_window_sec": float(c.asr.window_sec),
+        "asr_interval_sec": float(c.asr.interval_sec),
+        "latency_enabled": bool(c.latency.enabled),
+        "latency_window_sec": float(c.latency.window_sec),
+        "mos_enabled": bool(c.mos.enabled),
+        "mos_window_sec": float(c.mos.window_sec),
+        "mos_input_device": str(c.mos.input_device or ""),
+        "wake_enabled": bool(c.run.wake_enabled),
+        "wake_text": str(c.run.wake_text or "小翼管家"),
+        "wake_wait_sec": float(c.run.wake_wait_sec),
     }
 
 
@@ -589,6 +615,32 @@ def apply_runtime_overrides(cfg: AppConfig, overrides: dict[str, Any] | None) ->
         cfg.precondition.max_retries = max(1, int(overrides["max_retries"]))
     if overrides.get("step_settle_sec") is not None:
         cfg.precondition.step_settle_sec = max(0.0, float(overrides["step_settle_sec"]))
+    if overrides.get("asr_enabled") is not None:
+        cfg.asr.enabled = bool(overrides["asr_enabled"])
+    if overrides.get("asr_window_sec") is not None:
+        cfg.asr.window_sec = max(0.5, float(overrides["asr_window_sec"]))
+    if overrides.get("asr_interval_sec") is not None:
+        cfg.asr.interval_sec = max(0.2, float(overrides["asr_interval_sec"]))
+    if overrides.get("latency_enabled") is not None:
+        cfg.latency.enabled = bool(overrides["latency_enabled"])
+    if overrides.get("latency_window_sec") is not None:
+        cfg.latency.window_sec = max(0.5, float(overrides["latency_window_sec"]))
+    if overrides.get("mos_enabled") is not None:
+        cfg.mos.enabled = bool(overrides["mos_enabled"])
+    if overrides.get("mos_window_sec") is not None:
+        cfg.mos.window_sec = max(0.5, float(overrides["mos_window_sec"]))
+    if overrides.get("mos_input_device") is not None:
+        cfg.mos.input_device = str(overrides["mos_input_device"] or "").strip()
+        if cfg.mos.input_device and not (cfg.mos.input_format or "").strip():
+            cfg.mos.input_format = "dshow"
+    if overrides.get("wake_enabled") is not None:
+        cfg.run.wake_enabled = bool(overrides["wake_enabled"])
+    if overrides.get("wake_text") is not None:
+        text = str(overrides["wake_text"] or "").strip()
+        if text:
+            cfg.run.wake_text = text
+    if overrides.get("wake_wait_sec") is not None:
+        cfg.run.wake_wait_sec = max(0.0, float(overrides["wake_wait_sec"]))
     return cfg
 
 
@@ -631,6 +683,9 @@ def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
             "return_home_wait_sec": cfg.run.return_home_wait_sec,
             "judge_async": cfg.run.judge_async,
             "judge_parallel": cfg.run.judge_parallel,
+            "wake_enabled": cfg.run.wake_enabled,
+            "wake_text": cfg.run.wake_text,
+            "wake_wait_sec": cfg.run.wake_wait_sec,
         },
         "precondition": {
             "enabled": cfg.precondition.enabled,

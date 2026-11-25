@@ -154,6 +154,17 @@ type RunParams = {
   fps: number;
   max_retries: number;
   step_settle_sec: number;
+  asr_enabled: boolean;
+  asr_window_sec: number;
+  asr_interval_sec: number;
+  latency_enabled: boolean;
+  latency_window_sec: number;
+  mos_enabled: boolean;
+  mos_window_sec: number;
+  mos_input_device: string;
+  wake_enabled: boolean;
+  wake_text: string;
+  wake_wait_sec: number;
 };
 
 const PARAM_FALLBACK: RunParams = {
@@ -163,6 +174,17 @@ const PARAM_FALLBACK: RunParams = {
   fps: 1,
   max_retries: 3,
   step_settle_sec: 1,
+  asr_enabled: true,
+  asr_window_sec: 4,
+  asr_interval_sec: 0.5,
+  latency_enabled: true,
+  latency_window_sec: 8,
+  mos_enabled: true,
+  mos_window_sec: 5,
+  mos_input_device: "",
+  wake_enabled: true,
+  wake_text: "小翼管家",
+  wake_wait_sec: 3,
 };
 
 const ACTIVE_JOB_KEY = "echo_eval_active_job";
@@ -184,6 +206,7 @@ const STEP_DEFS: { id: string; label: string }[] = [
   { id: "audio", label: "检查音频播放" },
   { id: "tts", label: "检查 TTS" },
   { id: "vl", label: "检查 VL 配置" },
+  { id: "mos", label: "MOS 拾音（可选）" },
 ];
 
 function blankSteps(): StepRow[] {
@@ -266,12 +289,31 @@ export function ConsoleClient() {
   }, [pushLog]);
 
   function setParam<K extends keyof RunParams>(key: K, raw: string) {
+    if (key === "mos_input_device" || key === "wake_text") {
+      setParams((prev) => ({ ...prev, [key]: raw }));
+      return;
+    }
+    if (
+      key === "asr_enabled" ||
+      key === "latency_enabled" ||
+      key === "mos_enabled" ||
+      key === "wake_enabled"
+    ) {
+      return;
+    }
     const n = Number(raw);
     if (Number.isNaN(n)) return;
     setParams((prev) => ({
       ...prev,
       [key]: key === "max_retries" ? Math.max(1, Math.floor(n)) : Math.max(0, n),
     }));
+  }
+
+  function setBoolParam(
+    key: "asr_enabled" | "latency_enabled" | "mos_enabled" | "wake_enabled",
+    value: boolean
+  ) {
+    setParams((prev) => ({ ...prev, [key]: value }));
   }
 
   const refreshEnv = useCallback(async () => {
@@ -377,7 +419,7 @@ export function ConsoleClient() {
             detail: aborted
               ? "本步超时（20s）。请看 Git Bash 里 npm run dev 日志是否卡在 python/adb。"
               : `请求失败: ${String(e)}`,
-            required: !["audio", "tts", "vl"].includes(def.id),
+            required: !["audio", "tts", "vl", "mos"].includes(def.id),
           };
           pushLog(`step=${def.id} EXCEPTION ${item.detail}`);
         } finally {
@@ -1010,6 +1052,125 @@ export function ConsoleClient() {
                     step={0.5}
                     value={params.fps}
                     onChange={(e) => setParam("fps", e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-border/70 bg-secondary/30 px-3 py-3">
+              <p className="text-sm font-medium">评判项（本次任务）</p>
+              <p className="text-xs text-muted-foreground">
+                GUI 始终评判。下列开关控制 ASR / 时延 / MOS；唤醒词只播报不评判。默认来自配置，只影响本次。
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={params.asr_enabled}
+                    onChange={(e) => setBoolParam("asr_enabled", e.target.checked)}
+                  />
+                  ASR 准确率
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">ASR 窗口（秒）</Label>
+                    <Input
+                      type="number"
+                      min={0.5}
+                      step={0.5}
+                      disabled={!params.asr_enabled}
+                      value={params.asr_window_sec}
+                      onChange={(e) => setParam("asr_window_sec", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">ASR 间隔（秒）</Label>
+                    <Input
+                      type="number"
+                      min={0.2}
+                      step={0.1}
+                      disabled={!params.asr_enabled}
+                      value={params.asr_interval_sec}
+                      onChange={(e) => setParam("asr_interval_sec", e.target.value)}
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={params.latency_enabled}
+                    onChange={(e) => setBoolParam("latency_enabled", e.target.checked)}
+                  />
+                  端到端时延
+                </label>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">时延窗口（秒）</Label>
+                  <Input
+                    type="number"
+                    min={0.5}
+                    step={0.5}
+                    disabled={!params.latency_enabled}
+                    value={params.latency_window_sec}
+                    onChange={(e) => setParam("latency_window_sec", e.target.value)}
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={params.mos_enabled}
+                    onChange={(e) => setBoolParam("mos_enabled", e.target.checked)}
+                  />
+                  TTS MOS
+                </label>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">MOS 录音（秒）</Label>
+                  <Input
+                    type="number"
+                    min={0.5}
+                    step={0.5}
+                    disabled={!params.mos_enabled}
+                    value={params.mos_window_sec}
+                    onChange={(e) => setParam("mos_window_sec", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">
+                  MOS 麦克风（dshow，可写 audio=名称 或纯名称）
+                </Label>
+                <Input
+                  disabled={!params.mos_enabled}
+                  placeholder="例：麦克风阵列 (适用于数字麦克风的英特尔® 智音技术)"
+                  value={params.mos_input_device}
+                  onChange={(e) => setParam("mos_input_device", e.target.value)}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={params.wake_enabled}
+                    onChange={(e) => setBoolParam("wake_enabled", e.target.checked)}
+                  />
+                  用例前唤醒播报
+                </label>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">唤醒后等待（秒）</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    disabled={!params.wake_enabled}
+                    value={params.wake_wait_sec}
+                    onChange={(e) => setParam("wake_wait_sec", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="text-xs text-muted-foreground">唤醒词（不评判）</Label>
+                  <Input
+                    disabled={!params.wake_enabled}
+                    value={params.wake_text}
+                    onChange={(e) => setParam("wake_text", e.target.value)}
                   />
                 </div>
               </div>

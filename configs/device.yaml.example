@@ -38,6 +38,9 @@ run:
   # 设备串行；抽帧+评判后台并行（false=恢复同步）
   judge_async: true
   judge_parallel: 3
+  wake_enabled: true
+  wake_text: "小翼管家"
+  wake_wait_sec: 3.0
 
 # ASR 准确率（P1）：句后多帧截屏 + VL；与 GUI 成功率互不影响
 asr:
@@ -58,7 +61,7 @@ latency:
   bottom_band_ratio: 0.22
   change_threshold: 6.0
 
-# TTS MOS（P3）：主机麦。Windows 示例：
+# TTS MOS（P3）：主机麦。Windows 示例（纯名称也可，会自动补 audio=）：
 #   input_format: dshow
 #   input_device: audio=Microphone (Realtek ...)
 mos:
@@ -66,7 +69,7 @@ mos:
   window_sec: 5.0
   sample_rate: 16000
   min_speech_sec: 0.3
-  input_format: ""
+  input_format: "dshow"
   input_device: ""
 
 # 预置条件：开跑前覆盖检查；每条正式测前 force-stop→Home→回放 ADB

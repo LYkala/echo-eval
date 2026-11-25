@@ -78,3 +78,34 @@ capture: {}
 
 def test_mean_abs_diff_import():
     assert _mean_abs_diff(b"\x01\x02", b"\x01\x02") == 0.0
+
+
+def test_normalize_dshow_audio_device():
+    from echo_eval.capture.host_mic import normalize_dshow_audio_device
+
+    assert normalize_dshow_audio_device("麦克风阵列 (测试)") == "audio=麦克风阵列 (测试)"
+    assert normalize_dshow_audio_device("audio=Mic") == "audio=Mic"
+    assert normalize_dshow_audio_device("video=Cam") == "video=Cam"
+
+
+def test_wake_and_metric_defaults(tmp_path: Path):
+    p = tmp_path / "device.yaml"
+    p.write_text(
+        """
+adb:
+  host: "10.0.0.1"
+capture: {}
+""",
+        encoding="utf-8",
+    )
+    cfg = load_config(p)
+    assert cfg.run.wake_enabled is True
+    assert cfg.run.wake_text == "小翼管家"
+    assert cfg.run.wake_wait_sec == 3.0
+    from echo_eval.config import public_run_defaults
+
+    d = public_run_defaults(cfg)
+    assert d["asr_enabled"] is True
+    assert d["latency_enabled"] is True
+    assert d["mos_enabled"] is True
+    assert d["wake_enabled"] is True

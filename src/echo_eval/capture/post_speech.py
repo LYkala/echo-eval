@@ -142,11 +142,19 @@ def poll_post_speech(
     latency: LatencyConfig,
     ffmpeg_path: str = "",
     step_index: int = 1,
+    latency_baseline_png: Path | str | None = None,
 ) -> PostSpeechPollResult:
     """
     Capture screenshots after speech ends for ASR and/or e2e latency.
 
     - Latency uses the region *above* bottom_band (ignore ASR bubble text changes).
+    - Prefer a pre-speech ``latency_baseline_png`` so the first post-speech frame that
+      already differs is counted (avoids inflated latency when screencap is slow and
+      the in-loop baseline is taken *after* the UI already changed).
+    - When baseline is established from the first poll frame only, a later differing
+      frame reports latency at the *previous* frame offset (upper bound of the interval
+      where the change could first have been observed), not the slow arrival time of
+      the differing capture.
     - ASR picks frames every asr.interval_sec; early-stop when bottom band changes.
     """
     out_dir = Path(out_dir)
@@ -176,6 +184,14 @@ def poll_post_speech(
     bottom_streak = 0
     bottom_baseline: bytes | None = None
     upper_baseline: bytes | None = None
+    baseline_from_prespeech = False
+    if need_lat and latency_baseline_png:
+        bp = Path(latency_baseline_png)
+        if bp.is_file():
+            upper_baseline = _upper_band_gray(
+                bp, bottom_ratio=band_ratio, ffmpeg_path=ffmpeg_path
+            )
+            baseline_from_prespeech = upper_baseline is not None
     next_asr_t = 0.0
     asr_done = not need_asr
     lat_done = not need_lat
@@ -191,6 +207,8 @@ def poll_post_speech(
         if time.time() - t_start > window + 0.05 and i > 0:
             break
 
+        # Wall-clock when we *issue* screencap ≈ device snapshot time (transfer lags after).
+        capture_issued_at = time.time()
         path = out_dir / f"step_{step_index:02d}_{i:02d}.png"
         try:
             adb.screencap_png(path, timeout=25)
@@ -199,7 +217,7 @@ def poll_post_speech(
             if need_lat and result.latency_status == "no_action":
                 result.latency_status = "error"
             break
-        offset = round(time.time() - t_start, 3)
+        offset = round(capture_issued_at - t_start, 3)
         result.paths.append(path)
         result.offsets_sec.append(offset)
 
@@ -225,7 +243,7 @@ def poll_post_speech(
                             result.asr_early_stopped = True
                             asr_done = True
 
-        # --- Latency: first change above bottom band ---
+        # --- Latency: first change above bottom band vs pre-speech / first-frame baseline ---
         if need_lat and not lat_done:
             upper = _upper_band_gray(
                 path, bottom_ratio=band_ratio, ffmpeg_path=ffmpeg_path
@@ -236,19 +254,27 @@ def poll_post_speech(
                 else:
                     diff = _mean_abs_diff(upper_baseline, upper)
                     if diff >= change_thresh:
-                        result.latency_sec = round(offset, 1)  # 0.1s precision display
+                        if baseline_from_prespeech:
+                            # First post-speech frame that already differs → offset is
+                            # an upper bound limited by screencap lag.
+                            lat_val = offset
+                        elif len(result.offsets_sec) >= 2:
+                            # In-loop baseline was frame0; change seen on frame i →
+                            # UI changed between prev issue and this issue.
+                            lat_val = result.offsets_sec[-2]
+                        else:
+                            lat_val = offset
+                        result.latency_sec = round(float(lat_val), 1)
                         result.action_offset_sec = offset
                         result.action_frame = path.name
                         result.latency_status = "measured"
                         lat_done = True
 
         if asr_done and lat_done:
-            # Still allow a tiny settle if ASR wants one more sample — already done
             break
 
     result.elapsed_sec = round(time.time() - t_start, 3)
     if need_asr and not result.asr_paths and result.paths:
-        # ensure at least first/last for ASR
         result.asr_paths = [result.paths[0]]
         result.asr_offsets_sec = [result.offsets_sec[0]]
         if len(result.paths) > 1:
