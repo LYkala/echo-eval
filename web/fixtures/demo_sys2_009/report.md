@@ -22,10 +22,11 @@
 - enabled: true · 1/1 通过 · accuracy 100%
 - 第1句「取消静音」：识别文本与播报文一致（多帧截图仿真）
 
-## 端到端时延（演示仿真）
+## 端到端时延（演示订正）
 
-- enabled: true · measured 1 · no_action 0 · mean 0.8s
-- 第1句：说完后约 0.8s 出现非静音喇叭/音量 UI 变化
+- enabled: true · measured 1 · no_action 0 · mean **1.2s**
+- 估算依据：play_end≈2.8s；忽略底部文字带；frame_005(~4.0s) 出现音量条 50 → ≈1.2s
+- 说明：样例仅有约 1fps 抽帧，非正式 10fps 时延采集；原先写死的 0.8s 已作废
 
 ## TTS MOS
 

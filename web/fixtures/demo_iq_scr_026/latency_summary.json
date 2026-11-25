@@ -13,7 +13,7 @@
       "status": "no_action",
       "latency_sec": null,
       "action_frame": null,
-      "reason": "演示仿真：忽略底部文字带后，超时未见有效操控画面变化（与 GUI FAIL 一致）"
+      "reason": "演示估算：忽略底部文字带后，1fps 截帧至录屏结束未见热播榜选中/跳转 → no_action"
     }
   ]
 }

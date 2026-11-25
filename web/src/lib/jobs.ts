@@ -253,7 +253,7 @@ function newJobId(): string {
 }
 
 /** Bump when demo fixture set changes so local caches re-seed. */
-const DEMO_FIXTURE_ID = "demo-two-cases-v2";
+const DEMO_FIXTURE_ID = "demo-two-cases-v3";
 
 type DemoFixtureSpec = {
   fixtureDir: string;
@@ -384,7 +384,7 @@ export function ensureDemoJob(opts?: { force?: boolean }): JobMeta {
     createdAt: "2026-11-24T12:36:22.000Z",
     finishedAt: "2026-11-24T12:40:05.000Z",
     demo: true,
-    note: "SYS2-009（取消静音 PASS）+ IQ-SCR-026（热播榜 FAIL）；ASR/时延仿真，MOS 跳过",
+    note: "SYS2-009（GUI PASS，时延≈1.2s 按截帧估算）+ IQ-SCR-026（GUI FAIL，ASR 热锅榜≠热播榜）；MOS 跳过",
     results,
     passed,
     failed,

@@ -3,17 +3,20 @@
   "total": 1,
   "measured": 1,
   "no_action": 0,
-  "mean_sec": 0.8,
+  "mean_sec": 1.2,
   "timeout_sec": 4.0,
   "bottom_band_ratio": 0.22,
+  "resolution_note": "演示用抽帧约 1fps 估算，非 post_speech 10fps 实测；真机评测以 0.1s 分辨率 poll 为准",
   "utterances": [
     {
       "index": 1,
       "spoken_text": "取消静音",
       "status": "measured",
-      "latency_sec": 0.8,
+      "latency_sec": 1.2,
       "action_frame": "frame_005.jpg",
-      "reason": "演示仿真：忽略底部文字带后，约 0.8s 出现非静音喇叭/音量变化"
+      "play_end_offset_sec": 2.795,
+      "action_approx_offset_sec": 4.0,
+      "reason": "演示按截帧估算：play_end≈2.8s；frame_004 仅底部「取消静音」气泡（忽略）；frame_005(~4.0s) 右侧音量条 50 出现 → 时延≈1.2s。原先 0.8s 为占位虚构，已作废。"
     }
   ]
 }
