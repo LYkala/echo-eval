@@ -253,7 +253,7 @@ function newJobId(): string {
 }
 
 /** Bump when demo fixture set changes so local caches re-seed. */
-const DEMO_FIXTURE_ID = "demo-two-cases-v1";
+const DEMO_FIXTURE_ID = "demo-two-cases-v2";
 
 type DemoFixtureSpec = {
   fixtureDir: string;
@@ -305,21 +305,49 @@ function seedDemoCase(jobRoot: string, spec: DemoFixtureSpec): JobCaseResult {
   };
 }
 
-/** Seed a browsable multi-case demo job from packaged fixtures. MOS omitted. */
-export function ensureDemoJob(): JobMeta {
+function isLegacyDemoLayout(dir: string, specs: DemoFixtureSpec[]): boolean {
+  if (fs.existsSync(path.join(dir, "demo_case"))) return true;
+  const existing = readJob("job_demo_sample");
+  if (!existing?.results?.length) return true;
+  if (existing.results.length !== specs.length) return true;
+  if (existing.results.some((r) => r.case_id === "demo_weather_001")) return true;
+  const want = new Set(specs.map((s) => s.caseFolder));
+  return existing.results.some((r) => !want.has(r.case_id));
+}
+
+/**
+ * Seed a browsable multi-case demo job from packaged fixtures. MOS omitted.
+ * Pass `{ force: true }` from「打开演示任务」so stale local caches are always replaced.
+ */
+export function ensureDemoJob(opts?: { force?: boolean }): JobMeta {
   const id = "job_demo_sample";
   const dir = jobDir(id);
   ensureDir(dir);
   const markerPath = path.join(dir, "DEMO_JOB.txt");
   const specs = demoFixtureSpecs();
+  for (const s of specs) {
+    if (!fs.existsSync(s.fixtureDir)) {
+      throw new Error(
+        `演示素材缺失: ${s.fixtureDir}。请确认已 git pull 且存在 web/fixtures/demo_sys2_009 与 demo_iq_scr_026。`
+      );
+    }
+  }
+
+  const markerOk =
+    fs.existsSync(markerPath) &&
+    fs.readFileSync(markerPath, "utf-8").trim() === DEMO_FIXTURE_ID;
+  const casesPresent = specs.every((s) =>
+    fs.existsSync(path.join(dir, s.caseFolder, "case.json"))
+  );
   const needSeed =
-    !fs.existsSync(markerPath) ||
-    fs.readFileSync(markerPath, "utf-8").trim() !== DEMO_FIXTURE_ID ||
-    specs.some((s) => !fs.existsSync(path.join(dir, s.caseFolder, "case.json")));
+    !!opts?.force ||
+    !markerOk ||
+    !casesPresent ||
+    isLegacyDemoLayout(dir, specs);
 
   let results: JobCaseResult[];
   if (needSeed) {
-    // Drop legacy single-case layout (demo_case/).
+    // Drop legacy single-case layout (demo_case/ / weather demo).
     const legacy = path.join(dir, "demo_case");
     if (fs.existsSync(legacy)) fs.rmSync(legacy, { recursive: true, force: true });
     results = specs.map((s) => seedDemoCase(dir, s));

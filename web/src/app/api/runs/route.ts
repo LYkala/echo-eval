@@ -22,7 +22,8 @@ export async function POST(req: Request) {
   };
 
   if (body.demo) {
-    const job = ensureDemoJob();
+    // Always re-copy fixtures so「打开演示任务」不会卡在旧的单用例缓存上。
+    const job = ensureDemoJob({ force: true });
     return NextResponse.json(job);
   }
 
