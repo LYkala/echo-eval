@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MetricsChips } from "@/components/case-metrics";
 
 type EnvItem = { key: string; label: string; ok: boolean; detail: string; required: boolean };
 type EnvResult = {
@@ -74,6 +75,16 @@ type JobProgress = {
   cases: JobProgressCase[];
 };
 
+type CaseMetrics = {
+  asr_accuracy?: number | null;
+  asr_passed?: number;
+  asr_total?: number;
+  latency_mean_sec?: number | null;
+  latency_no_action?: number;
+  mos_mean?: number | null;
+  mos_na?: number;
+};
+
 type Job = {
   id: string;
   datasetName: string;
@@ -84,7 +95,13 @@ type Job = {
   failed?: number;
   errors?: number;
   demo?: boolean;
-  results: { case_id: string; name: string; passed: boolean | null; run_dir: string }[];
+  results: {
+    case_id: string;
+    name: string;
+    passed: boolean | null;
+    run_dir: string;
+    metrics?: CaseMetrics;
+  }[];
   error?: string;
   note?: string;
   progress?: JobProgress;
@@ -1284,11 +1301,11 @@ export function ConsoleClient() {
                 ) : null}
                 <div className="grid grid-cols-3 gap-2 text-center text-sm">
                   <div className="rounded-md bg-secondary/70 px-2 py-3">
-                    <div className="text-xs text-muted-foreground">通过</div>
+                    <div className="text-xs text-muted-foreground">GUI 通过</div>
                     <div className="text-lg font-semibold">{active.passed ?? "—"}</div>
                   </div>
                   <div className="rounded-md bg-secondary/70 px-2 py-3">
-                    <div className="text-xs text-muted-foreground">失败</div>
+                    <div className="text-xs text-muted-foreground">GUI 失败</div>
                     <div className="text-lg font-semibold">{active.failed ?? "—"}</div>
                   </div>
                   <div className="rounded-md bg-secondary/70 px-2 py-3">
@@ -1296,18 +1313,61 @@ export function ConsoleClient() {
                     <div className="text-lg font-semibold">{active.errors ?? "—"}</div>
                   </div>
                 </div>
+                {(() => {
+                  const scored = (active.results || []).filter((r) => r.metrics);
+                  if (!scored.length) return null;
+                  const asr = scored
+                    .map((r) => r.metrics?.asr_accuracy)
+                    .filter((x): x is number => typeof x === "number");
+                  const lat = scored
+                    .map((r) => r.metrics?.latency_mean_sec)
+                    .filter((x): x is number => typeof x === "number");
+                  const mos = scored
+                    .map((r) => r.metrics?.mos_mean)
+                    .filter((x): x is number => typeof x === "number");
+                  const mean = (xs: number[]) =>
+                    xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+                  return (
+                    <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                      <div className="rounded-md border border-border/70 bg-card/50 px-2 py-2">
+                        <div className="text-[11px] text-muted-foreground">ASR 均</div>
+                        <div className="font-semibold">
+                          {mean(asr) != null ? `${(mean(asr)! * 100).toFixed(0)}%` : "—"}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border/70 bg-card/50 px-2 py-2">
+                        <div className="text-[11px] text-muted-foreground">时延均</div>
+                        <div className="font-semibold">
+                          {mean(lat) != null ? `${mean(lat)!.toFixed(1)}s` : "—"}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border/70 bg-card/50 px-2 py-2">
+                        <div className="text-[11px] text-muted-foreground">MOS 均</div>
+                        <div className="font-semibold">
+                          {mean(mos) != null ? mean(mos)!.toFixed(1) : "—"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {active.error ? <p className="text-sm text-rose-700">{active.error}</p> : null}
                 <ul className="max-h-72 space-y-2 overflow-y-auto">
                   {(active.progress?.cases?.length
-                    ? active.progress.cases.map((c) => ({
-                        key: `${c.index}-${c.case_id}`,
-                        case_id: c.case_id,
-                        name: c.name,
-                        status: c.status,
-                        device_label: c.device_label || c.device_status || "",
-                        judge_label: c.judge_label || c.judge_status || "",
-                        linkable: ["passed", "failed"].includes(c.status),
-                      }))
+                    ? active.progress.cases.map((c) => {
+                        const metrics = (active.results || []).find(
+                          (r) => r.case_id === c.case_id
+                        )?.metrics;
+                        return {
+                          key: `${c.index}-${c.case_id}`,
+                          case_id: c.case_id,
+                          name: c.name,
+                          status: c.status,
+                          device_label: c.device_label || c.device_status || "",
+                          judge_label: c.judge_label || c.judge_status || "",
+                          linkable: ["passed", "failed"].includes(c.status),
+                          metrics,
+                        };
+                      })
                     : (active.results || []).map((r) => ({
                         key: r.case_id,
                         case_id: r.case_id,
@@ -1317,6 +1377,7 @@ export function ConsoleClient() {
                         device_label: "",
                         judge_label: "",
                         linkable: r.passed === true || r.passed === false,
+                        metrics: r.metrics,
                       }))
                   ).map((row) => {
                     const body = (
@@ -1327,7 +1388,10 @@ export function ConsoleClient() {
                           <span className="mt-0.5 block text-xs text-muted-foreground">
                             设备：{row.device_label || "—"}
                             <span className="mx-1.5 opacity-40">|</span>
-                            评判：{row.judge_label || "—"}
+                            GUI：{row.judge_label || "—"}
+                          </span>
+                          <span className="mt-0.5 block">
+                            <MetricsChips metrics={row.metrics} />
                           </span>
                         </span>
                         {progressBadge(row.status)}

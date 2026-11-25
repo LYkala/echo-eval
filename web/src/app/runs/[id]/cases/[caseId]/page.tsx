@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getCaseDetail } from "@/lib/jobs";
 import { Badge } from "@/components/ui/badge";
 import { CaseMedia } from "@/components/case-media";
+import { CaseMetricsPanels } from "@/components/case-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +16,17 @@ export default async function CaseDetailPage({
   const detail = getCaseDetail(id, decodeURIComponent(caseId));
   if (!detail) notFound();
 
-  const steps = (detail.caseJson as { steps?: { text: string; wait_sec: number }[] } | null)?.steps || [];
+  const steps =
+    (detail.caseJson as { steps?: { text: string; wait_sec: number }[] } | null)?.steps || [];
   const expected =
     (detail.caseJson as { expected?: string } | null)?.expected ||
     ((detail.evaluation as { result_parsed?: unknown }) ? "" : "");
   const parsed =
-    (detail.evaluation as { result_parsed?: { expectation?: string; result?: string; reason?: string }[] } | null)
-      ?.result_parsed || [];
+    (
+      detail.evaluation as {
+        result_parsed?: { expectation?: string; result?: string; reason?: string }[];
+      } | null
+    )?.result_parsed || [];
 
   return (
     <div className="animate-rise space-y-8">
@@ -30,15 +35,13 @@ export default async function CaseDetailPage({
           <Link href={`/runs/${id}`} className="text-sm text-muted-foreground hover:text-foreground">
             ← 返回任务
           </Link>
-          <h1 className="mt-2 font-display text-3xl font-semibold">
-            {detail.result.case_id}
-          </h1>
+          <h1 className="mt-2 font-display text-3xl font-semibold">{detail.result.case_id}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{detail.result.name}</p>
         </div>
         {detail.result.passed === true ? (
-          <Badge variant="pass">PASS</Badge>
+          <Badge variant="pass">GUI PASS</Badge>
         ) : detail.result.passed === false ? (
-          <Badge variant="fail">FAIL</Badge>
+          <Badge variant="fail">GUI FAIL</Badge>
         ) : (
           <Badge variant="secondary">—</Badge>
         )}
@@ -49,7 +52,9 @@ export default async function CaseDetailPage({
         <ol className="space-y-2 text-sm">
           {steps.map((s, i) => (
             <li key={i} className="rounded-md border bg-card/70 px-3 py-2">
-              <span className="font-medium">{i + 1}. {s.text}</span>
+              <span className="font-medium">
+                {i + 1}. {s.text}
+              </span>
               <span className="ml-2 text-muted-foreground">wait {s.wait_sec}s</span>
             </li>
           ))}
@@ -60,12 +65,14 @@ export default async function CaseDetailPage({
       <section className="space-y-3">
         <h2 className="font-display text-xl font-semibold">预期结果</h2>
         <pre className="whitespace-pre-wrap rounded-md border bg-card/70 p-3 text-sm">
-          {expected || (detail.caseJson as { exceptions?: string[] } | null)?.exceptions?.join("\n") || "—"}
+          {expected ||
+            (detail.caseJson as { exceptions?: string[] } | null)?.exceptions?.join("\n") ||
+            "—"}
         </pre>
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-display text-xl font-semibold">评判</h2>
+        <h2 className="font-display text-xl font-semibold">GUI 评判</h2>
         <ul className="space-y-2">
           {parsed.length ? (
             parsed.map((p, i) => (
@@ -82,10 +89,20 @@ export default async function CaseDetailPage({
         </ul>
       </section>
 
+      <CaseMetricsPanels
+        asr={detail.asr as never}
+        latency={detail.latency as never}
+        mos={detail.mos as never}
+        asrFrames={detail.asrFrames}
+        mosAudios={detail.mosAudios}
+      />
+
       {detail.report ? (
         <section className="space-y-3">
           <h2 className="font-display text-xl font-semibold">报告</h2>
-          <pre className="whitespace-pre-wrap rounded-md border bg-card/70 p-3 text-sm">{detail.report}</pre>
+          <pre className="whitespace-pre-wrap rounded-md border bg-card/70 p-3 text-sm">
+            {detail.report}
+          </pre>
         </section>
       ) : null}
     </div>

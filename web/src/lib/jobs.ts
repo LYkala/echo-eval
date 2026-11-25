@@ -11,6 +11,22 @@ import {
 
 export type JobStatus = "queued" | "running" | "passed" | "failed" | "error" | "cancelled";
 
+/** Parallel metrics (ASR / latency / MOS) brief for list views. */
+export type CaseMetricsBrief = {
+  asr_accuracy?: number | null;
+  asr_passed?: number;
+  asr_failed?: number;
+  asr_total?: number;
+  latency_mean_sec?: number | null;
+  latency_measured?: number;
+  latency_no_action?: number;
+  latency_total?: number;
+  mos_mean?: number | null;
+  mos_scored?: number;
+  mos_na?: number;
+  mos_total?: number;
+};
+
 export type JobCaseResult = {
   case_id: string;
   name: string;
@@ -19,6 +35,7 @@ export type JobCaseResult = {
   error?: string;
   report_path?: string;
   evaluation_path?: string;
+  metrics?: CaseMetricsBrief;
 };
 
 export type JobProgressCase = {
@@ -101,6 +118,80 @@ function readProgress(id: string): JobProgress | undefined {
   }
 }
 
+function readJsonFile(filePath: string): Record<string, unknown> | null {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/** Load ASR / latency / MOS summary brief from a case run_dir. */
+export function loadCaseMetricsBrief(runDir: string): CaseMetricsBrief | undefined {
+  if (!runDir || !fs.existsSync(runDir)) return undefined;
+  const asr = readJsonFile(path.join(runDir, "asr_summary.json"));
+  const lat = readJsonFile(path.join(runDir, "latency_summary.json"));
+  const mos = readJsonFile(path.join(runDir, "mos_summary.json"));
+  const meta = readJsonFile(path.join(runDir, "run_meta.json"));
+  const asrSrc = asr || (meta?.asr as Record<string, unknown> | undefined);
+  const latSrc = lat || (meta?.latency as Record<string, unknown> | undefined);
+  const mosSrc = mos || (meta?.mos as Record<string, unknown> | undefined);
+  if (!asrSrc && !latSrc && !mosSrc) return undefined;
+  const brief: CaseMetricsBrief = {};
+  if (asrSrc) {
+    brief.asr_total = Number(asrSrc.total ?? 0);
+    brief.asr_passed = Number(asrSrc.passed ?? 0);
+    brief.asr_failed = Number(asrSrc.failed ?? 0);
+    brief.asr_accuracy =
+      asrSrc.accuracy === null || asrSrc.accuracy === undefined
+        ? null
+        : Number(asrSrc.accuracy);
+  }
+  if (latSrc) {
+    brief.latency_total = Number(latSrc.total ?? 0);
+    brief.latency_measured = Number(latSrc.measured ?? 0);
+    brief.latency_no_action = Number(latSrc.no_action ?? 0);
+    brief.latency_mean_sec =
+      latSrc.mean_sec === null || latSrc.mean_sec === undefined
+        ? null
+        : Number(latSrc.mean_sec);
+  }
+  if (mosSrc) {
+    brief.mos_total = Number(mosSrc.total ?? 0);
+    brief.mos_scored = Number(mosSrc.scored ?? 0);
+    brief.mos_na = Number(mosSrc.na ?? 0);
+    brief.mos_mean =
+      mosSrc.mean_mos === null || mosSrc.mean_mos === undefined
+        ? null
+        : Number(mosSrc.mean_mos);
+  }
+  return brief;
+}
+
+function artifactUrl(jobId: string, caseId: string, file: string): string {
+  return `/api/artifacts?job=${encodeURIComponent(jobId)}&case=${encodeURIComponent(caseId)}&file=${encodeURIComponent(file)}`;
+}
+
+function listMediaUrls(
+  runDir: string,
+  jobId: string,
+  caseId: string,
+  subdir: string,
+  re: RegExp
+): { name: string; url: string }[] {
+  const dir = path.join(runDir, subdir);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => re.test(f))
+    .sort()
+    .map((f) => ({
+      name: f,
+      url: artifactUrl(jobId, caseId, `${subdir}/${f}`),
+    }));
+}
+
 export function readJob(id: string): JobMeta | null {
   const p = path.join(jobDir(id), "job.json");
   if (!fs.existsSync(p)) return null;
@@ -126,6 +217,14 @@ export function readJob(id: string): JobMeta | null {
           };
         });
     }
+  }
+  // Attach parallel metrics from each case run_dir when available.
+  if (Array.isArray(job.results)) {
+    job.results = job.results.map((r) => {
+      if (!r.run_dir) return r;
+      const metrics = loadCaseMetricsBrief(r.run_dir);
+      return metrics ? { ...r, metrics } : r;
+    });
   }
   return job;
 }
@@ -153,10 +252,89 @@ function newJobId(): string {
   return `job_${stamp}`;
 }
 
+function writeDemoMetricFiles(caseDir: string): void {
+  const asrDir = path.join(caseDir, "asr_frames");
+  ensureDir(asrDir);
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64"
+  );
+  fs.writeFileSync(path.join(asrDir, "step_01_00.png"), png);
+  fs.writeFileSync(path.join(asrDir, "step_02_00.png"), png);
+  fs.writeFileSync(
+    path.join(caseDir, "asr_summary.json"),
+    JSON.stringify(
+      {
+        enabled: true,
+        total: 2,
+        passed: 2,
+        failed: 0,
+        accuracy: 1,
+        utterances: [
+          {
+            index: 1,
+            spoken_text: "小艺小艺",
+            recognized_text: "小艺小艺",
+            passed: true,
+            reason: "演示：识别一致",
+          },
+          {
+            index: 2,
+            spoken_text: "今天西安天气怎么样",
+            recognized_text: "今天西安天气怎么样",
+            passed: true,
+            reason: "演示：识别一致",
+          },
+        ],
+      },
+      null,
+      2
+    )
+  );
+  fs.writeFileSync(
+    path.join(caseDir, "latency_summary.json"),
+    JSON.stringify(
+      {
+        enabled: true,
+        total: 2,
+        measured: 2,
+        no_action: 0,
+        mean_sec: 1.2,
+        utterances: [
+          { index: 1, status: "measured", latency_sec: 0.9, action_frame: "step_01_03.png" },
+          { index: 2, status: "measured", latency_sec: 1.5, action_frame: "step_02_05.png" },
+        ],
+      },
+      null,
+      2
+    )
+  );
+  fs.writeFileSync(
+    path.join(caseDir, "mos_summary.json"),
+    JSON.stringify(
+      {
+        enabled: true,
+        total: 2,
+        scored: 1,
+        na: 1,
+        mean_mos: 4.0,
+        utterances: [
+          { index: 1, status: "no_speech", mos: null, reason: "演示：唤醒句无回复语音 → N/A" },
+          { index: 2, status: "scored", mos: 4.0, reason: "演示：启发式流畅度" },
+        ],
+      },
+      null,
+      2
+    )
+  );
+  fs.writeFileSync(
+    path.join(caseDir, "report.md"),
+    "# 样例报告\n\nGUI PASS；ASR 100%；时延均 1.2s；MOS 均 4.0（演示数据）。\n"
+  );
+}
+
 /** Seed a browsable demo job when no device (cloud / preview). */
 export function ensureDemoJob(): JobMeta {
-  const existing = listJobs().find((j) => j.demo);
-  if (existing) return existing;
   const id = "job_demo_sample";
   const dir = jobDir(id);
   ensureDir(dir);
@@ -209,11 +387,7 @@ export function ensureDemoJob(): JobMeta {
       2
     )
   );
-  fs.writeFileSync(
-    path.join(caseDir, "report.md"),
-    "# 样例报告\n\n这是演示数据，真实评测请在 PC1 连接设备后运行。\n"
-  );
-  // empty wav placeholder note
+  writeDemoMetricFiles(caseDir);
   fs.writeFileSync(path.join(stepsDir, "step_01.txt"), "小艺小艺");
 
   const job: JobMeta = {
@@ -234,6 +408,7 @@ export function ensureDemoJob(): JobMeta {
         run_dir: caseDir,
         report_path: path.join(caseDir, "report.md"),
         evaluation_path: path.join(caseDir, "evaluation.json"),
+        metrics: loadCaseMetricsBrief(caseDir),
       },
     ],
     passed: 1,
@@ -434,12 +609,38 @@ export function getCaseDetail(jobId: string, caseId: string) {
   const reportPath = path.join(runDir, "report.md");
   const report = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, "utf-8") : "";
 
+  const asrSummary = readJson("asr_summary.json") || (readJson("run_meta.json") as { asr?: unknown } | null)?.asr || null;
+  const latencySummary =
+    readJson("latency_summary.json") ||
+    (readJson("run_meta.json") as { latency?: unknown } | null)?.latency ||
+    null;
+  const mosSummary =
+    readJson("mos_summary.json") ||
+    (readJson("run_meta.json") as { mos?: unknown } | null)?.mos ||
+    null;
+
+  const asrFrames = listMediaUrls(runDir, jobId, caseId, "asr_frames", /\.(png|jpg|jpeg|webp)$/i);
+  const postSpeechFrames = listMediaUrls(
+    runDir,
+    jobId,
+    caseId,
+    "post_speech_frames",
+    /\.(png|jpg|jpeg|webp)$/i
+  );
+  const mosAudios = listMediaUrls(runDir, jobId, caseId, "mos_audio", /\.wav$/i);
+
   return {
     job,
-    result: row,
+    result: { ...row, metrics: loadCaseMetricsBrief(runDir) || row.metrics },
     caseJson: readJson("case.json"),
     evaluation: readJson("evaluation.json"),
     timeline: readJson("timeline.json"),
+    runMeta: readJson("run_meta.json"),
+    asr: asrSummary,
+    latency: latencySummary,
+    mos: mosSummary,
+    asrFrames: asrFrames.length ? asrFrames : postSpeechFrames,
+    mosAudios,
     frames,
     audios,
     report,
