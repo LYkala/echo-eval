@@ -22,7 +22,8 @@
 
 可选：用例名称、等待时间、预置条件、用例类型。
 
-样例：`cases/examples/sample_weather.csv`
+样例：`cases/examples/sample_weather.csv`  
+v0.29 同 ID 多轮样例：`cases/examples/sample_v029_10cases.csv`（同 ID 多行合并为一条；预置一次；整组结束后 Home）
 
 ## 用法
 

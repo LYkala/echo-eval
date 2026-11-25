@@ -367,7 +367,24 @@ def capture_one_case(
         "scene": case.scene,
         "priority": case.priority,
         "precondition_steps": list(case.precondition_steps),
-        "steps": [{"text": s.text, "wait_sec": s.wait_sec} for s in case.steps],
+        "round_count": int(getattr(case, "round_count", 1) or 1),
+        "rounds": [
+            {
+                "round_index": r.round_index,
+                "source_row": r.source_row,
+                "utterances": list(r.utterances),
+                "expected": r.expected,
+            }
+            for r in (getattr(case, "rounds", None) or [])
+        ],
+        "steps": [
+            {
+                "text": s.text,
+                "wait_sec": s.wait_sec,
+                "round_index": int(getattr(s, "round_index", 1) or 1),
+            }
+            for s in case.steps
+        ],
         "expected": case.expected,
         "exceptions": case.exceptions(),
     }
@@ -1119,6 +1136,12 @@ def run_excel(
     )
     if not cases:
         raise ValueError(f"未解析到任何用例: {excel_path}")
+    multi = sum(1 for c in cases if getattr(c, "round_count", 1) > 1)
+    print(
+        f"[echo-eval] loaded {len(cases)} case(s) from {excel_path} "
+        f"(same-ID rows merged; multi-round={multi})",
+        flush=True,
+    )
 
     pre_cache = PreconditionCache(cfg.precondition.resolved_cache_dir())
     skip_ids: set[str] = set()
@@ -1135,7 +1158,19 @@ def run_excel(
             c.case_id: c.skip_reason for c in report.cases if c.skip
         }
 
-    init_progress([(c.case_id, c.name) for c in cases])
+    init_progress(
+        [
+            (
+                c.case_id,
+                (
+                    f"{c.name}（{c.round_count}轮）"
+                    if getattr(c, "round_count", 1) > 1
+                    else c.name
+                ),
+            )
+            for c in cases
+        ]
+    )
     summary = BatchSummary(
         excel=str(Path(excel_path).resolve()),
         started_at=datetime.now(timezone.utc).isoformat(),

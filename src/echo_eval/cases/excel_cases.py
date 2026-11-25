@@ -12,6 +12,19 @@ from typing import Any, Sequence
 class CaseStep:
     text: str
     wait_sec: float = 3.0
+    # 1-based round index within the same 用例 ID (v0.29 multi-row cases)
+    round_index: int = 1
+
+
+@dataclass
+class CaseRound:
+    """One spreadsheet row under a shared 用例 ID (方案 A: merged into one EvalCase)."""
+
+    round_index: int
+    source_row: int
+    utterances: list[str] = field(default_factory=list)
+    expected: str = ""
+    precondition_raw: str = ""
 
 
 @dataclass
@@ -29,6 +42,8 @@ class EvalCase:
     priority: str = ""
     exec_notes: str = ""
     precondition_steps: list[str] = field(default_factory=list)
+    # v0.29: ordered rounds after merging same-ID rows (top → bottom)
+    rounds: list[CaseRound] = field(default_factory=list)
 
     def exceptions(self) -> list[str]:
         lines = _parse_numbered_lines(self.expected)
@@ -37,6 +52,10 @@ class EvalCase:
         if (self.expected or "").strip():
             return [self.expected.strip()]
         return []
+
+    @property
+    def round_count(self) -> int:
+        return max(1, len(self.rounds) or (1 if self.steps else 0))
 
 
 def _cell_str(value: Any) -> str:
@@ -146,7 +165,29 @@ def _header_map(headers: Sequence[Any]) -> dict[str, Any]:
             col["expected"] = i
         elif "timeout" in n_lower:
             col["timeout"] = i
+        elif n in ("轮次", "轮次号", "round") or n_lower == "round":
+            col["round"] = i
+        elif "用例分类" in n or n == "分类":
+            col.setdefault("category", i)
     return col
+
+
+def _format_expected_chunks(chunks: list[str]) -> str:
+    """Number flattened expectation lines for VL judge."""
+    out: list[str] = []
+    for i, text in enumerate(chunks, 1):
+        t = (text or "").strip()
+        if t:
+            out.append(f"{i}. {t}")
+    return "\n".join(out)
+
+
+def _expected_chunks_from_cell(expected: str) -> list[str]:
+    text = (expected or "").strip()
+    if not text:
+        return []
+    numbered = _parse_numbered_lines(text)
+    return numbered if numbered else [text]
 
 
 def _rows_from_csv(path: Path) -> list[list[Any]]:
@@ -192,14 +233,27 @@ def _parse_rows(
     default_wait_sec: float = 3.0,
     default_timeout_sec: float = 120.0,
 ) -> list[EvalCase]:
+    """
+    Parse spreadsheet rows into EvalCase list.
+
+    v0.29: multiple rows may share the same 用例 ID. They are merged in file
+    order into one EvalCase (方案 A): one precondition, ordered utterances,
+    combined expectations; runner Homes only after the whole case.
+    """
     if not rows:
         return []
     col = _header_map(rows[0])
     if "id" not in col:
         raise ValueError(f"缺少「用例编号」或「用例 ID」列: {source}")
 
-    cases: list[EvalCase] = []
-    for row in rows[1:]:
+    # case_id -> draft accumulator (first-seen order)
+    order: list[str] = []
+    drafts: dict[str, dict[str, Any]] = {}
+    # Detect non-contiguous reappearance of an ID (still merge in file order).
+    last_id = ""
+    seen_closed: set[str] = set()
+
+    for row_idx, row in enumerate(rows[1:], start=2):
         if not row:
             continue
         # pad short rows
@@ -207,16 +261,36 @@ def _parse_rows(
         case_id = _cell_str(row[col["id"]] if col["id"] < len(row) else None)
         if not case_id:
             continue
+
+        chat_texts: list[str] = []
+        if "steps" in col and col["steps"] < len(row):
+            chat_texts = _parse_utterance_lines(row[col["steps"]])
+        steps_cols = col.get("steps_cols") or []
+        if isinstance(steps_cols, list):
+            for idx in steps_cols:
+                if idx < len(row):
+                    t = _cell_str(row[idx])
+                    if t:
+                        chat_texts.extend(_parse_utterance_lines(t))
+        if not chat_texts:
+            # allow empty steps? skip row without utterances
+            continue
+
         name = _col_str(row, col, "name") or case_id
         desc = _col_str(row, col, "desc")
         exec_notes = _col_str(row, col, "exec_notes")
         if not desc and exec_notes:
             desc = exec_notes
-        case_type = _col_str(row, col, "type") or "GUI"
+        case_type = _col_str(row, col, "type") or _col_str(row, col, "category") or "GUI"
         expected = _col_str(row, col, "expected")
         object_name = _col_str(row, col, "object")
         scene = _col_str(row, col, "scene")
         priority = _col_str(row, col, "priority")
+        pre_raw = (
+            _col_str(row, col, "precondition")
+            if "precondition" in col
+            else ""
+        )
         precondition_steps = (
             _parse_precondition_steps(row[col["precondition"]])
             if "precondition" in col and col["precondition"] < len(row)
@@ -233,20 +307,6 @@ def _parse_rows(
                 except ValueError:
                     pass
 
-        chat_texts: list[str] = []
-        if "steps" in col and col["steps"] < len(row):
-            chat_texts = _parse_utterance_lines(row[col["steps"]])
-        steps_cols = col.get("steps_cols") or []
-        if isinstance(steps_cols, list):
-            for idx in steps_cols:
-                if idx < len(row):
-                    t = _cell_str(row[idx])
-                    if t:
-                        chat_texts.extend(_parse_utterance_lines(t))
-        if not chat_texts:
-            # allow empty steps? skip case without steps
-            continue
-
         waits = [default_wait_sec] * len(chat_texts)
         if "wait" in col and col["wait"] < len(row):
             parsed = _parse_wait_seconds(row[col["wait"]], default_wait_sec)
@@ -254,24 +314,96 @@ def _parse_rows(
                 if i < len(waits):
                     waits[i] = w
 
-        steps = [
-            CaseStep(text=chat_texts[i], wait_sec=float(waits[i]))
-            for i in range(len(chat_texts))
-        ]
+        sheet_round = 0
+        if "round" in col and col["round"] < len(row):
+            raw_r = _cell_str(row[col["round"]])
+            if raw_r:
+                try:
+                    sheet_round = int(float(raw_r))
+                except ValueError:
+                    sheet_round = 0
+
+        if case_id in seen_closed and case_id != last_id:
+            print(
+                f"[echo-eval][warn] 用例 ID {case_id} 在表中非连续出现，仍按文件顺序合并为一组 "
+                f"(source={source})",
+                flush=True,
+            )
+        if last_id and last_id != case_id and last_id in drafts:
+            seen_closed.add(last_id)
+        last_id = case_id
+
+        if case_id not in drafts:
+            order.append(case_id)
+            drafts[case_id] = {
+                "case_id": case_id,
+                "name": name,
+                "description": desc,
+                "case_type": case_type,
+                "timeout_sec": timeout_sec,
+                "object_name": object_name,
+                "scene": scene,
+                "priority": priority,
+                "exec_notes": exec_notes,
+                "precondition_steps": list(precondition_steps),
+                "rounds": [],
+                "steps": [],
+                "expected_chunks": [],
+            }
+        draft = drafts[case_id]
+        # Prefer first non-empty metadata / precondition
+        if not draft["precondition_steps"] and precondition_steps:
+            draft["precondition_steps"] = list(precondition_steps)
+        if name and draft["name"] == case_id:
+            draft["name"] = name
+        if object_name and not draft["object_name"]:
+            draft["object_name"] = object_name
+        if scene and not draft["scene"]:
+            draft["scene"] = scene
+        if priority and not draft["priority"]:
+            draft["priority"] = priority
+        if exec_notes and not draft["exec_notes"]:
+            draft["exec_notes"] = exec_notes
+        if desc and not draft["description"]:
+            draft["description"] = desc
+
+        round_index = sheet_round if sheet_round > 0 else (len(draft["rounds"]) + 1)
+        rnd = CaseRound(
+            round_index=round_index,
+            source_row=row_idx,
+            utterances=list(chat_texts),
+            expected=expected,
+            precondition_raw=pre_raw,
+        )
+        draft["rounds"].append(rnd)
+        for i, text in enumerate(chat_texts):
+            draft["steps"].append(
+                CaseStep(
+                    text=text,
+                    wait_sec=float(waits[i] if i < len(waits) else default_wait_sec),
+                    round_index=round_index,
+                )
+            )
+        draft["expected_chunks"].extend(_expected_chunks_from_cell(expected))
+
+    cases: list[EvalCase] = []
+    for case_id in order:
+        d = drafts[case_id]
         cases.append(
             EvalCase(
-                case_id=case_id,
-                name=name,
-                description=desc,
-                case_type=case_type,
-                steps=steps,
-                expected=expected,
-                timeout_sec=timeout_sec,
-                object_name=object_name,
-                scene=scene,
-                priority=priority,
-                exec_notes=exec_notes,
-                precondition_steps=precondition_steps,
+                case_id=d["case_id"],
+                name=d["name"],
+                description=d["description"],
+                case_type=d["case_type"],
+                steps=list(d["steps"]),
+                expected=_format_expected_chunks(d["expected_chunks"]),
+                timeout_sec=float(d["timeout_sec"]),
+                object_name=d["object_name"],
+                scene=d["scene"],
+                priority=d["priority"],
+                exec_notes=d["exec_notes"],
+                precondition_steps=list(d["precondition_steps"]),
+                rounds=list(d["rounds"]),
             )
         )
     return cases
