@@ -363,3 +363,94 @@ def synthesize(
         )
 
     raise TtsError(f"未知 tts.backend: {backend}")
+
+
+def synthesize_with_library(
+    text: str,
+    out_path: Path,
+    *,
+    backend: str = "edge",
+    voice: str = "",
+    rate: int = 0,
+    case_id: str = "",
+    step_index: int = 1,
+    ffmpeg_path: str = "",
+    fallback_sapi: bool = True,
+    prefer_library: bool = True,
+    library_dir: str = "",
+) -> TtsResult:
+    """
+    Runtime path: prefer on-disk TTS library; on miss use system SAPI (Windows).
+
+    Prebuild fills the library (often via edge). Live runs avoid network when possible.
+    """
+    text = (text or "").strip()
+    if not text:
+        raise TtsError("TTS 文本为空")
+    out_path = Path(out_path)
+
+    if prefer_library and (library_dir or "").strip():
+        from echo_eval.stimulus.tts_library import (
+            copy_library_wav_to,
+            resolve_library_root,
+            resolve_wav,
+            voice_profile,
+        )
+
+        root = resolve_library_root(library_dir)
+        # Prefer entry keyed by the prebuild voice profile (usually edge:…).
+        profiles = [
+            voice_profile(backend, voice),
+            voice_profile("edge", voice or DEFAULT_EDGE_VOICE),
+            voice_profile("sapi", ""),
+        ]
+        seen: set[str] = set()
+        for profile in profiles:
+            if profile in seen:
+                continue
+            seen.add(profile)
+            hit = resolve_wav(
+                root,
+                case_id=case_id or "",
+                step_index=int(step_index),
+                text=text,
+                profile=profile,
+            )
+            if hit is None:
+                continue
+            result = copy_library_wav_to(out_path, hit)
+            result.text = text
+            result.voice = profile
+            print(
+                f"[echo-eval] TTS library hit case={case_id} step={step_index} "
+                f"profile={profile}",
+                flush=True,
+            )
+            return result
+        print(
+            f"[echo-eval][warn] TTS library miss case={case_id} step={step_index}；"
+            f"使用本机 SAPI",
+            flush=True,
+        )
+        if sys.platform.startswith("win"):
+            result = synthesize_sapi(text, out_path, voice="", rate=rate)
+            return TtsResult(
+                path=result.path,
+                backend="library_miss_sapi",
+                text=text,
+                duration_sec=result.duration_sec,
+                voice=result.voice or "sapi_default",
+            )
+        # Non-Windows: fall through to normal synthesize (edge/beep).
+
+    return synthesize(
+        text,
+        out_path,
+        backend=backend,
+        voice=voice,
+        rate=rate,
+        case_id=case_id,
+        step_index=step_index,
+        ffmpeg_path=ffmpeg_path,
+        fallback_sapi=fallback_sapi,
+    )

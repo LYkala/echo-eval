@@ -171,9 +171,27 @@ type RunParams = {
   wake_wait_sec: number;
   tts_backend: string;
   tts_voice: string;
+  tts_prefer_library: boolean;
+  tts_library_dir: string;
 };
 
 type TtsVoiceOption = { id: string; label: string; gender?: string; locale?: string };
+
+type TtsLibraryStatus = {
+  library_root?: string;
+  exists?: boolean;
+  entry_count?: number;
+  missing_files?: number;
+  updated_at?: string;
+  entries?: Array<{
+    case_id?: string;
+    step_index?: number;
+    text?: string;
+    voice_profile?: string;
+    source?: string;
+  }>;
+  error?: string;
+};
 
 const PARAM_FALLBACK: RunParams = {
   step_wait_sec: 3,
@@ -195,6 +213,8 @@ const PARAM_FALLBACK: RunParams = {
   wake_wait_sec: 3,
   tts_backend: "edge",
   tts_voice: "zh-CN-XiaoxiaoNeural",
+  tts_prefer_library: true,
+  tts_library_dir: "assets/tts_library",
 };
 
 const TTS_VOICE_FALLBACK: TtsVoiceOption[] = [
@@ -256,6 +276,10 @@ export function ConsoleClient() {
   const [ttsPreviewBusy, setTtsPreviewBusy] = useState(false);
   const [ttsPreviewUrl, setTtsPreviewUrl] = useState<string | null>(null);
   const [ttsPreviewError, setTtsPreviewError] = useState("");
+  const [ttsLibrary, setTtsLibrary] = useState<TtsLibraryStatus | null>(null);
+  const [ttsLibraryBusy, setTtsLibraryBusy] = useState(false);
+  const [ttsLibraryMsg, setTtsLibraryMsg] = useState("");
+  const [ttsCustomText, setTtsCustomText] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [active, setActive] = useState<Job | null>(null);
@@ -316,7 +340,8 @@ export function ConsoleClient() {
       key === "mos_input_device" ||
       key === "wake_text" ||
       key === "tts_backend" ||
-      key === "tts_voice"
+      key === "tts_voice" ||
+      key === "tts_library_dir"
     ) {
       setParams((prev) => ({ ...prev, [key]: raw }));
       return;
@@ -325,7 +350,8 @@ export function ConsoleClient() {
       key === "asr_enabled" ||
       key === "latency_enabled" ||
       key === "mos_enabled" ||
-      key === "wake_enabled"
+      key === "wake_enabled" ||
+      key === "tts_prefer_library"
     ) {
       return;
     }
@@ -348,6 +374,18 @@ export function ConsoleClient() {
       /* keep fallback list */
     }
   }, []);
+
+  const refreshTtsLibrary = useCallback(async () => {
+    try {
+      const dir = encodeURIComponent(params.tts_library_dir || "assets/tts_library");
+      const res = await fetch(`/api/tts/library?library_dir=${dir}`, { cache: "no-store" });
+      const data = (await res.json()) as TtsLibraryStatus;
+      if (!res.ok) throw new Error(data.error || `library HTTP ${res.status}`);
+      setTtsLibrary(data);
+    } catch (e) {
+      setTtsLibrary({ error: String(e), entry_count: 0 });
+    }
+  }, [params.tts_library_dir]);
 
   async function previewTts() {
     if (params.tts_backend !== "edge") {
@@ -384,8 +422,89 @@ export function ConsoleClient() {
     }
   }
 
+  async function prebuildTtsLibrary(force = false) {
+    setTtsLibraryBusy(true);
+    setTtsLibraryMsg("");
+    try {
+      const res = await fetch("/api/tts/library", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "prebuild",
+          datasetId,
+          backend: params.tts_backend,
+          voice: params.tts_voice,
+          library_dir: params.tts_library_dir,
+          wake_enabled: params.wake_enabled,
+          wake_text: params.wake_text,
+          force,
+        }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        created?: number;
+        exists?: number;
+        total?: number;
+        errors?: Array<{ case_id?: string; step?: string; error?: string }>;
+        entry_count?: number;
+      };
+      if (!res.ok) throw new Error(data.error || `prebuild HTTP ${res.status}`);
+      const errN = (data.errors || []).length;
+      setTtsLibraryMsg(
+        `预合成完成：新建 ${data.created ?? 0} / 已有 ${data.exists ?? 0} / 合计 ${data.total ?? 0}` +
+          (errN ? `，失败 ${errN}` : "") +
+          `，库内 ${data.entry_count ?? "?"} 条`
+      );
+      await refreshTtsLibrary();
+    } catch (e) {
+      setTtsLibraryMsg(String(e));
+    } finally {
+      setTtsLibraryBusy(false);
+    }
+  }
+
+  async function addCustomTts() {
+    const text = ttsCustomText.trim();
+    if (!text) {
+      setTtsLibraryMsg("请输入要合成的文本");
+      return;
+    }
+    setTtsLibraryBusy(true);
+    setTtsLibraryMsg("");
+    try {
+      const res = await fetch("/api/tts/library", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "custom",
+          text,
+          backend: params.tts_backend,
+          voice: params.tts_voice,
+          library_dir: params.tts_library_dir,
+        }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        status?: string;
+        entry?: { text?: string; rel_path?: string };
+      };
+      if (!res.ok) throw new Error(data.error || `custom HTTP ${res.status}`);
+      setTtsLibraryMsg(
+        data.status === "exists"
+          ? `已存在：${data.entry?.text || text}`
+          : `已写入库：${data.entry?.text || text}`
+      );
+      setTtsCustomText("");
+      await refreshTtsLibrary();
+    } catch (e) {
+      setTtsLibraryMsg(String(e));
+    } finally {
+      setTtsLibraryBusy(false);
+    }
+  }
+
   function setBoolParam(
-    key: "asr_enabled" | "latency_enabled" | "mos_enabled" | "wake_enabled",
+    key: "asr_enabled" | "latency_enabled" | "mos_enabled" | "wake_enabled" | "tts_prefer_library",
     value: boolean
   ) {
     setParams((prev) => ({ ...prev, [key]: value }));
@@ -567,6 +686,7 @@ export function ConsoleClient() {
     void refreshDatasets();
     void refreshParamDefaults();
     void loadTtsVoices();
+    void refreshTtsLibrary();
     // Restore in-flight job after leaving/returning to this page.
     const saved = sessionStorage.getItem(ACTIVE_JOB_KEY);
     if (saved) {
@@ -602,7 +722,7 @@ export function ConsoleClient() {
         }
       })();
     }
-  }, [mounted, refreshEnv, refreshDatasets, refreshParamDefaults, pushLog]);
+  }, [mounted, refreshEnv, refreshDatasets, refreshParamDefaults, loadTtsVoices, refreshTtsLibrary, pushLog]);
 
   useEffect(() => {
     if (!active || !["queued", "running"].includes(active.status)) return;
@@ -1253,11 +1373,12 @@ export function ConsoleClient() {
               <div className="space-y-2 border-t border-border/60 pt-3">
                 <p className="text-sm font-medium">播报音色（TTS）</p>
                 <p className="text-xs text-muted-foreground">
-                  edge-tts 走微软在线神经音色（需出网）。连不上时自动回退本机 SAPI（Windows）；也可手动选 SAPI。
+                  建议先预合成进语音库再开测：运行时优先读库，未命中则用本机系统语音（Windows SAPI）。预合成可用
+                  edge-tts（需出网）或 SAPI。
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">TTS 后端</Label>
+                    <Label className="text-xs text-muted-foreground">TTS 后端（预合成）</Label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                       value={params.tts_backend}
@@ -1303,6 +1424,77 @@ export function ConsoleClient() {
                 {ttsPreviewError ? (
                   <p className="text-xs text-rose-700">{ttsPreviewError}</p>
                 ) : null}
+                <div className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">语音库</p>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={params.tts_prefer_library}
+                        onChange={(e) => setBoolParam("tts_prefer_library", e.target.checked)}
+                      />
+                      运行时优先用库（未命中→系统语音）
+                    </label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    库内 {ttsLibrary?.entry_count ?? "—"} 条
+                    {ttsLibrary?.missing_files
+                      ? `（缺文件 ${ttsLibrary.missing_files}）`
+                      : ""}
+                    {ttsLibrary?.updated_at ? ` · 更新 ${ttsLibrary.updated_at}` : ""}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={ttsLibraryBusy || !datasetId}
+                      onClick={() => void prebuildTtsLibrary(false)}
+                    >
+                      {ttsLibraryBusy ? "处理中…" : "预合成当前数据集"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={ttsLibraryBusy || !datasetId}
+                      onClick={() => void prebuildTtsLibrary(true)}
+                    >
+                      强制重合成
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={ttsLibraryBusy}
+                      onClick={() => void refreshTtsLibrary()}
+                    >
+                      刷新状态
+                    </Button>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <Label className="text-xs text-muted-foreground">自定义文本（数据集外）</Label>
+                      <Input
+                        value={ttsCustomText}
+                        placeholder="例如：打开设置"
+                        maxLength={200}
+                        onChange={(e) => setTtsCustomText(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={ttsLibraryBusy || !ttsCustomText.trim()}
+                      onClick={() => void addCustomTts()}
+                    >
+                      写入语音库
+                    </Button>
+                  </div>
+                  {ttsLibraryMsg ? (
+                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">{ttsLibraryMsg}</p>
+                  ) : null}
+                  {ttsLibrary?.error ? (
+                    <p className="text-xs text-rose-700">{ttsLibrary.error}</p>
+                  ) : null}
+                </div>
               </div>
             </div>
 

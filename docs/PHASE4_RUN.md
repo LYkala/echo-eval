@@ -76,6 +76,16 @@ pip install "edge-tts>=7.0.0"
 
 默认 `backend: edge`，音色如 `zh-CN-XiaoxiaoNeural`。控制台可切换后端/音色并试听。edge 需访问 `speech.platform.bing.com`；连不上时默认 **回退本机 SAPI**（`tts.fallback_sapi: true`，仅 Windows），日志会打 `[warn] edge-tts 失败，回退本机 SAPI`。
 
+### 语音库（预合成）
+
+开测前可在控制台「预合成当前数据集」把步骤文本写成 `assets/tts_library/`（也支持自定义文本）。运行时 `prefer_library: true` 时优先命中库；未命中则用本机系统语音（Windows SAPI），不现场调 edge。
+
+```yaml
+tts:
+  library_dir: assets/tts_library
+  prefer_library: true
+```
+
 ## 预置条件（v0.11）
 
 开跑前可做覆盖检查；每条正式测前：`force-stop` 上一条包 → Home → 回放本条预置 ADB → 再播「文本语料」。

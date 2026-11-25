@@ -12,6 +12,10 @@ web/node_modules/
 web/.next/
 web/out/
 
+# Prebuilt TTS wavs (index may be local-only)
+assets/tts_library/**
+!assets/tts_library/.gitkeep
+
 # Secrets — vendor TestApp 真密钥勿进仓；本仓库 configs/model.yaml 仅放占位符
 vendor/testApp/configs/model.yaml
 !configs/model.yaml

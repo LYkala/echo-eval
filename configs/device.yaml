@@ -43,6 +43,9 @@ tts:
   lookup_dir: ""
   # edge 连不上时回退本机 SAPI（仅 Windows）
   fallback_sapi: true
+  # 预合成语音库；运行时优先命中库，未命中用本机 SAPI
+  library_dir: assets/tts_library
+  prefer_library: true
 
 run:
   # Excel 步骤默认等待（表内「等待时间」列可覆盖）
