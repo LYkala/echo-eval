@@ -88,6 +88,72 @@ def test_normalize_dshow_audio_device():
     assert normalize_dshow_audio_device("video=Cam") == "video=Cam"
 
 
+def test_offline_latency_detects_change(tmp_path: Path):
+    """Synthetic mp4: black 1s then white 1s → latency ~1.0s after play_end=1.0."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("ffmpeg"):
+        return
+    video = tmp_path / "cap.mp4"
+    # 1s black + 1s white @ 10fps
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=black:s=320x240:d=1",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=white:s=320x240:d=1",
+        "-filter_complex",
+        "[0:v][1:v]concat=n=2:v=1:a=0,fps=10",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        str(video),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
+    assert video.is_file()
+
+    from echo_eval.capture.offline_latency import measure_latency_offline
+    from echo_eval.config import LatencyConfig
+
+    out = tmp_path / "lat"
+    result = measure_latency_offline(
+        video,
+        play_end_offset_sec=1.0,
+        play_start_offset_sec=0.2,
+        latency=LatencyConfig(enabled=True, fps=10.0, window_sec=2.0, change_threshold=6.0),
+        out_dir=out,
+        step_index=1,
+    )
+    assert result["status"] == "measured"
+    assert result["mode"] == "offline_video"
+    assert result["latency_sec"] is not None
+    assert float(result["latency_sec"]) <= 0.3
+
+
+def test_offline_latency_disabled(tmp_path: Path):
+    from echo_eval.capture.offline_latency import measure_latency_offline
+    from echo_eval.config import LatencyConfig
+
+    result = measure_latency_offline(
+        tmp_path / "missing.mp4",
+        play_end_offset_sec=0.0,
+        latency=LatencyConfig(enabled=False),
+        out_dir=tmp_path / "lat",
+    )
+    assert result["status"] == "skipped"
+
+
 def test_wake_and_metric_defaults(tmp_path: Path):
     p = tmp_path / "device.yaml"
     p.write_text(

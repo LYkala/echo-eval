@@ -1,4 +1,4 @@
-"""Post-utterance capture: high-fps screenshots for ASR + e2e latency (ignore bottom text)."""
+"""Post-utterance capture: short ASR screencaps (latency is offline from mp4 after pull)."""
 from __future__ import annotations
 
 import time

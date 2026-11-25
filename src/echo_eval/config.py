@@ -237,12 +237,12 @@ class AsrConfig:
 
 @dataclass
 class LatencyConfig:
-    """端到端时延：说完 → 画面首变（忽略底部识别条文字变化）。"""
+    """端到端时延（pull 后离线）：说完 → 画面首变（忽略底部识别条文字变化）。"""
 
     enabled: bool = True
-    # 句后采图帧率（需 ≥10 才能到约 0.1s）
+    # 从 capture.mp4 抽帧帧率（需 ≥10 才能到约 0.1s）
     fps: float = 10.0
-    # 超时窗口；超时记 status=no_action（无操控）
+    # 说完后搜索窗口；超时记 status=no_action（无操控）
     window_sec: float = 8.0
     bottom_band_ratio: float = 0.22
     # 上半屏灰度指纹平均绝对差阈值

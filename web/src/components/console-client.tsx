@@ -1060,7 +1060,7 @@ export function ConsoleClient() {
             <div className="space-y-3 rounded-lg border border-border/70 bg-secondary/30 px-3 py-3">
               <p className="text-sm font-medium">评判项（本次任务）</p>
               <p className="text-xs text-muted-foreground">
-                GUI 始终评判。下列开关控制 ASR / 时延 / MOS；唤醒词只播报不评判。默认来自配置，只影响本次。
+                现场：唤醒 + 播报 + 短 ASR 采图 + MOS 麦。pull 后后台：GUI / ASR VL / 离线时延 / MOS 打分。唤醒词只播报不评判。
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex items-center gap-2 text-sm">
@@ -1101,10 +1101,10 @@ export function ConsoleClient() {
                     checked={params.latency_enabled}
                     onChange={(e) => setBoolParam("latency_enabled", e.target.checked)}
                   />
-                  端到端时延
+                  端到端时延（pull 后离线）
                 </label>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">时延窗口（秒）</Label>
+                  <Label className="text-xs text-muted-foreground">时延窗口（秒，离线抽帧）</Label>
                   <Input
                     type="number"
                     min={0.5}

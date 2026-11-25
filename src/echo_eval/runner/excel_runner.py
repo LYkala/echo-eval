@@ -16,10 +16,12 @@ from echo_eval.capture.host_mic import (
     host_mic_meta,
     start_host_mic_record,
 )
+from echo_eval.capture.offline_latency import measure_latency_offline
 from echo_eval.capture.post_speech import poll_post_speech, post_speech_meta
 from echo_eval.cases.excel_cases import EvalCase, load_cases
 from echo_eval.config import (
     AppConfig,
+    LatencyConfig,
     load_config,
     load_object_packages,
     load_packages_map,
@@ -181,8 +183,9 @@ def _write_report(path: Path, case: EvalCase, payload: dict[str, Any]) -> None:
         lines.extend(
             [
                 "",
-                "## 端到端时延（说完→画面首变，忽略底部文字）",
+                "## 端到端时延（离线：说完→画面首变，忽略底部文字）",
                 "",
+                f"- mode: `{lat.get('mode') or 'offline_video'}`",
                 f"- utterances: `{lat.get('total')}`",
                 f"- measured: `{lat.get('measured')}`",
                 f"- no_action: `{lat.get('no_action')}`",
@@ -413,12 +416,10 @@ def capture_one_case(
             step_index=i,
         )
         dur = tts.duration_sec or wav_duration_sec(Path(tts.path))
-        # ASR 采图窗口与 step.wait 取较大值，避免录屏时长不够
+        # 现场仅 ASR 短采图 + MOS 麦；时延改离线，不拉长录屏
         post = float(step.wait_sec)
         if cfg.asr.enabled:
             post = max(post, float(cfg.asr.window_sec))
-        if cfg.latency.enabled:
-            post = max(post, float(cfg.latency.window_sec))
         if cfg.mos.enabled:
             post = max(post, float(cfg.mos.window_sec))
         total_play += dur + post
@@ -525,18 +526,6 @@ def capture_one_case(
                 device_label=f"播放第 {step_i}/{len(tts_meta)} 句（{case_index}/{case_total}）",
                 status="running",
             )
-            # Pre-speech upper-band baseline for e2e latency (before TTS play).
-            latency_baseline_png: Path | None = None
-            if cfg.latency.enabled:
-                try:
-                    latency_baseline_png = (
-                        run_dir / "post_speech_frames" / f"step_{step_i:02d}_baseline.png"
-                    )
-                    latency_baseline_png.parent.mkdir(parents=True, exist_ok=True)
-                    adb.screencap_png(latency_baseline_png, timeout=25)
-                except AdbError:
-                    latency_baseline_png = None
-
             play_started = datetime.now(timezone.utc).isoformat()
             play_offset = round(time.time() - t0, 3)
             play_audio_file(item["wav"], ffmpeg_path=cfg.capture.ffmpeg_path)
@@ -561,20 +550,21 @@ def capture_one_case(
                 except HostMicError as e:
                     mos_info.update({"ok": False, "error": str(e), "path": ""})
 
+            # 现场只做短 ASR 采图；时延改 pull 后离线算
             post_info: dict[str, Any] = {
                 "asr_enabled": bool(cfg.asr.enabled),
                 "latency_enabled": bool(cfg.latency.enabled),
-                "latency_baseline": str(latency_baseline_png) if latency_baseline_png else "",
+                "latency_mode": "offline_after_pull",
             }
             post_elapsed = 0.0
-            if cfg.asr.enabled or cfg.latency.enabled:
+            if cfg.asr.enabled:
                 _prog_device(
                     case,
                     index=case_index,
                     total=case_total,
                     device_status="running",
                     device_label=(
-                        f"句后采图 第 {step_i}/{len(tts_meta)} 句"
+                        f"ASR 采图 第 {step_i}/{len(tts_meta)} 句"
                         f"（{case_index}/{case_total}）"
                     ),
                     status="running",
@@ -583,10 +573,9 @@ def capture_one_case(
                     adb,
                     run_dir / "post_speech_frames",
                     asr=cfg.asr,
-                    latency=cfg.latency,
+                    latency=LatencyConfig(enabled=False),
                     ffmpeg_path=cfg.capture.ffmpeg_path,
                     step_index=step_i,
-                    latency_baseline_png=latency_baseline_png,
                 )
                 post_info.update(post_speech_meta(poll))
                 post_elapsed = float(poll.elapsed_sec or 0.0)
@@ -622,7 +611,10 @@ def capture_one_case(
                     "asr_poll": asr_poll,
                     "post_speech": post_info,
                     "mos_record": mos_info,
-                    "latency": (post_info.get("latency") or {}),
+                    "latency": {
+                        "status": "pending_offline" if cfg.latency.enabled else "skipped",
+                        "mode": "offline_video",
+                    },
                 }
             )
         if tail > 0:
@@ -818,6 +810,7 @@ def judge_one_capture(
 
         latency_summary: dict[str, Any] = {
             "enabled": bool(cfg.latency.enabled),
+            "mode": "offline_video",
             "total": 0,
             "measured": 0,
             "no_action": 0,
@@ -825,11 +818,44 @@ def judge_one_capture(
             "utterances": [],
         }
         if cfg.latency.enabled:
+            _prog_judge(
+                case,
+                index=idx,
+                judge_status="running",
+                judge_label="离线时延（录像抽帧）",
+                status="running",
+            )
             vals: list[float] = []
-            for step in (cap.timeline or {}).get("steps") or []:
+            lat_dir = cap.run_dir / "latency_frames"
+            step_rows = list((cap.timeline or {}).get("steps") or [])
+            for step in step_rows:
                 if not isinstance(step, dict):
                     continue
-                lat = step.get("latency") or {}
+                play_end = step.get("play_end_offset_sec")
+                play_start = step.get("play_offset_sec")
+                try:
+                    lat = measure_latency_offline(
+                        cap.local_video,
+                        play_end_offset_sec=float(play_end if play_end is not None else 0.0),
+                        play_start_offset_sec=(
+                            float(play_start) if play_start is not None else None
+                        ),
+                        latency=cfg.latency,
+                        out_dir=lat_dir,
+                        step_index=int(step.get("index") or 0),
+                        ffmpeg_path=cfg.capture.ffmpeg_path,
+                    )
+                except Exception as e:
+                    lat = {
+                        "enabled": True,
+                        "status": "error",
+                        "latency_sec": None,
+                        "action_frame": "",
+                        "action_offset_sec": None,
+                        "mode": "offline_video",
+                        "error": str(e),
+                    }
+                step["latency"] = lat
                 status = str(lat.get("status") or "no_action")
                 sec = lat.get("latency_sec")
                 latency_summary["total"] += 1
@@ -845,10 +871,22 @@ def judge_one_capture(
                         "latency_sec": sec,
                         "action_frame": lat.get("action_frame") or "",
                         "action_offset_sec": lat.get("action_offset_sec"),
+                        "mode": lat.get("mode") or "offline_video",
+                        "error": lat.get("error") or "",
                     }
                 )
             if vals:
                 latency_summary["mean_sec"] = round(sum(vals) / len(vals), 2)
+            # Persist updated timeline latency fields
+            try:
+                tl_path = cap.run_dir / "timeline.json"
+                if tl_path.is_file() and cap.timeline is not None:
+                    tl_path.write_text(
+                        json.dumps(cap.timeline, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+            except OSError:
+                pass
             (cap.run_dir / "latency_summary.json").write_text(
                 json.dumps(latency_summary, ensure_ascii=False, indent=2),
                 encoding="utf-8",
