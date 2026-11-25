@@ -36,11 +36,16 @@ stimulus:
   start_delay_sec: 1.0
 
 tts:
-  # sapi=Windows 系统语音（默认）；file=预生成 wav；edge/http 预留
-  backend: sapi
-  voice: ""
+  # sapi | edge | file（edge 需出网；http 预留）
+  backend: edge
+  voice: zh-CN-XiaoxiaoNeural
   rate: 0
   lookup_dir: ""
+  # edge 连不上时回退本机 SAPI（仅 Windows）
+  fallback_sapi: true
+  # 预合成语音库；运行时优先命中库，未命中用本机 SAPI
+  library_dir: assets/tts_library
+  prefer_library: true
 
 run:
   # Excel 步骤默认等待（表内「等待时间」列可覆盖）

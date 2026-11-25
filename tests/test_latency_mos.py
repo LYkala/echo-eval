@@ -175,3 +175,5 @@ capture: {}
     assert d["latency_enabled"] is True
     assert d["mos_enabled"] is True
     assert d["wake_enabled"] is True
+    assert d["tts_backend"] == "edge"
+    assert "Xiaoxiao" in d["tts_voice"]

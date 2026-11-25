@@ -23,10 +23,16 @@ stimulus:
   start_delay_sec: 1.0
 
 tts:
-  backend: sapi
-  voice: ""
+  # sapi | edge | file（edge 需出网，走 Microsoft Edge 在线神经音色）
+  backend: edge
+  voice: zh-CN-XiaoxiaoNeural
   rate: 0
   lookup_dir: ""
+  # edge 连不上时回退本机 SAPI（仅 Windows）
+  fallback_sapi: true
+  # 预合成语音库；运行时优先命中库，未命中用本机 SAPI
+  library_dir: assets/tts_library
+  prefer_library: true
 
 run:
   step_wait_sec: 3

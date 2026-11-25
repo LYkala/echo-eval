@@ -1,13 +1,16 @@
-"""TTS backends: Windows SAPI (default), with switchable stubs for edge/http/file."""
+"""TTS backends: Windows SAPI, edge-tts (online), file lookup; http reserved."""
 from __future__ import annotations
 
+import asyncio
 import math
+import shutil
 import struct
 import subprocess
 import sys
 import wave
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 class TtsError(RuntimeError):
@@ -20,6 +23,20 @@ class TtsResult:
     backend: str
     text: str
     duration_sec: float
+    voice: str = ""
+
+
+# Curated zh-CN voices for the console (edge-tts ShortName).
+CURATED_EDGE_VOICES: list[dict[str, str]] = [
+    {"id": "zh-CN-XiaoxiaoNeural", "label": "晓晓（女·温暖）", "gender": "Female", "locale": "zh-CN"},
+    {"id": "zh-CN-XiaoyiNeural", "label": "晓伊（女·活泼）", "gender": "Female", "locale": "zh-CN"},
+    {"id": "zh-CN-YunxiNeural", "label": "云希（男·阳光）", "gender": "Male", "locale": "zh-CN"},
+    {"id": "zh-CN-YunyangNeural", "label": "云扬（男·新闻）", "gender": "Male", "locale": "zh-CN"},
+    {"id": "zh-CN-YunjianNeural", "label": "云健（男·热情）", "gender": "Male", "locale": "zh-CN"},
+    {"id": "zh-CN-YunxiaNeural", "label": "云夏（男·可爱）", "gender": "Male", "locale": "zh-CN"},
+]
+
+DEFAULT_EDGE_VOICE = "zh-CN-XiaoxiaoNeural"
 
 
 def wav_duration_sec(path: Path) -> float:
@@ -54,6 +71,49 @@ def _write_beep_wav(path: Path, duration_sec: float = 0.4, rate: int = 16000, fr
             w.writeframes(struct.pack("<h", val))
 
 
+def _sapi_rate_to_edge(rate: int) -> str:
+    """Map SAPI-like int rate (-10..10) to edge-tts rate string."""
+    # Rough: each SAPI step ≈ 10%
+    pct = max(-50, min(100, int(rate) * 10))
+    return f"{pct:+d}%"
+
+
+def _ffmpeg_bin(ffmpeg_path: str = "") -> str:
+    if ffmpeg_path:
+        p = Path(ffmpeg_path)
+        if p.is_file():
+            return str(p)
+    found = shutil.which("ffmpeg")
+    if not found:
+        raise TtsError("未找到 ffmpeg，无法将 edge-tts 音频转为 wav")
+    return found
+
+
+def _mp3_to_wav(mp3: Path, wav: Path, *, ffmpeg_path: str = "") -> None:
+    ff = _ffmpeg_bin(ffmpeg_path)
+    wav.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        ff,
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(mp3),
+        "-ac",
+        "1",
+        "-ar",
+        "24000",
+        "-c:a",
+        "pcm_s16le",
+        str(wav),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0 or not wav.is_file() or wav.stat().st_size <= 44:
+        err = (proc.stderr or proc.stdout or "").strip()
+        raise TtsError(f"edge-tts mp3→wav 失败: {err or 'empty output'}")
+
+
 def synthesize_sapi(
     text: str,
     out_path: Path,
@@ -67,7 +127,6 @@ def synthesize_sapi(
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    # Escape for PowerShell single-quoted string
     safe_text = (text or "").replace("'", "''")
     safe_out = str(out_path.resolve()).replace("'", "''")
     voice_line = ""
@@ -100,6 +159,7 @@ $speak.Dispose()
         backend="sapi",
         text=text,
         duration_sec=round(wav_duration_sec(out_path), 3),
+        voice=voice or "",
     )
 
 
@@ -131,6 +191,98 @@ def synthesize_file_lookup(
     )
 
 
+async def _edge_save_mp3(text: str, voice: str, mp3_path: Path, *, rate: str) -> None:
+    try:
+        import edge_tts
+    except ImportError as e:
+        raise TtsError("未安装 edge-tts，请执行: pip install edge-tts") from e
+
+    mp3_path.parent.mkdir(parents=True, exist_ok=True)
+    communicate = edge_tts.Communicate(text, voice, rate=rate)
+    await communicate.save(str(mp3_path))
+
+
+def synthesize_edge(
+    text: str,
+    out_path: Path,
+    *,
+    voice: str = "",
+    rate: int = 0,
+    ffmpeg_path: str = "",
+) -> TtsResult:
+    """
+    Microsoft Edge online neural TTS via edge-tts (external network required).
+    Writes wav (mp3 intermediate converted with ffmpeg).
+    """
+    out_path = Path(out_path)
+    if out_path.suffix.lower() != ".wav":
+        out_path = out_path.with_suffix(".wav")
+    voice_id = (voice or "").strip() or DEFAULT_EDGE_VOICE
+    rate_str = _sapi_rate_to_edge(int(rate))
+    mp3_path = out_path.with_suffix(".mp3")
+    try:
+        asyncio.run(_edge_save_mp3(text, voice_id, mp3_path, rate=rate_str))
+    except TtsError:
+        raise
+    except Exception as e:
+        raise TtsError(f"edge-tts 合成失败（需可访问 speech.platform.bing.com）: {e}") from e
+
+    if not mp3_path.is_file() or mp3_path.stat().st_size < 100:
+        raise TtsError("edge-tts 未生成有效音频")
+
+    try:
+        _mp3_to_wav(mp3_path, out_path, ffmpeg_path=ffmpeg_path)
+    finally:
+        try:
+            mp3_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    return TtsResult(
+        path=str(out_path.resolve()),
+        backend="edge",
+        text=text,
+        duration_sec=round(wav_duration_sec(out_path), 3),
+        voice=voice_id,
+    )
+
+
+def list_edge_voices(*, locale_prefix: str = "zh-CN", curated_only: bool = True) -> list[dict[str, Any]]:
+    """Return voice descriptors for the console. curated_only avoids a network round-trip."""
+    if curated_only:
+        return [dict(v) for v in CURATED_EDGE_VOICES if v["locale"].startswith(locale_prefix or "")]
+
+    try:
+        import edge_tts
+    except ImportError as e:
+        raise TtsError("未安装 edge-tts，请执行: pip install edge-tts") from e
+
+    async def _list() -> list[dict[str, Any]]:
+        raw = await edge_tts.list_voices()
+        out: list[dict[str, Any]] = []
+        for v in raw:
+            loc = str(v.get("Locale") or "")
+            if locale_prefix and not loc.startswith(locale_prefix):
+                continue
+            sid = str(v.get("ShortName") or "")
+            if not sid:
+                continue
+            out.append(
+                {
+                    "id": sid,
+                    "label": sid,
+                    "gender": str(v.get("Gender") or ""),
+                    "locale": loc,
+                }
+            )
+        return out
+
+    try:
+        return asyncio.run(_list())
+    except Exception as e:
+        raise TtsError(f"拉取 edge-tts 音色列表失败: {e}") from e
+
+
 def synthesize(
     text: str,
     out_path: Path,
@@ -141,6 +293,8 @@ def synthesize(
     lookup_dir: Path | None = None,
     case_id: str = "",
     step_index: int = 1,
+    ffmpeg_path: str = "",
+    fallback_sapi: bool = True,
 ) -> TtsResult:
     backend = (backend or "sapi").strip().lower()
     text = (text or "").strip()
@@ -158,6 +312,7 @@ def synthesize(
             backend="sapi_fallback_beep",
             text=text,
             duration_sec=round(wav_duration_sec(out_path), 3),
+            voice=voice or "",
         )
 
     if backend == "file":
@@ -171,10 +326,131 @@ def synthesize(
             step_index=step_index,
         )
 
-    if backend in ("edge", "http"):
+    if backend == "edge":
+        try:
+            return synthesize_edge(
+                text,
+                out_path,
+                voice=voice,
+                rate=rate,
+                ffmpeg_path=ffmpeg_path,
+            )
+        except TtsError as e:
+            # Network / Edge service unavailable → Windows SAPI when enabled.
+            if not fallback_sapi:
+                raise
+            if not sys.platform.startswith("win"):
+                raise TtsError(
+                    f"{e}；非 Windows 无法回退 SAPI（可改 tts.backend=file）"
+                ) from e
+            print(
+                f"[echo-eval][warn] edge-tts 失败，回退本机 SAPI: {e}",
+                flush=True,
+            )
+            # SAPI voice names differ from edge ShortName; use system default.
+            result = synthesize_sapi(text, out_path, voice="", rate=rate)
+            return TtsResult(
+                path=result.path,
+                backend="edge_fallback_sapi",
+                text=result.text,
+                duration_sec=result.duration_sec,
+                voice=result.voice or "sapi_default",
+            )
+
+    if backend == "http":
         raise TtsError(
-            f"tts.backend={backend} 已预留但尚未实现。请改用 sapi 或 file，"
-            "或后续接入对应实现。"
+            "tts.backend=http 已预留但尚未实现。请改用 edge / sapi / file。"
         )
 
     raise TtsError(f"未知 tts.backend: {backend}")
+
+
+def synthesize_with_library(
+    text: str,
+    out_path: Path,
+    *,
+    backend: str = "edge",
+    voice: str = "",
+    rate: int = 0,
+    case_id: str = "",
+    step_index: int = 1,
+    ffmpeg_path: str = "",
+    fallback_sapi: bool = True,
+    prefer_library: bool = True,
+    library_dir: str = "",
+) -> TtsResult:
+    """
+    Runtime path: prefer on-disk TTS library; on miss use system SAPI (Windows).
+
+    Prebuild fills the library (often via edge). Live runs avoid network when possible.
+    """
+    text = (text or "").strip()
+    if not text:
+        raise TtsError("TTS 文本为空")
+    out_path = Path(out_path)
+
+    if prefer_library and (library_dir or "").strip():
+        from echo_eval.stimulus.tts_library import (
+            copy_library_wav_to,
+            resolve_library_root,
+            resolve_wav,
+            voice_profile,
+        )
+
+        root = resolve_library_root(library_dir)
+        # Prefer entry keyed by the prebuild voice profile (usually edge:…).
+        profiles = [
+            voice_profile(backend, voice),
+            voice_profile("edge", voice or DEFAULT_EDGE_VOICE),
+            voice_profile("sapi", ""),
+        ]
+        seen: set[str] = set()
+        for profile in profiles:
+            if profile in seen:
+                continue
+            seen.add(profile)
+            hit = resolve_wav(
+                root,
+                case_id=case_id or "",
+                step_index=int(step_index),
+                text=text,
+                profile=profile,
+            )
+            if hit is None:
+                continue
+            result = copy_library_wav_to(out_path, hit)
+            result.text = text
+            result.voice = profile
+            print(
+                f"[echo-eval] TTS library hit case={case_id} step={step_index} "
+                f"profile={profile}",
+                flush=True,
+            )
+            return result
+        print(
+            f"[echo-eval][warn] TTS library miss case={case_id} step={step_index}；"
+            f"使用本机 SAPI",
+            flush=True,
+        )
+        if sys.platform.startswith("win"):
+            result = synthesize_sapi(text, out_path, voice="", rate=rate)
+            return TtsResult(
+                path=result.path,
+                backend="library_miss_sapi",
+                text=text,
+                duration_sec=result.duration_sec,
+                voice=result.voice or "sapi_default",
+            )
+        # Non-Windows: fall through to normal synthesize (edge/beep).
+
+    return synthesize(
+        text,
+        out_path,
+        backend=backend,
+        voice=voice,
+        rate=rate,
+        case_id=case_id,
+        step_index=step_index,
+        ffmpeg_path=ffmpeg_path,
+        fallback_sapi=fallback_sapi,
+    )

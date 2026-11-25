@@ -204,15 +204,97 @@ def main() -> int:
         )
 
     if want("tts"):
-        items.append(
-            {
-                "key": "tts",
-                "label": "TTS (SAPI)",
-                "ok": sys.platform.startswith("win"),
-                "detail": "Windows SAPI" if sys.platform.startswith("win") else "非 Windows：真机 TTS 需在 PC1 Windows 上跑",
-                "required": False,
-            }
-        )
+        tts_cfg = cfg.tts if cfg else None
+        backend = (tts_cfg.backend if tts_cfg else "edge") or "edge"
+        backend = str(backend).strip().lower()
+
+        edge_ver = ""
+        try:
+            import edge_tts  # type: ignore
+
+            edge_ver = str(getattr(edge_tts, "__version__", "?") or "?")
+            edge_pkg_ok = True
+            edge_pkg_detail = f"edge-tts {edge_ver} 已安装"
+        except ImportError:
+            edge_pkg_ok = False
+            edge_pkg_detail = '未安装 edge-tts（pip install "edge-tts>=7.0.0"）'
+
+        if backend == "edge":
+            if not edge_pkg_ok:
+                items.append(
+                    {
+                        "key": "tts",
+                        "label": "TTS (edge-tts)",
+                        "ok": False,
+                        "detail": edge_pkg_detail,
+                        "required": True,
+                    }
+                )
+            else:
+                detail = edge_pkg_detail
+                ok = False
+                try:
+                    from echo_eval.stimulus.tts import synthesize_edge
+
+                    probe = ROOT / "artifacts" / "_tts_edge_probe.wav"
+                    probe.parent.mkdir(parents=True, exist_ok=True)
+                    voice = (tts_cfg.voice if tts_cfg else "") or "zh-CN-XiaoxiaoNeural"
+                    result = synthesize_edge(
+                        "小翼管家",
+                        probe,
+                        voice=voice,
+                        rate=int(tts_cfg.rate if tts_cfg else 0),
+                        ffmpeg_path=cfg.capture.ffmpeg_path if cfg else "",
+                    )
+                    ok = True
+                    detail = (
+                        f"{edge_pkg_detail} · 试合成 OK · {result.voice} · "
+                        f"{result.duration_sec}s"
+                    )
+                    try:
+                        if probe.is_file():
+                            probe.unlink()
+                    except OSError:
+                        pass
+                except Exception as e:
+                    ok = False
+                    detail = f"{edge_pkg_detail} · 试合成失败（需出网/ffmpeg）: {e}"
+                items.append(
+                    {
+                        "key": "tts",
+                        "label": "TTS (edge-tts)",
+                        "ok": ok,
+                        "detail": detail,
+                        # 缺包已 required；试合成失败不挡整体 env.ok（网络波动）
+                        "required": False,
+                    }
+                )
+        elif backend == "sapi":
+            sapi_ok = sys.platform.startswith("win")
+            sapi_detail = (
+                "Windows SAPI"
+                if sapi_ok
+                else "非 Windows：SAPI 不可用，请改用 edge"
+            )
+            items.append(
+                {
+                    "key": "tts",
+                    "label": "TTS (SAPI)",
+                    "ok": sapi_ok,
+                    "detail": f"{sapi_detail} · {edge_pkg_detail}",
+                    "required": False,
+                }
+            )
+        else:
+            items.append(
+                {
+                    "key": "tts",
+                    "label": f"TTS ({backend})",
+                    "ok": True,
+                    "detail": f"backend={backend} · {edge_pkg_detail}",
+                    "required": False,
+                }
+            )
 
     if want("vl"):
         mp = find_model_config_path()

@@ -48,8 +48,8 @@ python -m echo_eval run --excel your.xlsx --backend vl
 
 ```yaml
 tts:
-  backend: sapi   # 或 file
-  voice: ""
+  backend: edge   # edge | sapi | file（edge 需出网）
+  voice: zh-CN-XiaoxiaoNeural
   rate: 0
 run:
   step_wait_sec: 3
@@ -66,6 +66,25 @@ run:
 
 更细的录屏 / 播报 / Home / 异步评判时间线见 [CASE_TIMELINE.md](./CASE_TIMELINE.md)。  
 预置 VL 验收与正式多帧评判的方法对比见 [EVALUATION_METHODS.md](./EVALUATION_METHODS.md)。
+
+### TTS（edge-tts）
+
+```bash
+pip install "edge-tts>=7.0.0"
+# 或：pip install -e .
+```
+
+默认 `backend: edge`，音色如 `zh-CN-XiaoxiaoNeural`。控制台可切换后端/音色并试听。edge 需访问 `speech.platform.bing.com`；连不上时默认 **回退本机 SAPI**（`tts.fallback_sapi: true`，仅 Windows），日志会打 `[warn] edge-tts 失败，回退本机 SAPI`。
+
+### 语音库（预合成）
+
+开测前可在控制台「预合成当前数据集」把步骤文本写成 `assets/tts_library/`（也支持自定义文本）。运行时 `prefer_library: true` 时优先命中库；未命中则用本机系统语音（Windows SAPI），不现场调 edge。
+
+```yaml
+tts:
+  library_dir: assets/tts_library
+  prefer_library: true
+```
 
 ## 预置条件（v0.11）
 

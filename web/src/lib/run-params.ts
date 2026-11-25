@@ -22,6 +22,10 @@ export type RunParamOverrides = {
   wake_enabled?: boolean;
   wake_text?: string;
   wake_wait_sec?: number;
+  tts_backend?: string;
+  tts_voice?: string;
+  tts_prefer_library?: boolean;
+  tts_library_dir?: string;
 };
 
 export type RunParamDefaults = {
@@ -42,6 +46,10 @@ export type RunParamDefaults = {
   wake_enabled: boolean;
   wake_text: string;
   wake_wait_sec: number;
+  tts_backend: string;
+  tts_voice: string;
+  tts_prefer_library: boolean;
+  tts_library_dir: string;
 };
 
 const FALLBACK_DEFAULTS: RunParamDefaults = {
@@ -62,6 +70,10 @@ const FALLBACK_DEFAULTS: RunParamDefaults = {
   wake_enabled: true,
   wake_text: "小翼管家",
   wake_wait_sec: 3,
+  tts_backend: "edge",
+  tts_voice: "zh-CN-XiaoxiaoNeural",
+  tts_prefer_library: true,
+  tts_library_dir: "assets/tts_library",
 };
 
 function pythonBin(): string {
@@ -111,6 +123,15 @@ export function readRunParamDefaults(): RunParamDefaults {
       wake_enabled: raw.wake_enabled !== undefined ? Boolean(raw.wake_enabled) : FALLBACK_DEFAULTS.wake_enabled,
       wake_text: String(raw.wake_text ?? FALLBACK_DEFAULTS.wake_text) || FALLBACK_DEFAULTS.wake_text,
       wake_wait_sec: Number(raw.wake_wait_sec ?? FALLBACK_DEFAULTS.wake_wait_sec),
+      tts_backend: String(raw.tts_backend ?? FALLBACK_DEFAULTS.tts_backend) || FALLBACK_DEFAULTS.tts_backend,
+      tts_voice: String(raw.tts_voice ?? FALLBACK_DEFAULTS.tts_voice) || FALLBACK_DEFAULTS.tts_voice,
+      tts_prefer_library:
+        raw.tts_prefer_library !== undefined
+          ? Boolean(raw.tts_prefer_library)
+          : FALLBACK_DEFAULTS.tts_prefer_library,
+      tts_library_dir:
+        String(raw.tts_library_dir ?? FALLBACK_DEFAULTS.tts_library_dir) ||
+        FALLBACK_DEFAULTS.tts_library_dir,
     };
   } catch {
     return { ...FALLBACK_DEFAULTS };
@@ -140,7 +161,13 @@ export function sanitizeOverrides(input: RunParamOverrides | null | undefined): 
     const n = Number(v);
     out[k] = k === "max_retries" ? Math.max(1, Math.floor(n)) : Math.max(0, n);
   }
-  const boolKeys = ["asr_enabled", "latency_enabled", "mos_enabled", "wake_enabled"] as const;
+  const boolKeys = [
+    "asr_enabled",
+    "latency_enabled",
+    "mos_enabled",
+    "wake_enabled",
+    "tts_prefer_library",
+  ] as const;
   for (const k of boolKeys) {
     if (input[k] === undefined || input[k] === null) continue;
     out[k] = Boolean(input[k]);
@@ -151,6 +178,20 @@ export function sanitizeOverrides(input: RunParamOverrides | null | undefined): 
   if (input.wake_text !== undefined && input.wake_text !== null) {
     const t = String(input.wake_text).trim();
     if (t) out.wake_text = t;
+  }
+  if (input.tts_backend !== undefined && input.tts_backend !== null) {
+    const b = String(input.tts_backend).trim().toLowerCase();
+    if (b === "sapi" || b === "edge" || b === "file" || b === "http") {
+      out.tts_backend = b;
+    }
+  }
+  if (input.tts_voice !== undefined && input.tts_voice !== null) {
+    const v = String(input.tts_voice).trim();
+    if (v) out.tts_voice = v;
+  }
+  if (input.tts_library_dir !== undefined && input.tts_library_dir !== null) {
+    const d = String(input.tts_library_dir).trim();
+    if (d) out.tts_library_dir = d;
   }
   return out;
 }

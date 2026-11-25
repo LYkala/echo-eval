@@ -45,7 +45,7 @@ from echo_eval.runner.progress import (
     update_case,
 )
 from echo_eval.stimulus.audio import play_audio_file
-from echo_eval.stimulus.tts import synthesize, wav_duration_sec
+from echo_eval.stimulus.tts import synthesize_with_library, wav_duration_sec
 
 JudgeBackend = Literal["auto", "vl", "mock"]
 
@@ -407,15 +407,18 @@ def capture_one_case(
     total_play = 0.0
     for i, step in enumerate(case.steps, 1):
         wav_path = steps_dir / f"step_{i:02d}.wav"
-        tts = synthesize(
+        tts = synthesize_with_library(
             step.text,
             wav_path,
             backend=cfg.tts.backend,
             voice=cfg.tts.voice,
             rate=cfg.tts.rate,
-            lookup_dir=Path(cfg.tts.lookup_dir) if cfg.tts.lookup_dir else None,
             case_id=case.case_id,
             step_index=i,
+            ffmpeg_path=cfg.capture.ffmpeg_path,
+            fallback_sapi=bool(cfg.tts.fallback_sapi),
+            prefer_library=bool(cfg.tts.prefer_library),
+            library_dir=str(cfg.tts.library_dir or ""),
         )
         dur = tts.duration_sec or wav_duration_sec(Path(tts.path))
         # 现场仅 ASR 短采图 + MOS 麦；时延改离线，不拉长录屏
@@ -490,15 +493,18 @@ def capture_one_case(
                 status="running",
             )
             wake_wav = steps_dir / "wake.wav"
-            wake_tts = synthesize(
+            wake_tts = synthesize_with_library(
                 str(cfg.run.wake_text),
                 wake_wav,
                 backend=cfg.tts.backend,
                 voice=cfg.tts.voice,
                 rate=cfg.tts.rate,
-                lookup_dir=Path(cfg.tts.lookup_dir) if cfg.tts.lookup_dir else None,
-                case_id=case.case_id,
+                case_id="_wake_",
                 step_index=0,
+                ffmpeg_path=cfg.capture.ffmpeg_path,
+                fallback_sapi=bool(cfg.tts.fallback_sapi),
+                prefer_library=bool(cfg.tts.prefer_library),
+                library_dir=str(cfg.tts.library_dir or ""),
             )
             wake_play_started = datetime.now(timezone.utc).isoformat()
             wake_offset = round(time.time() - t0, 3)

@@ -196,6 +196,12 @@ class TtsConfig:
     voice: str
     rate: int
     lookup_dir: str
+    # edge 连不上微软服务时，回退 Windows SAPI（仅 Windows）
+    fallback_sapi: bool = True
+    # 预合成语音库目录（相对仓库根或绝对路径）
+    library_dir: str = "assets/tts_library"
+    # 运行时优先用语音库；未命中则用本机 SAPI（不现场调 edge）
+    prefer_library: bool = True
 
 
 @dataclass
@@ -360,11 +366,23 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             else 1.0
         ),
     )
+    if "fallback_sapi" in tts_raw:
+        tts_fallback = bool(tts_raw.get("fallback_sapi"))
+    else:
+        tts_fallback = True
+    if "prefer_library" in tts_raw:
+        prefer_library = bool(tts_raw.get("prefer_library"))
+    else:
+        prefer_library = True
     tts = TtsConfig(
-        backend=str(tts_raw.get("backend") or "sapi").strip().lower(),
-        voice=str(tts_raw.get("voice") or "").strip(),
+        backend=str(tts_raw.get("backend") or "edge").strip().lower(),
+        voice=str(tts_raw.get("voice") or "zh-CN-XiaoxiaoNeural").strip(),
         rate=int(tts_raw.get("rate") or 0),
         lookup_dir=str(tts_raw.get("lookup_dir") or "").strip(),
+        fallback_sapi=tts_fallback,
+        library_dir=str(tts_raw.get("library_dir") or "assets/tts_library").strip()
+        or "assets/tts_library",
+        prefer_library=prefer_library,
     )
     if "return_home_after_case" in run_raw:
         return_home = bool(run_raw.get("return_home_after_case"))
@@ -596,6 +614,10 @@ def public_run_defaults(cfg: AppConfig | None = None) -> dict[str, Any]:
         "wake_enabled": bool(c.run.wake_enabled),
         "wake_text": str(c.run.wake_text or "小翼管家"),
         "wake_wait_sec": float(c.run.wake_wait_sec),
+        "tts_backend": str(c.tts.backend or "edge"),
+        "tts_voice": str(c.tts.voice or "zh-CN-XiaoxiaoNeural"),
+        "tts_prefer_library": bool(c.tts.prefer_library),
+        "tts_library_dir": str(c.tts.library_dir or "assets/tts_library"),
     }
 
 
@@ -641,6 +663,20 @@ def apply_runtime_overrides(cfg: AppConfig, overrides: dict[str, Any] | None) ->
             cfg.run.wake_text = text
     if overrides.get("wake_wait_sec") is not None:
         cfg.run.wake_wait_sec = max(0.0, float(overrides["wake_wait_sec"]))
+    if overrides.get("tts_backend") is not None:
+        backend = str(overrides["tts_backend"] or "").strip().lower()
+        if backend in ("sapi", "edge", "file", "http"):
+            cfg.tts.backend = backend
+    if overrides.get("tts_voice") is not None:
+        voice = str(overrides["tts_voice"] or "").strip()
+        if voice:
+            cfg.tts.voice = voice
+    if overrides.get("tts_prefer_library") is not None:
+        cfg.tts.prefer_library = bool(overrides["tts_prefer_library"])
+    if overrides.get("tts_library_dir") is not None:
+        d = str(overrides["tts_library_dir"] or "").strip()
+        if d:
+            cfg.tts.library_dir = d
     return cfg
 
 
@@ -674,6 +710,9 @@ def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
             "voice": cfg.tts.voice,
             "rate": cfg.tts.rate,
             "lookup_dir": cfg.tts.lookup_dir,
+            "fallback_sapi": bool(cfg.tts.fallback_sapi),
+            "library_dir": cfg.tts.library_dir,
+            "prefer_library": bool(cfg.tts.prefer_library),
         },
         "run": {
             "step_wait_sec": cfg.run.step_wait_sec,

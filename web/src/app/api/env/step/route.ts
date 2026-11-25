@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     });
   }
 
-  const timeoutMs = step === "device" ? 12000 : 10000;
+  const timeoutMs = step === "device" ? 12000 : step === "tts" ? 25000 : 10000;
   const args = [script, "--quick", "--step", step];
   console.log(`[echo-eval][env/step] spawn: ${pythonBin()} ${args.join(" ")} timeout=${timeoutMs}ms`);
 
