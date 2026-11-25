@@ -398,26 +398,16 @@ def synthesize_with_library(
         )
 
         root = resolve_library_root(library_dir)
-        # Prefer entry keyed by the prebuild voice profile (usually edge:…).
-        profiles = [
-            voice_profile(backend, voice),
-            voice_profile("edge", voice or DEFAULT_EDGE_VOICE),
-            voice_profile("sapi", ""),
-        ]
-        seen: set[str] = set()
-        for profile in profiles:
-            if profile in seen:
-                continue
-            seen.add(profile)
-            hit = resolve_wav(
-                root,
-                case_id=case_id or "",
-                step_index=int(step_index),
-                text=text,
-                profile=profile,
-            )
-            if hit is None:
-                continue
+        # Strict: only the selected run voice profile (do not cross-voice).
+        profile = voice_profile(backend, voice)
+        hit = resolve_wav(
+            root,
+            case_id=case_id or "",
+            step_index=int(step_index),
+            text=text,
+            profile=profile,
+        )
+        if hit is not None:
             result = copy_library_wav_to(out_path, hit)
             result.text = text
             result.voice = profile
@@ -428,8 +418,8 @@ def synthesize_with_library(
             )
             return result
         print(
-            f"[echo-eval][warn] TTS library miss case={case_id} step={step_index}；"
-            f"使用本机 SAPI",
+            f"[echo-eval][warn] TTS library miss case={case_id} step={step_index} "
+            f"profile={profile}；使用本机 SAPI",
             flush=True,
         )
         if sys.platform.startswith("win"):

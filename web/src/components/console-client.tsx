@@ -177,12 +177,22 @@ type RunParams = {
 
 type TtsVoiceOption = { id: string; label: string; gender?: string; locale?: string };
 
+type LibraryVoice = {
+  profile: string;
+  backend: string;
+  voice: string;
+  label: string;
+  count: number;
+  sample_rel_path?: string;
+};
+
 type TtsLibraryStatus = {
   library_root?: string;
   exists?: boolean;
   entry_count?: number;
   missing_files?: number;
   updated_at?: string;
+  voices?: LibraryVoice[];
   entries?: Array<{
     case_id?: string;
     step_index?: number;
@@ -441,7 +451,65 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
     }
   }
 
+  const libraryVoices = ttsLibrary?.voices || [];
+
+  function selectLibraryVoiceForRun(profile: string) {
+    const hit = libraryVoices.find((v) => v.profile === profile);
+    if (!hit) return;
+    setParams((prev) => ({
+      ...prev,
+      tts_backend: hit.backend || "edge",
+      tts_voice: hit.voice || prev.tts_voice,
+      tts_prefer_library: true,
+    }));
+  }
+
+  async function previewLibraryProfile(
+    profile: string,
+    opts: {
+      setBusy: (v: boolean) => void;
+      setError: (v: string) => void;
+      url: string | null;
+      setUrl: (v: string | null) => void;
+    }
+  ) {
+    opts.setBusy(true);
+    opts.setError("");
+    try {
+      if (opts.url) {
+        URL.revokeObjectURL(opts.url);
+        opts.setUrl(null);
+      }
+      const dir = encodeURIComponent(params.tts_library_dir || "assets/tts_library");
+      const res = await fetch(
+        `/api/tts/library?library_dir=${dir}&sample_profile=${encodeURIComponent(profile)}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || `sample HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      opts.setUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      opts.setError(String(e));
+    } finally {
+      opts.setBusy(false);
+    }
+  }
+
   async function previewTts() {
+    const profile = `${params.tts_backend}:${params.tts_voice || "default"}`;
+    const inLib = libraryVoices.some((v) => v.profile === profile);
+    if (inLib) {
+      await previewLibraryProfile(profile, {
+        setBusy: setTtsPreviewBusy,
+        setError: setTtsPreviewError,
+        url: ttsPreviewUrl,
+        setUrl: setTtsPreviewUrl,
+      });
+      return;
+    }
     await previewTtsVoice({
       backend: params.tts_backend,
       voice: params.tts_voice,
@@ -451,6 +519,17 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
       setUrl: setTtsPreviewUrl,
     });
   }
+
+  // Keep run voice selection aligned with library when voices load / change.
+  useEffect(() => {
+    if (section !== "run") return;
+    if (!libraryVoices.length) return;
+    const current = `${params.tts_backend}:${params.tts_voice || "default"}`;
+    if (!libraryVoices.some((v) => v.profile === current)) {
+      selectLibraryVoiceForRun(libraryVoices[0].profile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-sync when library voice list changes
+  }, [section, libraryVoices.map((v) => v.profile).join("|")]);
 
   async function previewLibTts() {
     await previewTtsVoice({
@@ -726,8 +805,8 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
     if (section === "env") void refreshEnv();
     void refreshDatasets();
     if (section === "run" || section === "tts") void refreshParamDefaults();
-    if (section === "run" || section === "tts") void loadTtsVoices();
-    if (section === "tts") void refreshTtsLibrary();
+    if (section === "tts") void loadTtsVoices();
+    if (section === "tts" || section === "run") void refreshTtsLibrary();
     // Restore in-flight job after leaving/returning to this page.
     const saved = sessionStorage.getItem(ACTIVE_JOB_KEY);
     if (saved) {
@@ -1325,12 +1404,63 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
                   <p className="text-xs text-rose-700">{libPreviewError}</p>
                 ) : null}
                 <p className="text-xs text-muted-foreground">
-                  库内 {ttsLibrary?.entry_count ?? "—"} 条
+                  当前写入音色：
+                  <span className="font-medium text-foreground">
+                    {" "}
+                    {libBackend === "edge"
+                      ? ttsVoices.find((v) => v.id === libVoice)?.label || libVoice
+                      : "本机 SAPI"}
+                  </span>
+                  （{libBackend}:{libBackend === "edge" ? libVoice : "default"}）· 库内{" "}
+                  {ttsLibrary?.entry_count ?? "—"} 条
                   {ttsLibrary?.missing_files
                     ? `（缺文件 ${ttsLibrary.missing_files}）`
                     : ""}
-                  {ttsLibrary?.updated_at ? ` · 更新 ${ttsLibrary.updated_at}` : ""}
                 </p>
+                {libraryVoices.length ? (
+                  <div className="overflow-hidden rounded-md border border-border">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-secondary/50 text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">已入库音色</th>
+                          <th className="px-3 py-2 font-medium">profile</th>
+                          <th className="px-3 py-2 font-medium">条数</th>
+                          <th className="px-3 py-2 font-medium">试听</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {libraryVoices.map((v) => (
+                          <tr key={v.profile} className="border-t border-border/70">
+                            <td className="px-3 py-2 font-medium">{v.label}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{v.profile}</td>
+                            <td className="px-3 py-2">{v.count}</td>
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                className="text-primary underline-offset-2 hover:underline"
+                                disabled={libPreviewBusy}
+                                onClick={() =>
+                                  void previewLibraryProfile(v.profile, {
+                                    setBusy: setLibPreviewBusy,
+                                    setError: setLibPreviewError,
+                                    url: libPreviewUrl,
+                                    setUrl: setLibPreviewUrl,
+                                  })
+                                }
+                              >
+                                播放样例
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                    库中尚无音色。选择上方后端/音色后点「预合成当前数据集」。
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -1338,7 +1468,7 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
                     disabled={ttsLibraryBusy || !datasetId}
                     onClick={() => void prebuildTtsLibrary(false)}
                   >
-                    {ttsLibraryBusy ? "处理中…" : "预合成当前数据集"}
+                    {ttsLibraryBusy ? "处理中…" : `预合成（${libBackend === "edge" ? libVoice : "SAPI"}）`}
                   </Button>
                   <Button
                     type="button"
@@ -1799,51 +1929,38 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
               </div>
             </div>
               <div className="space-y-2 border-t border-border/60 pt-3">
-                <p className="text-sm font-medium">开测音色</p>
+                <p className="text-sm font-medium">开测音色（仅语音库）</p>
                 <p className="text-xs text-muted-foreground">
-                  仅影响「开始测试」与试听。开启「优先用库」时先读语音库；未命中再用下方后端（Windows 上库未命中走系统
-                  SAPI）。
+                  只能选择已预合成入库的音色。未命中该音色条目时回退本机系统语音（Windows SAPI）。请先到「预合成语音」生成。
                 </p>
-                <div className="grid gap-3 sm:grid-cols-2">
+                {libraryVoices.length ? (
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">开测 TTS 后端</Label>
+                    <Label className="text-xs text-muted-foreground">已入库音色</Label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      value={params.tts_backend}
-                      onChange={(e) => setParam("tts_backend", e.target.value)}
+                      value={`${params.tts_backend}:${params.tts_voice || "default"}`}
+                      onChange={(e) => selectLibraryVoiceForRun(e.target.value)}
                     >
-                      <option value="edge">edge-tts</option>
-                      <option value="sapi">本机 SAPI</option>
-                      <option value="file">预录 file</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">开测音色</Label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      disabled={params.tts_backend !== "edge"}
-                      value={params.tts_voice}
-                      onChange={(e) => setParam("tts_voice", e.target.value)}
-                    >
-                      {ttsVoices.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.label || v.id}
+                      {libraryVoices.map((v) => (
+                        <option key={v.profile} value={v.profile}>
+                          {v.label} · {v.count} 条 · {v.profile}
                         </option>
                       ))}
-                      {!ttsVoices.some((v) => v.id === params.tts_voice) && params.tts_voice ? (
-                        <option value={params.tts_voice}>{params.tts_voice}</option>
-                      ) : null}
                     </select>
                   </div>
-                </div>
+                ) : (
+                  <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                    语音库尚无可用音色。请先到侧栏「数据集管理 → 预合成语音」生成后再开测。
+                  </p>
+                )}
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
                     type="button"
                     variant="secondary"
-                    disabled={ttsPreviewBusy || params.tts_backend !== "edge"}
+                    disabled={ttsPreviewBusy || !libraryVoices.length}
                     onClick={() => void previewTts()}
                   >
-                    {ttsPreviewBusy ? "合成中…" : "试听开测音色"}
+                    {ttsPreviewBusy ? "合成中…" : "试听库内样例"}
                   </Button>
                   {ttsPreviewUrl ? (
                     <audio controls src={ttsPreviewUrl} className="h-8 max-w-full" />
@@ -1871,8 +1988,14 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
             <div className="flex flex-wrap gap-3">
               <Button
                 type="button"
-                disabled={busy || calibrateRunning}
-                title={calibrateRunning ? "请先停止预置校准" : undefined}
+                disabled={busy || calibrateRunning || !libraryVoices.length}
+                title={
+                  !libraryVoices.length
+                    ? "请先预合成语音库音色"
+                    : calibrateRunning
+                      ? "请先停止预置校准"
+                      : undefined
+                }
                 onClick={() => void startRun(false)}
               >
                 {busy ? "处理中…" : "开始测试"}

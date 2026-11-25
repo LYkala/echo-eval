@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from echo_eval.stimulus.tts import (
+    CURATED_EDGE_VOICES,
     DEFAULT_EDGE_VOICE,
     TtsError,
     TtsResult,
@@ -36,6 +37,27 @@ def voice_profile(backend: str, voice: str = "") -> str:
     if b == "sapi":
         return f"sapi:{(v or 'default')}"
     return f"{b}:{v or 'default'}"
+
+
+def parse_voice_profile(profile: str) -> tuple[str, str]:
+    """Split 'edge:zh-CN-XiaoxiaoNeural' → ('edge', 'zh-CN-XiaoxiaoNeural')."""
+    raw = (profile or "").strip()
+    if ":" not in raw:
+        return "edge", raw or DEFAULT_EDGE_VOICE
+    backend, voice = raw.split(":", 1)
+    return (backend or "edge").strip().lower(), (voice or "").strip()
+
+
+def voice_label(profile: str) -> str:
+    backend, voice = parse_voice_profile(profile)
+    if backend == "edge":
+        for v in CURATED_EDGE_VOICES:
+            if v.get("id") == voice:
+                return str(v.get("label") or voice)
+        return voice or profile
+    if backend == "sapi":
+        return f"本机 SAPI（{voice or 'default'}）"
+    return profile
 
 
 def _safe_token(s: str) -> str:
@@ -106,9 +128,7 @@ def find_entry(
     key = entry_key(case_id=case_id, step_index=step_index, text=text, profile=profile)
     th = text_hash(text)
     soft_case: dict[str, Any] | None = None
-    soft_case_any: dict[str, Any] | None = None
     soft_text: dict[str, Any] | None = None
-    soft_text_any: dict[str, Any] | None = None
     for e in data.get("entries") or []:
         if not isinstance(e, dict):
             continue
@@ -117,25 +137,21 @@ def find_entry(
             continue
         if e.get("key") == key:
             return e
-        same_case_step = (
-            str(e.get("case_id") or "") == case_id
+        same_profile = str(e.get("voice_profile") or "") == profile
+        if not same_profile:
+            continue
+        # Soft match: same case/step/profile and text hash
+        if (
+            soft_case is None
+            and str(e.get("case_id") or "") == case_id
             and int(e.get("step_index") or -1) == int(step_index)
             and str(e.get("text_hash") or "") == th
-        )
-        same_text = str(e.get("text_hash") or "") == th
-        same_profile = str(e.get("voice_profile") or "") == profile
-        # Soft match: same case/step/profile and text hash
-        if soft_case is None and same_case_step and same_profile:
+        ):
             soft_case = e
-        # Prebuild voice may differ from run voice — still prefer same case/step/text
-        if soft_case_any is None and same_case_step:
-            soft_case_any = e
         # Custom / cross-case: same profile + text (e.g. UI-added utterance)
-        if soft_text is None and same_text and same_profile:
+        if soft_text is None and str(e.get("text_hash") or "") == th:
             soft_text = e
-        if soft_text_any is None and same_text:
-            soft_text_any = e
-    return soft_case or soft_case_any or soft_text or soft_text_any
+    return soft_case or soft_text
 
 
 def resolve_wav(
@@ -335,6 +351,40 @@ def prebuild_from_excel(
     }
 
 
+def list_library_voices(library_root: Path) -> list[dict[str, Any]]:
+    """Aggregate usable voices already present in the library (by voice_profile)."""
+    root = Path(library_root)
+    data = load_index(root)
+    counts: dict[str, int] = {}
+    samples: dict[str, str] = {}
+    for e in data.get("entries") or []:
+        if not isinstance(e, dict):
+            continue
+        profile = str(e.get("voice_profile") or "").strip()
+        if not profile:
+            continue
+        rel = str(e.get("rel_path") or "")
+        if not rel or not (root / rel).is_file():
+            continue
+        counts[profile] = counts.get(profile, 0) + 1
+        if profile not in samples:
+            samples[profile] = rel.replace("\\", "/")
+    out: list[dict[str, Any]] = []
+    for profile, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        backend, voice = parse_voice_profile(profile)
+        out.append(
+            {
+                "profile": profile,
+                "backend": backend,
+                "voice": voice,
+                "label": voice_label(profile),
+                "count": count,
+                "sample_rel_path": samples.get(profile) or "",
+            }
+        )
+    return out
+
+
 def library_status(library_root: Path) -> dict[str, Any]:
     root = Path(library_root)
     data = load_index(root)
@@ -344,12 +394,14 @@ def library_status(library_root: Path) -> dict[str, Any]:
         rel = str(e.get("rel_path") or "")
         if not rel or not (root / rel).is_file():
             missing += 1
+    voices = list_library_voices(root)
     return {
         "library_root": str(root),
         "exists": root.is_dir(),
         "entry_count": len(entries),
         "missing_files": missing,
         "updated_at": data.get("updated_at") or "",
+        "voices": voices,
         "entries": entries[-50:],  # tail for UI
     }
 
