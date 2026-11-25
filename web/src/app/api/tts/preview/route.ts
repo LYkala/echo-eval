@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const text = String(body.text || "小翼管家，打开爱奇艺").trim().slice(0, 80);
+  const text = String(body.text || "小翼管家").trim().slice(0, 80) || "小翼管家";
   const voice = String(body.voice || "zh-CN-XiaoxiaoNeural").trim();
   const backend = String(body.backend || "edge").trim().toLowerCase() || "edge";
   if (backend !== "edge") {

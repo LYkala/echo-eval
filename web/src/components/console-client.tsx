@@ -223,7 +223,7 @@ const STEP_DEFS: { id: string; label: string }[] = [
   { id: "device", label: "连接设备（短超时）" },
   { id: "ffmpeg", label: "检查 FFmpeg" },
   { id: "audio", label: "检查音频播放" },
-  { id: "tts", label: "检查 TTS" },
+  { id: "tts", label: "检查 TTS / edge-tts" },
   { id: "vl", label: "检查 VL 配置" },
   { id: "mos", label: "MOS 拾音（可选）" },
 ];
@@ -367,7 +367,7 @@ export function ConsoleClient() {
         body: JSON.stringify({
           backend: "edge",
           voice: params.tts_voice,
-          text: params.wake_text || "小翼管家，打开爱奇艺",
+          text: "小翼管家",
         }),
       });
       if (!res.ok) {

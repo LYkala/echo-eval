@@ -62,8 +62,8 @@ function runDoctorStep(step: EnvStepId): { item?: EnvCheckItem; serial?: string;
     return { error: `缺少脚本: ${script}` };
   }
 
-  // device step can take a few seconds for connect; others should be fast
-  const timeoutMs = step === "device" ? 12000 : 8000;
+  // device: connect; tts/edge: network synth; others should be fast
+  const timeoutMs = step === "device" ? 12000 : step === "tts" ? 25000 : 8000;
   const proc = spawnSync(pythonBin(), [script, "--quick", "--step", step], {
     encoding: "utf-8",
     cwd: root,
