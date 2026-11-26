@@ -14,9 +14,9 @@
 
 这些命令是测评的**采集层**；完整 `run` 会复用同一套 `device/`、`capture/`、`stimulus/` 代码。
 
-## 环境准备（ADB / FFmpeg）
+## 环境准备（Windows 端到端）
 
-Windows 安装与排查见 **[`docs/SETUP_WINDOWS.md`](docs/SETUP_WINDOWS.md)**（含确认是否已装、winget/手动安装、写入 `device.yaml` 绝对路径）。
+安装 Python / Node、ADB、FFmpeg、Python 包、配置与控制台启动，见 **[`docs/SETUP_WINDOWS.md`](docs/SETUP_WINDOWS.md)**。
 
 ## 配置
 
@@ -75,7 +75,7 @@ python -m echo_eval run --excel cases/examples/sample_weather.csv \
 
 ## 文档
 
-- [`docs/SETUP_WINDOWS.md`](docs/SETUP_WINDOWS.md) — Windows 安装 ADB / FFmpeg  
+- [`docs/SETUP_WINDOWS.md`](docs/SETUP_WINDOWS.md) — Windows 端到端环境安装与使用  
 - [`docs/JUDGE.md`](docs/JUDGE.md) — Phase 3 评判  
 - [`docs/PHASE4_RUN.md`](docs/PHASE4_RUN.md) — Phase 4 Excel 编排  
 - [`docs/WEB_CONSOLE.md`](docs/WEB_CONSOLE.md) — PC1 Web 控制台  
