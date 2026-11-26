@@ -82,7 +82,7 @@ export async function GET(req: Request) {
         label: known.label,
         ok: false,
         detail,
-        required: !["audio", "tts", "vl"].includes(step),
+        required: !["audio", "tts", "vl", "mos"].includes(step),
       },
     });
   }

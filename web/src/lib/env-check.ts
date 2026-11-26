@@ -28,6 +28,7 @@ export type EnvStepId =
   | "device"
   | "ffmpeg"
   | "audio"
+  | "scrcpy"
   | "tts"
   | "vl"
   | "mos";
@@ -39,9 +40,10 @@ export const ENV_STEP_ORDER: { id: EnvStepId; label: string }[] = [
   { id: "device", label: "连接设备（短超时）" },
   { id: "ffmpeg", label: "检查 FFmpeg" },
   { id: "audio", label: "检查音频播放" },
+  { id: "scrcpy", label: "检查 scrcpy（带声录屏）" },
   { id: "tts", label: "检查 TTS" },
   { id: "vl", label: "检查 VL 配置" },
-  { id: "mos", label: "MOS 拾音（可选）" },
+  { id: "mos", label: "MOS 音源 / 拾音（可选）" },
 ];
 
 export type EnvProgressEvent =
