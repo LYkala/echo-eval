@@ -28,22 +28,35 @@
 
 ## P3 TTS MOS
 
-**背景**：系统 `screenrecord` **不录**设备外放音频，因此用**主机麦克风**在说完后录一段设备扬声器回复。录制必须在现场；打分在 pull 后。
+**背景**：系统 `adb screenrecord` **不录**音频。当前推荐 `capture.backend: scrcpy` 内录，MOS 从 `capture.mp4` 按 `play_end_offset_sec` 抽 wav；无音轨或 `mos.source: host_mic` 时仍可用主机麦。
 
 | 项 | 默认 |
 |----|------|
+| 音源 | `mos.source: auto`（scrcpy 有音轨 → video；否则 host_mic） |
 | 窗口 | 说完后 5s |
 | 无有效语音 | **N/A**（不记失败） |
 | 评分 | 启发式流畅度 **1–5**（静音比、切分、削波等；非听感大模型） |
 
-Windows 需配置麦克风（`ffmpeg -list_devices true -f dshow -i dummy` 查看名称）：
+scrcpy（华为 Android 12 穿刺通过）：
+
+```yaml
+capture:
+  backend: scrcpy
+  scrcpy_audio_codec: aac
+  scrcpy_audio_encoder: OMX.google.aac.encoder
+mos:
+  source: auto   # 或 video / host_mic
+```
+
+Windows 主机麦（旧路径 / 降级）：
 
 ```yaml
 mos:
+  source: host_mic
   input_format: dshow
   input_device: audio=你的麦克风名称
 ```
 
 产物：`mos_audio/step_XX.wav`、`mos/step_XX.json`、`mos_summary.json`。
 
-录制失败（无设备/权限）时该句 MOS 记 N/A/error，不阻断整例 GUI 评判。
+录制/抽音失败时该句 MOS 记 N/A/error，不阻断整例 GUI 评判。

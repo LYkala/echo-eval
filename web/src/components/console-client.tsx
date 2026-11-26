@@ -253,9 +253,10 @@ const STEP_DEFS: { id: string; label: string }[] = [
   { id: "device", label: "连接设备（短超时）" },
   { id: "ffmpeg", label: "检查 FFmpeg" },
   { id: "audio", label: "检查音频播放" },
+  { id: "scrcpy", label: "检查 scrcpy（带声录屏）" },
   { id: "tts", label: "检查 TTS / edge-tts" },
   { id: "vl", label: "检查 VL 配置" },
-  { id: "mos", label: "MOS 拾音（可选）" },
+  { id: "mos", label: "MOS 音源 / 拾音（可选）" },
 ];
 
 function blankSteps(): StepRow[] {

@@ -14,6 +14,16 @@ capture:
   local_dir: "artifacts"
   fps: 1
   ffmpeg_path: ""
+  # scrcpy = 本机带声音录屏（推荐）；screenrecord = 旧 adb 无声录屏
+  backend: scrcpy
+  scrcpy_path: ""   # 留空则 PATH；例: C:/Users/.../scrcpy.exe
+  # 华为 Android 12 穿刺：必须 AAC（默认 opus 会失败）
+  scrcpy_audio_codec: aac
+  scrcpy_audio_encoder: OMX.google.aac.encoder
+  scrcpy_max_size: 1280
+  scrcpy_video_bit_rate: "8M"
+  scrcpy_require_audio: true
+  scrcpy_extra_args: []
 
 stimulus:
   enabled: false
@@ -67,11 +77,15 @@ latency:
   bottom_band_ratio: 0.22
   change_threshold: 6.0
 
-# TTS MOS（P3）：主机麦。Windows 示例（纯名称也可，会自动补 audio=）：
+# TTS MOS（P3）
+# source: auto=scrcpy 有音轨则从 mp4 抽；否则主机麦
+#         video=只从 mp4 抽；host_mic=只主机麦
+# Windows 主机麦示例：
 #   input_format: dshow
 #   input_device: audio=Microphone (Realtek ...)
 mos:
   enabled: true
+  source: auto
   window_sec: 5.0
   sample_rate: 16000
   min_speech_sec: 0.3

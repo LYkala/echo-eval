@@ -25,7 +25,7 @@ def main() -> int:
     ap.add_argument(
         "--step",
         default="",
-        help="只跑单步: config|python|adb|device|ffmpeg|audio|tts|vl|mos",
+        help="只跑单步: config|python|adb|device|ffmpeg|audio|tts|vl|mos|scrcpy",
     )
     args = ap.parse_args()
     connect_timeout = 4.0 if args.quick else 12.0
@@ -308,6 +308,39 @@ def main() -> int:
             }
         )
 
+    if want("scrcpy"):
+        from echo_eval.capture.scrcpy_record import ScrcpyError, resolve_scrcpy_bin
+
+        backend = str(cfg.capture.backend if cfg else "scrcpy").strip().lower()
+        want_scrcpy = backend in ("scrcpy", "scrcpy_audio")
+        try:
+            bin_path = resolve_scrcpy_bin(cfg.capture.scrcpy_path if cfg else "")
+            detail = f"{bin_path} · backend={backend}"
+            if cfg:
+                detail += (
+                    f" · codec={cfg.capture.scrcpy_audio_codec}"
+                    f" · encoder={cfg.capture.scrcpy_audio_encoder}"
+                )
+            items.append(
+                {
+                    "key": "scrcpy",
+                    "label": "scrcpy（带声音录屏）",
+                    "ok": True,
+                    "detail": detail,
+                    "required": want_scrcpy,
+                }
+            )
+        except ScrcpyError as e:
+            items.append(
+                {
+                    "key": "scrcpy",
+                    "label": "scrcpy（带声音录屏）",
+                    "ok": False,
+                    "detail": str(e),
+                    "required": want_scrcpy,
+                }
+            )
+
     if want("mos"):
         # Optional: host-mic path for TTS MOS (does not block env.ok).
         from echo_eval.capture.host_mic import (
@@ -319,6 +352,20 @@ def main() -> int:
         )
 
         mos_cfg = cfg.mos if cfg else None
+        mos_source = str(mos_cfg.source if mos_cfg else "auto").strip().lower() or "auto"
+        if mos_cfg is not None and mos_cfg.enabled and mos_source in ("auto", "video"):
+            items.append(
+                {
+                    "key": "mos_source",
+                    "label": "MOS 音源",
+                    "ok": True,
+                    "detail": (
+                        f"source={mos_source}（scrcpy 录屏有音轨时从 mp4 抽取；"
+                        "否则/host_mic 用主机麦）"
+                    ),
+                    "required": False,
+                }
+            )
         if mos_cfg is None or not mos_cfg.enabled:
             items.append(
                 {
@@ -326,6 +373,16 @@ def main() -> int:
                     "label": "MOS 拾音（主机麦）",
                     "ok": True,
                     "detail": "mos.enabled=false，跳过拾音检查",
+                    "required": False,
+                }
+            )
+        elif mos_source == "video":
+            items.append(
+                {
+                    "key": "mos_mic",
+                    "label": "MOS 拾音（主机麦）",
+                    "ok": True,
+                    "detail": "mos.source=video，跳过主机麦检查（从 capture.mp4 抽音）",
                     "required": False,
                 }
             )
@@ -338,14 +395,22 @@ def main() -> int:
                     "dshow" if sys.platform.startswith("win") else ""
                 )
                 dev = (mos_cfg.input_device or "").strip()
+                # auto + scrcpy: host mic optional
+                mic_required = mos_source == "host_mic"
                 if sys.platform.startswith("win"):
                     if not dev:
-                        ok = False
-                        detail = (
-                            "未配置 mos.input_device。请用 "
-                            "`ffmpeg -list_devices true -f dshow -i dummy` "
-                            "查看 (audio) 设备，填 audio=名称 或纯名称"
-                        )
+                        if not mic_required:
+                            ok = True
+                            detail = (
+                                "未配置主机麦（mos.source=auto 且 scrcpy 时从 mp4 抽音，可忽略）"
+                            )
+                        else:
+                            ok = False
+                            detail = (
+                                "未配置 mos.input_device。请用 "
+                                "`ffmpeg -list_devices true -f dshow -i dummy` "
+                                "查看 (audio) 设备，填 audio=名称 或纯名称"
+                            )
                     else:
                         norm = normalize_dshow_audio_device(dev)
                         probe = ROOT / "artifacts" / "_mos_mic_probe.wav"

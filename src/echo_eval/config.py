@@ -160,11 +160,25 @@ class CaptureConfig:
     local_dir: str
     fps: float
     ffmpeg_path: str
+    # screenrecord = adb 无声录屏；scrcpy = 本机录屏+内录音频
+    backend: str = "scrcpy"
+    scrcpy_path: str = ""
+    # Huawei Android 12: default opus fails; AAC works in puncture
+    scrcpy_audio_codec: str = "aac"
+    scrcpy_audio_encoder: str = "OMX.google.aac.encoder"
+    scrcpy_max_size: int = 1280
+    scrcpy_video_bit_rate: str = "8M"
+    scrcpy_require_audio: bool = True
+    scrcpy_extra_args: list[str] = field(default_factory=list)
 
     @property
     def remote_path(self) -> str:
         d = self.remote_dir.rstrip("/")
         return f"{d}/{self.remote_filename.lstrip('/')}"
+
+    @property
+    def use_scrcpy(self) -> bool:
+        return str(self.backend or "").strip().lower() in ("scrcpy", "scrcpy_audio")
 
     def local_root(self, repo_root: Path | None = None) -> Path:
         root = repo_root or REPO_ROOT
@@ -257,10 +271,17 @@ class LatencyConfig:
 
 @dataclass
 class MosConfig:
-    """TTS MOS：主机麦录设备外放（screenrecord 无音频），启发式流畅度 1–5。"""
+    """TTS MOS：启发式流畅度 1–5。
+
+    source:
+      - auto: scrcpy 且 mp4 有音轨 → 从视频抽；否则主机麦
+      - video: 只从 capture.mp4 抽（无音轨则该句失败/N/A）
+      - host_mic: 只主机麦（旧路径）
+    """
 
     enabled: bool = True
-    # 说完后录音时长
+    source: str = "auto"
+    # 说完后录音/抽音时长
     window_sec: float = 5.0
     sample_rate: int = 16000
     # 有效语音低于该秒数 → N/A
@@ -347,6 +368,12 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         adb_path=str(adb_raw.get("adb_path") or "").strip(),
         connect_timeout_sec=float(adb_raw.get("connect_timeout_sec") or 15),
     )
+    extra_raw = cap_raw.get("scrcpy_extra_args")
+    extra_args: list[str] = []
+    if isinstance(extra_raw, list):
+        extra_args = [str(x).strip() for x in extra_raw if str(x).strip()]
+    elif isinstance(extra_raw, str) and extra_raw.strip():
+        extra_args = [extra_raw.strip()]
     capture = CaptureConfig(
         duration_sec=int(cap_raw.get("duration_sec") or 15),
         remote_dir=str(cap_raw.get("remote_dir") or "/sdcard/echo_eval"),
@@ -354,6 +381,22 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         local_dir=str(cap_raw.get("local_dir") or "artifacts"),
         fps=float(cap_raw.get("fps") if cap_raw.get("fps") is not None else 1),
         ffmpeg_path=str(cap_raw.get("ffmpeg_path") or "").strip(),
+        backend=str(cap_raw.get("backend") or "scrcpy").strip().lower() or "scrcpy",
+        scrcpy_path=str(cap_raw.get("scrcpy_path") or "").strip(),
+        scrcpy_audio_codec=str(cap_raw.get("scrcpy_audio_codec") or "aac").strip()
+        or "aac",
+        scrcpy_audio_encoder=str(
+            cap_raw.get("scrcpy_audio_encoder") or "OMX.google.aac.encoder"
+        ).strip(),
+        scrcpy_max_size=int(cap_raw.get("scrcpy_max_size") or 1280),
+        scrcpy_video_bit_rate=str(cap_raw.get("scrcpy_video_bit_rate") or "8M").strip()
+        or "8M",
+        scrcpy_require_audio=bool(
+            cap_raw["scrcpy_require_audio"]
+            if "scrcpy_require_audio" in cap_raw
+            else True
+        ),
+        scrcpy_extra_args=extra_args,
     )
     stimulus = StimulusConfig(
         enabled=bool(stim_raw.get("enabled", False)),
@@ -542,8 +585,12 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         mos_enabled = bool(mos_raw.get("enabled"))
     else:
         mos_enabled = True
+    mos_source = str(mos_raw.get("source") or "auto").strip().lower() or "auto"
+    if mos_source not in ("auto", "video", "host_mic"):
+        mos_source = "auto"
     mos = MosConfig(
         enabled=mos_enabled,
+        source=mos_source,
         window_sec=float(
             mos_raw.get("window_sec") if mos_raw.get("window_sec") is not None else 5.0
         ),
@@ -651,10 +698,18 @@ def apply_runtime_overrides(cfg: AppConfig, overrides: dict[str, Any] | None) ->
         cfg.mos.enabled = bool(overrides["mos_enabled"])
     if overrides.get("mos_window_sec") is not None:
         cfg.mos.window_sec = max(0.5, float(overrides["mos_window_sec"]))
+    if overrides.get("mos_source") is not None:
+        src = str(overrides["mos_source"] or "auto").strip().lower() or "auto"
+        if src in ("auto", "video", "host_mic"):
+            cfg.mos.source = src
     if overrides.get("mos_input_device") is not None:
         cfg.mos.input_device = str(overrides["mos_input_device"] or "").strip()
         if cfg.mos.input_device and not (cfg.mos.input_format or "").strip():
             cfg.mos.input_format = "dshow"
+    if overrides.get("capture_backend") is not None:
+        backend = str(overrides["capture_backend"] or "scrcpy").strip().lower()
+        if backend in ("scrcpy", "scrcpy_audio", "screenrecord"):
+            cfg.capture.backend = "scrcpy" if backend == "scrcpy_audio" else backend
     if overrides.get("wake_enabled") is not None:
         cfg.run.wake_enabled = bool(overrides["wake_enabled"])
     if overrides.get("wake_text") is not None:
@@ -697,6 +752,14 @@ def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
             "local_dir": cfg.capture.local_dir,
             "fps": cfg.capture.fps,
             "ffmpeg_path": cfg.capture.ffmpeg_path,
+            "backend": cfg.capture.backend,
+            "scrcpy_path": cfg.capture.scrcpy_path,
+            "scrcpy_audio_codec": cfg.capture.scrcpy_audio_codec,
+            "scrcpy_audio_encoder": cfg.capture.scrcpy_audio_encoder,
+            "scrcpy_max_size": cfg.capture.scrcpy_max_size,
+            "scrcpy_video_bit_rate": cfg.capture.scrcpy_video_bit_rate,
+            "scrcpy_require_audio": cfg.capture.scrcpy_require_audio,
+            "scrcpy_extra_args": list(cfg.capture.scrcpy_extra_args),
         },
         "stimulus": {
             "enabled": cfg.stimulus.enabled,
@@ -754,6 +817,7 @@ def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
         },
         "mos": {
             "enabled": cfg.mos.enabled,
+            "source": cfg.mos.source,
             "window_sec": cfg.mos.window_sec,
             "sample_rate": cfg.mos.sample_rate,
             "min_speech_sec": cfg.mos.min_speech_sec,

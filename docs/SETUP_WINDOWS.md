@@ -16,7 +16,8 @@
 | 运行时 | Node.js **18+**（建议 20 LTS） | 必须（用控制台时） | Next.js 控制台 |
 | 运行时 | Git | 必须 | 拉代码 |
 | 系统工具 | Android **platform-tools**（`adb`） | 必须 | 无线连接、录屏、Home、预置 ADB |
-| 系统工具 | **FFmpeg**（含 `ffplay` 更佳） | 必须 | 抽帧、edge-tts 转 wav、MOS 录麦 |
+| 系统工具 | **FFmpeg**（含 `ffplay` 更佳） | 必须 | 抽帧、edge-tts 转 wav、MOS 抽音/录麦 |
+| 系统工具 | **scrcpy** 5.x | 推荐（带声录屏） | 本机录 `capture.mp4`（含内录音频）；华为需 AAC |
 | Python 包 | `edge-tts` | 强烈建议 | 默认在线 TTS；失败可回退 Windows SAPI |
 | Python 包 | `openpyxl` | 读 `.xlsx` 时必须 | Excel 数据集；CSV 可不装 |
 | Python 包 | `PyYAML` | 可选 | 配置解析更稳；未装时有内置子集解析 |
@@ -262,29 +263,53 @@ adb shell pm list packages | grep -i qiyi
 
 ---
 
-## 8. TTS MOS 麦克风（可选，默认开启时需配）
+## 8. scrcpy（带声音录屏，推荐）
 
-系统录屏无音频，MOS 用主机麦录设备扬声器。Windows 查设备：
+```powershell
+winget install --id Genymobile.scrcpy -e --source winget
+```
+
+新开终端：`scrcpy --version`。在 `device.yaml`：
+
+```yaml
+capture:
+  backend: scrcpy
+  scrcpy_path: ""   # 或 scrcpy.exe 绝对路径
+  # 华为 Android 12：必须指定 AAC（默认 opus 会失败）
+  scrcpy_audio_codec: aac
+  scrcpy_audio_encoder: OMX.google.aac.encoder
+mos:
+  source: auto      # 有音轨则从 mp4 抽，不再依赖主机麦
+```
+
+指定 adb（与穿刺相同）：
+
+```bash
+export ADB="/d/software/platform-tools/adb.exe"
+```
+
+回退旧无声录屏：`capture.backend: screenrecord`。
+
+## 9. TTS MOS 主机麦（仅 host_mic / 降级）
+
+`mos.source: host_mic` 或 scrcpy 无音轨时需要。Windows 查设备：
 
 ```bash
 ffmpeg -list_devices true -f dshow -i dummy
 ```
 
-在 `device.yaml`：
-
 ```yaml
 mos:
-  enabled: true
-  window_sec: 5.0
+  source: host_mic
   input_format: dshow
-  input_device: audio=麦克风 (Realtek ...)   # 或纯名称，会自动补 audio=
+  input_device: audio=麦克风 (Realtek ...)
 ```
 
-不测 MOS 时可 `mos.enabled: false`。拾音失败只影响该句 MOS，不阻断 GUI 评判。
+不测 MOS：`mos.enabled: false`。
 
 ---
 
-## 9. 启动 Web 控制台（日常主入口）
+## 10. 启动 Web 控制台（日常主入口）
 
 ```bash
 cd /d/code/voiceass/echo-eval
@@ -318,7 +343,7 @@ curl -s http://127.0.0.1:58261/api/ping
 
 ---
 
-## 10. CLI 快速验收（不经过控制台）
+## 11. CLI 快速验收（不经过控制台）
 
 ```bash
 cd /d/code/voiceass/echo-eval
@@ -348,7 +373,7 @@ python -m echo_eval run --excel cases/examples/sample_weather.csv \
 
 ---
 
-## 11. 常见问题
+## 12. 常见问题
 
 | 现象 | 处理 |
 |------|------|
@@ -361,21 +386,23 @@ python -m echo_eval run --excel cases/examples/sample_weather.csv \
 | `screenrecord` 路径异常 | 用 `echo-eval` 封装，或 `MSYS_NO_PATHCONV=1` |
 | 控制台环境检查无反应 | 确认地址是 `127.0.0.1:58261`；看 Git Bash 里 `[echo-eval]` 日志；`curl` 测 `/api/ping` |
 | ping 显示 `platform=linux` | 打到了云端预览，改回本机 URL |
-| MOS 拾音失败 | 配置 `mos.input_device`；或暂时 `mos.enabled: false` |
+| MOS 拾音失败 | scrcpy+`mos.source=auto/video` 可不配麦；否则配 `mos.input_device` |
+| scrcpy opus 编码失败 | 设 `scrcpy_audio_codec: aac` + `OMX.google.aac.encoder` |
+| scrcpy 找不到 adb | `export ADB=.../adb.exe`；`scrcpy_path` 指向 scrcpy.exe |
 | 预置打不开 App | 核对 `packages.yaml` 包名与真机安装 |
 | 磁盘被 artifacts 撑满 | 任务管理「清理媒体」；勿删 `artifacts/precondition_cache` |
 
 ---
 
-## 12. 清单（装完打勾）
+## 13. 清单（装完打勾）
 
 - [ ] Python 3.9+、`pip` 可用  
 - [ ] `pip install -e .`（或至少 `edge-tts`）；xlsx 则已装 `openpyxl`  
 - [ ] Node 18+，`web/` 下 `npm install` 成功  
-- [ ] `adb` / `ffmpeg` 在 PATH 或已写入 `device.yaml`  
+- [ ] `adb` / `ffmpeg` / `scrcpy` 在 PATH 或已写入 `device.yaml`  
 - [ ] `adb devices` 为 `device`  
-- [ ] `configs/device.yaml` 主机/端口正确  
+- [ ] `configs/device.yaml` 主机/端口正确；`capture.backend: scrcpy` + AAC  
 - [ ] （可选）`model.yaml` 已填密钥  
-- [ ] （可选）MOS `input_device` 已配  
+- [ ] （仅 host_mic）MOS `input_device` 已配  
 - [ ] `python -m echo_eval doctor` → OK  
 - [ ] `npm run dev` → `http://127.0.0.1:58261` 可开，`/api/ping` 为本机  

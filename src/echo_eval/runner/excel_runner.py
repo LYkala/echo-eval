@@ -18,6 +18,14 @@ from echo_eval.capture.host_mic import (
 )
 from echo_eval.capture.offline_latency import measure_latency_offline
 from echo_eval.capture.post_speech import poll_post_speech, post_speech_meta
+from echo_eval.capture.scrcpy_record import (
+    ScrcpyError,
+    probe_has_audio,
+    start_scrcpy_record,
+    stop_scrcpy_record,
+    wait_scrcpy_record,
+)
+from echo_eval.capture.video_audio import VideoAudioError, extract_wav_segment
 from echo_eval.cases.excel_cases import EvalCase, load_cases
 from echo_eval.config import (
     AppConfig,
@@ -119,6 +127,19 @@ def _device_posix(path: str) -> str:
     if not path.startswith("//"):
         path = "/" + path
     return path
+
+
+def _mos_use_video_deferred(cfg: AppConfig) -> bool:
+    """Whether MOS wav will be cut from capture.mp4 after recording (not host mic)."""
+    if not cfg.mos.enabled:
+        return False
+    src = str(cfg.mos.source or "auto").strip().lower()
+    if src == "video":
+        return True
+    if src == "host_mic":
+        return False
+    # auto
+    return bool(cfg.capture.use_scrcpy)
 
 
 def math_ceil(x: float) -> int:
@@ -350,8 +371,9 @@ def capture_one_case(
     state = adb.device_state()
     if not state or not state.ok:
         adb.connect(timeout_sec=cfg.adb.connect_timeout_sec)
-    if not adb.has_screenrecord():
-        raise AdbError("设备无 screenrecord")
+    use_scrcpy = bool(cfg.capture.use_scrcpy)
+    if not use_scrcpy and not adb.has_screenrecord():
+        raise AdbError("设备无 screenrecord（可改 capture.backend: scrcpy）")
 
     run_dir = cfg.capture.local_root() / f"{_run_id()}_{_safe_name(case.case_id)}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -471,15 +493,19 @@ def capture_one_case(
     remote_file = f"{remote_dir}/{cfg.capture.remote_filename.lstrip('/')}"
     remote_on_device = remote_file if remote_file.startswith("/") else f"/{remote_file}"
     local_video = run_dir / "capture.mp4"
+    mos_from_video = _mos_use_video_deferred(cfg)
 
-    adb.ensure_remote_dir(remote_dir)
-    adb.rm_remote(remote_on_device)
+    if not use_scrcpy:
+        adb.ensure_remote_dir(remote_dir)
+        adb.rm_remote(remote_on_device)
 
     timeline: dict[str, Any] = {
         "record_started_at": None,
         "head_delay_sec": head,
         "tail_sec": tail,
         "planned_duration_sec": duration_sec,
+        "capture_backend": "scrcpy" if use_scrcpy else "screenrecord",
+        "mos_source_plan": "video" if mos_from_video else "host_mic",
         "wake": None,
         "steps": [],
     }
@@ -492,10 +518,36 @@ def capture_one_case(
         index=case_index,
         total=case_total,
         device_status="running",
-        device_label=f"录屏+播报（{case_index}/{case_total}）",
+        device_label=(
+            f"录屏+播报（scrcpy）（{case_index}/{case_total}）"
+            if use_scrcpy
+            else f"录屏+播报（{case_index}/{case_total}）"
+        ),
         status="running",
     )
-    proc = adb.screenrecord_start(remote_on_device, duration_sec)
+    scrcpy_proc = None
+    scrcpy_meta = None
+    proc = None
+    if use_scrcpy:
+        try:
+            scrcpy_proc, scrcpy_meta = start_scrcpy_record(
+                local_video,
+                serial=serial,
+                duration_sec=duration_sec,
+                scrcpy_path=cfg.capture.scrcpy_path,
+                adb_path=cfg.adb.adb_path,
+                audio_codec=cfg.capture.scrcpy_audio_codec,
+                audio_encoder=cfg.capture.scrcpy_audio_encoder,
+                max_size=int(cfg.capture.scrcpy_max_size),
+                video_bit_rate=str(cfg.capture.scrcpy_video_bit_rate),
+                extra_args=list(cfg.capture.scrcpy_extra_args or []),
+                require_audio=bool(cfg.capture.scrcpy_require_audio),
+            )
+        except ScrcpyError:
+            stop_scrcpy_record(scrcpy_proc)
+            raise
+    else:
+        proc = adb.screenrecord_start(remote_on_device, duration_sec)
     if head > 0:
         time.sleep(head)
 
@@ -560,7 +612,17 @@ def capture_one_case(
             mos_info: dict[str, Any] = {"enabled": bool(cfg.mos.enabled)}
             mic_proc = None
             mic_meta = None
-            if cfg.mos.enabled:
+            if cfg.mos.enabled and mos_from_video:
+                mos_info.update(
+                    {
+                        "source": "video",
+                        "deferred": True,
+                        "ok": True,
+                        "path": "",
+                        "window_sec": float(cfg.mos.window_sec),
+                    }
+                )
+            elif cfg.mos.enabled:
                 mos_wav = run_dir / "mos_audio" / f"step_{step_i:02d}.wav"
                 try:
                     mic_proc, mic_meta = start_host_mic_record(
@@ -572,8 +634,11 @@ def capture_one_case(
                         sample_rate=int(cfg.mos.sample_rate),
                     )
                     mos_info.update(host_mic_meta(mic_meta))
+                    mos_info["source"] = "host_mic"
                 except HostMicError as e:
-                    mos_info.update({"ok": False, "error": str(e), "path": ""})
+                    mos_info.update(
+                        {"ok": False, "error": str(e), "path": "", "source": "host_mic"}
+                    )
 
             # 现场只做短 ASR 采图；时延改 pull 后离线算
             post_info: dict[str, Any] = {
@@ -609,6 +674,12 @@ def capture_one_case(
             if mic_proc is not None and mic_meta is not None:
                 mic_meta = finish_host_mic_record(mic_proc, mic_meta)
                 mos_info.update(host_mic_meta(mic_meta))
+                mos_elapsed = float(cfg.mos.window_sec)
+            elif cfg.mos.enabled and mos_from_video:
+                # Keep wall time so assistant reply lands inside the video window.
+                extra = max(0.0, float(cfg.mos.window_sec) - post_elapsed)
+                if extra > 0:
+                    time.sleep(extra)
                 mos_elapsed = float(cfg.mos.window_sec)
 
             wait_sec = float(item["wait_sec"])
@@ -646,24 +717,116 @@ def capture_one_case(
             elapsed = time.time() - t0
             remain = duration_sec - elapsed
             time.sleep(max(0.0, min(tail, remain)))
-        adb.screenrecord_wait(proc, duration_sec=duration_sec)
+        if use_scrcpy:
+            assert scrcpy_proc is not None and scrcpy_meta is not None
+            wait_scrcpy_record(scrcpy_proc, scrcpy_meta)
+        else:
+            assert proc is not None
+            adb.screenrecord_wait(proc, duration_sec=duration_sec)
     except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
+        if use_scrcpy:
+            stop_scrcpy_record(scrcpy_proc)
+        else:
+            try:
+                if proc is not None:
+                    proc.kill()
+            except Exception:
+                pass
         raise
 
-    _prog_device(
-        case,
-        index=case_index,
-        total=case_total,
-        device_status="running",
-        device_label=f"拉取录屏（{case_index}/{case_total}）",
-        status="running",
-    )
-    adb.pull(_device_posix(remote_on_device), local_video)
-    adb.rm_remote(remote_on_device)
+    if use_scrcpy:
+        _prog_device(
+            case,
+            index=case_index,
+            total=case_total,
+            device_status="running",
+            device_label=f"整理录屏（{case_index}/{case_total}）",
+            status="running",
+        )
+        if not local_video.is_file():
+            raise ScrcpyError(f"scrcpy 未写出 {local_video}")
+        timeline["capture_audio"] = probe_has_audio(
+            local_video, ffmpeg_path=cfg.capture.ffmpeg_path
+        )
+    else:
+        _prog_device(
+            case,
+            index=case_index,
+            total=case_total,
+            device_status="running",
+            device_label=f"拉取录屏（{case_index}/{case_total}）",
+            status="running",
+        )
+        adb.pull(_device_posix(remote_on_device), local_video)
+        adb.rm_remote(remote_on_device)
+        timeline["capture_audio"] = False
+
+    # Deferred MOS: cut wav from capture.mp4 after recording is ready.
+    if cfg.mos.enabled and mos_from_video:
+        has_a = bool(timeline.get("capture_audio"))
+        for step in timeline.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            rec = step.get("mos_record") or {}
+            if not rec.get("deferred"):
+                continue
+            step_i = int(step.get("index") or 0)
+            mos_wav = run_dir / "mos_audio" / f"step_{step_i:02d}.wav"
+            if not has_a:
+                if str(cfg.mos.source or "auto").strip().lower() == "auto":
+                    # Fall back to empty; host mic already skipped this case.
+                    rec.update(
+                        {
+                            "ok": False,
+                            "deferred": False,
+                            "error": "mp4 无音轨，auto 本趟未录主机麦",
+                            "path": "",
+                            "source": "video",
+                        }
+                    )
+                else:
+                    rec.update(
+                        {
+                            "ok": False,
+                            "deferred": False,
+                            "error": "capture.mp4 无音轨",
+                            "path": "",
+                            "source": "video",
+                        }
+                    )
+                step["mos_record"] = rec
+                continue
+            try:
+                start = float(step.get("play_end_offset_sec") or 0.0)
+                extract_wav_segment(
+                    local_video,
+                    mos_wav,
+                    start_sec=start,
+                    duration_sec=float(cfg.mos.window_sec),
+                    sample_rate=int(cfg.mos.sample_rate),
+                    ffmpeg_path=cfg.capture.ffmpeg_path,
+                )
+                rec.update(
+                    {
+                        "ok": True,
+                        "deferred": False,
+                        "path": str(mos_wav),
+                        "source": "video",
+                        "start_sec": start,
+                        "error": "",
+                    }
+                )
+            except VideoAudioError as e:
+                rec.update(
+                    {
+                        "ok": False,
+                        "deferred": False,
+                        "path": "",
+                        "source": "video",
+                        "error": str(e),
+                    }
+                )
+            step["mos_record"] = rec
 
     _prog_device(
         case,
