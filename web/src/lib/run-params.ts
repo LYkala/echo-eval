@@ -12,8 +12,10 @@ export type RunParamOverrides = {
   max_retries?: number;
   step_settle_sec?: number;
   asr_enabled?: boolean;
+  asr_capture_mode?: string;
   asr_window_sec?: number;
   asr_interval_sec?: number;
+  asr_early_stop?: boolean;
   latency_enabled?: boolean;
   latency_window_sec?: number;
   mos_enabled?: boolean;
@@ -36,8 +38,10 @@ export type RunParamDefaults = {
   max_retries: number;
   step_settle_sec: number;
   asr_enabled: boolean;
+  asr_capture_mode: string;
   asr_window_sec: number;
   asr_interval_sec: number;
+  asr_early_stop: boolean;
   latency_enabled: boolean;
   latency_window_sec: number;
   mos_enabled: boolean;
@@ -60,8 +64,10 @@ const FALLBACK_DEFAULTS: RunParamDefaults = {
   max_retries: 3,
   step_settle_sec: 1,
   asr_enabled: true,
-  asr_window_sec: 4,
-  asr_interval_sec: 0.5,
+  asr_capture_mode: "offline",
+  asr_window_sec: 8,
+  asr_interval_sec: 0.3,
+  asr_early_stop: false,
   latency_enabled: true,
   latency_window_sec: 8,
   mos_enabled: true,
@@ -112,8 +118,15 @@ export function readRunParamDefaults(): RunParamDefaults {
       max_retries: Math.max(1, Math.floor(Number(raw.max_retries ?? FALLBACK_DEFAULTS.max_retries))),
       step_settle_sec: Number(raw.step_settle_sec ?? FALLBACK_DEFAULTS.step_settle_sec),
       asr_enabled: raw.asr_enabled !== undefined ? Boolean(raw.asr_enabled) : FALLBACK_DEFAULTS.asr_enabled,
+      asr_capture_mode:
+        String(raw.asr_capture_mode ?? FALLBACK_DEFAULTS.asr_capture_mode) ||
+        FALLBACK_DEFAULTS.asr_capture_mode,
       asr_window_sec: Number(raw.asr_window_sec ?? FALLBACK_DEFAULTS.asr_window_sec),
       asr_interval_sec: Number(raw.asr_interval_sec ?? FALLBACK_DEFAULTS.asr_interval_sec),
+      asr_early_stop:
+        raw.asr_early_stop !== undefined
+          ? Boolean(raw.asr_early_stop)
+          : FALLBACK_DEFAULTS.asr_early_stop,
       latency_enabled:
         raw.latency_enabled !== undefined ? Boolean(raw.latency_enabled) : FALLBACK_DEFAULTS.latency_enabled,
       latency_window_sec: Number(raw.latency_window_sec ?? FALLBACK_DEFAULTS.latency_window_sec),
@@ -163,6 +176,7 @@ export function sanitizeOverrides(input: RunParamOverrides | null | undefined): 
   }
   const boolKeys = [
     "asr_enabled",
+    "asr_early_stop",
     "latency_enabled",
     "mos_enabled",
     "wake_enabled",
@@ -171,6 +185,12 @@ export function sanitizeOverrides(input: RunParamOverrides | null | undefined): 
   for (const k of boolKeys) {
     if (input[k] === undefined || input[k] === null) continue;
     out[k] = Boolean(input[k]);
+  }
+  if (input.asr_capture_mode !== undefined && input.asr_capture_mode !== null) {
+    const m = String(input.asr_capture_mode).trim().toLowerCase();
+    if (m === "live" || m === "offline" || m === "hybrid") {
+      out.asr_capture_mode = m;
+    }
   }
   if (input.mos_input_device !== undefined && input.mos_input_device !== null) {
     out.mos_input_device = String(input.mos_input_device);

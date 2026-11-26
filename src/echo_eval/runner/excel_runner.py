@@ -16,6 +16,7 @@ from echo_eval.capture.host_mic import (
     host_mic_meta,
     start_host_mic_record,
 )
+from echo_eval.capture.offline_asr_frames import extract_asr_frames_from_video
 from echo_eval.capture.offline_latency import measure_latency_offline
 from echo_eval.capture.post_speech import poll_post_speech, post_speech_meta
 from echo_eval.capture.scrcpy_record import (
@@ -640,14 +641,17 @@ def capture_one_case(
                         {"ok": False, "error": str(e), "path": "", "source": "host_mic"}
                     )
 
-            # 现场只做短 ASR 采图；时延改 pull 后离线算
+            # ASR: live 现场截屏；offline 等视频就绪后抽帧；时延始终离线
+            asr_mode = str(cfg.asr.capture_mode or "offline").strip().lower()
             post_info: dict[str, Any] = {
                 "asr_enabled": bool(cfg.asr.enabled),
+                "asr_capture_mode": asr_mode,
                 "latency_enabled": bool(cfg.latency.enabled),
                 "latency_mode": "offline_after_pull",
             }
             post_elapsed = 0.0
-            if cfg.asr.enabled:
+            do_live_asr = bool(cfg.asr.enabled) and asr_mode in ("live", "hybrid")
+            if do_live_asr:
                 _prog_device(
                     case,
                     index=case_index,
@@ -669,6 +673,19 @@ def capture_one_case(
                 )
                 post_info.update(post_speech_meta(poll))
                 post_elapsed = float(poll.elapsed_sec or 0.0)
+            elif cfg.asr.enabled and asr_mode == "offline":
+                # Keep wall time so on-screen transcript can appear in the recording.
+                need = float(cfg.asr.window_sec)
+                if need > 0:
+                    time.sleep(need)
+                post_elapsed = need
+                post_info["asr"] = {
+                    "enabled": True,
+                    "mode": "offline_pending",
+                    "paths": [],
+                    "offsets_sec": [],
+                    "count": 0,
+                }
 
             mos_elapsed = 0.0
             if mic_proc is not None and mic_meta is not None:
@@ -827,6 +844,49 @@ def capture_one_case(
                     }
                 )
             step["mos_record"] = rec
+
+    # Offline / hybrid ASR: sample frames from capture.mp4 after recording.
+    asr_mode_final = str(cfg.asr.capture_mode or "offline").strip().lower()
+    if cfg.asr.enabled and asr_mode_final in ("offline", "hybrid") and local_video.is_file():
+        asr_dir = run_dir / "asr_frames"
+        for step in timeline.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            poll = step.get("asr_poll") if isinstance(step.get("asr_poll"), dict) else {}
+            live_paths = [str(p) for p in (poll.get("paths") or []) if p]
+            need_offline = asr_mode_final == "offline" or len(live_paths) < 2
+            if not need_offline:
+                continue
+            start = float(step.get("play_end_offset_sec") or 0.0)
+            offline = extract_asr_frames_from_video(
+                local_video,
+                asr_dir,
+                start_sec=start,
+                window_sec=float(cfg.asr.window_sec),
+                interval_sec=float(cfg.asr.interval_sec),
+                ffmpeg_path=cfg.capture.ffmpeg_path,
+                step_index=int(step.get("index") or 0),
+            )
+            merged = live_paths + [str(p) for p in (offline.get("paths") or []) if p]
+            seen_p: set[str] = set()
+            uniq: list[str] = []
+            for p in merged:
+                if p not in seen_p:
+                    seen_p.add(p)
+                    uniq.append(p)
+            step["asr_poll"] = {
+                "enabled": True,
+                "mode": offline.get("mode") or asr_mode_final,
+                "paths": uniq,
+                "offsets_sec": list(offline.get("offsets_sec") or []),
+                "count": len(uniq),
+                "early_stopped": bool(poll.get("early_stopped")),
+                "offline": {
+                    "ok": offline.get("ok"),
+                    "count": offline.get("count"),
+                    "error": offline.get("error") or "",
+                },
+            }
 
     _prog_device(
         case,

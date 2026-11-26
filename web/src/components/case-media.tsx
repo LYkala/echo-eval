@@ -19,7 +19,13 @@ export function CaseMedia({
       {video ? (
         <div className="rounded-md border bg-card/70 px-3 py-2">
           <div className="mb-1 text-xs text-muted-foreground">{video.name}</div>
-          <video controls preload="metadata" src={video.url} className="max-h-[360px] w-full rounded bg-black" />
+          <video
+            controls
+            preload="metadata"
+            src={video.url}
+            className="max-h-[360px] w-full rounded bg-black"
+            // Range-enabled /api/artifacts allows seeking in Chromium/Edge
+          />
         </div>
       ) : null}
 

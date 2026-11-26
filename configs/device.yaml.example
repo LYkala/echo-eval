@@ -58,12 +58,15 @@ run:
   wake_text: "小翼管家"
   wake_wait_sec: 3.0
 
-# ASR 准确率（P1）：句后多帧截屏 + VL；与 GUI 成功率互不影响
+# ASR 准确率（P1）：与 GUI 成功率互不影响
+# capture_mode: offline=从 capture.mp4 抽帧（推荐，字幕闪现更稳）
+#               live=现场 adb 截屏；hybrid=现场不足再用视频补
 asr:
   enabled: true
-  interval_sec: 0.5
-  window_sec: 4.0
-  early_stop: true
+  capture_mode: offline
+  interval_sec: 0.3
+  window_sec: 8.0
+  early_stop: false
   early_stop_stable_frames: 2
   bottom_band_ratio: 0.22
   # 多条用 | 分隔

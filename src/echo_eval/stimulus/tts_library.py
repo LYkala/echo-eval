@@ -220,11 +220,14 @@ def add_utterance(
     )
     if existing and not force:
         rel = str(existing.get("rel_path") or "")
-        return {
-            "status": "exists",
-            "entry": existing,
-            "path": str(library_root / rel),
-        }
+        existing_path = library_root / rel if rel else None
+        if existing_path is not None and existing_path.is_file():
+            return {
+                "status": "exists",
+                "entry": existing,
+                "path": str(existing_path),
+            }
+        # Index hit but wav missing → fall through and re-synthesize (补充合成)
 
     profile_dir = _safe_token(profile.replace(":", "_"))
     fname = f"{_safe_token(cid)}_{step:02d}_{text_hash(text)}.wav"
@@ -263,6 +266,11 @@ def add_utterance(
     return {"status": "created", "entry": entry, "path": str(out_wav.resolve())}
 
 
+def _emit_prebuild_progress(payload: dict[str, Any]) -> None:
+    """One NDJSON progress line for streaming console UI."""
+    print(json.dumps(payload, ensure_ascii=False), flush=True)
+
+
 def prebuild_from_excel(
     excel_path: str | Path,
     library_root: Path,
@@ -275,72 +283,123 @@ def prebuild_from_excel(
     wake_text: str = "",
     force: bool = False,
     default_wait_sec: float = 3.0,
+    progress: bool = False,
 ) -> dict[str, Any]:
-    """Pre-synthesize all case steps (+ optional wake) into the library."""
+    """Pre-synthesize all case steps (+ optional wake) into the library.
+
+    force=False skips intact library hits (补充缺失/失败)；force=True 全量重做。
+    When progress=True, prints NDJSON lines: progress / done.
+    """
     from echo_eval.cases.excel_cases import load_cases
 
     cases = load_cases(excel_path, default_wait_sec=float(default_wait_sec))
     created = 0
     exists = 0
     errors: list[dict[str, str]] = []
-    total = 0
 
+    jobs: list[dict[str, Any]] = []
     wake = (wake_text or "").strip()
     if wake:
-        total += 1
+        jobs.append(
+            {
+                "text": wake,
+                "case_id": "_wake_",
+                "step_index": 0,
+                "source": "wake",
+                "label": f"唤醒「{wake}」",
+            }
+        )
+    for case in cases:
+        for i, step in enumerate(case.steps, 1):
+            jobs.append(
+                {
+                    "text": step.text,
+                    "case_id": case.case_id,
+                    "step_index": i,
+                    "source": "dataset",
+                    "label": f"{case.case_id}#{i}",
+                }
+            )
+
+    total = len(jobs)
+    if progress:
+        _emit_prebuild_progress(
+            {
+                "type": "start",
+                "total": total,
+                "backend": backend,
+                "voice": voice,
+                "force": bool(force),
+                "wake_text": wake,
+                "wake_included": bool(wake),
+            }
+        )
+
+    for done_i, job in enumerate(jobs, 1):
         try:
             r = add_utterance(
                 library_root,
-                text=wake,
-                case_id="_wake_",
-                step_index=0,
+                text=str(job["text"]),
+                case_id=str(job["case_id"]),
+                step_index=int(job["step_index"]),
                 backend=backend,
                 voice=voice,
                 rate=rate,
                 ffmpeg_path=ffmpeg_path,
                 fallback_sapi=fallback_sapi,
-                source="wake",
+                source=str(job["source"]),
                 force=force,
             )
-            if r["status"] == "created":
+            status = str(r.get("status") or "")
+            if status == "created":
                 created += 1
             else:
                 exists += 1
-        except Exception as e:
-            errors.append({"case_id": "_wake_", "step": "0", "error": str(e)})
-
-    for case in cases:
-        for i, step in enumerate(case.steps, 1):
-            total += 1
-            try:
-                r = add_utterance(
-                    library_root,
-                    text=step.text,
-                    case_id=case.case_id,
-                    step_index=i,
-                    backend=backend,
-                    voice=voice,
-                    rate=rate,
-                    ffmpeg_path=ffmpeg_path,
-                    fallback_sapi=fallback_sapi,
-                    source="dataset",
-                    force=force,
-                )
-                if r["status"] == "created":
-                    created += 1
-                else:
-                    exists += 1
-            except Exception as e:
-                errors.append(
+            if progress:
+                _emit_prebuild_progress(
                     {
-                        "case_id": case.case_id,
-                        "step": str(i),
+                        "type": "progress",
+                        "done": done_i,
+                        "total": total,
+                        "percent": round(100.0 * done_i / float(total), 1) if total else 100.0,
+                        "status": status or "ok",
+                        "case_id": job["case_id"],
+                        "step": str(job["step_index"]),
+                        "label": job["label"],
+                        "created": created,
+                        "exists": exists,
+                        "errors": len(errors),
+                    }
+                )
+        except Exception as e:
+            errors.append(
+                {
+                    "case_id": str(job["case_id"]),
+                    "step": str(job["step_index"]),
+                    "error": str(e),
+                }
+            )
+            if progress:
+                _emit_prebuild_progress(
+                    {
+                        "type": "progress",
+                        "done": done_i,
+                        "total": total,
+                        "percent": round(100.0 * done_i / float(total), 1) if total else 100.0,
+                        "status": "error",
+                        "case_id": job["case_id"],
+                        "step": str(job["step_index"]),
+                        "label": job["label"],
                         "error": str(e),
+                        "created": created,
+                        "exists": exists,
+                        "errors": len(errors),
                     }
                 )
 
     data = load_index(library_root)
-    return {
+    result = {
+        "type": "done",
         "library_root": str(library_root),
         "total": total,
         "created": created,
@@ -348,7 +407,15 @@ def prebuild_from_excel(
         "errors": errors,
         "entry_count": len(data.get("entries") or []),
         "updated_at": data.get("updated_at") or "",
+        "wake_included": bool(wake),
+        "wake_text": wake,
+        "backend": backend,
+        "voice": voice,
+        "force": bool(force),
     }
+    if progress:
+        _emit_prebuild_progress(result)
+    return result
 
 
 def list_library_voices(library_root: Path) -> list[dict[str, Any]]:

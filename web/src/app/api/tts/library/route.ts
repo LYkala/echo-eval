@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import {
@@ -35,6 +35,92 @@ function runPythonJson(code: string, args: string[] = [], timeoutMs = 120_000): 
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   const last = lines[lines.length - 1] || text;
   return JSON.parse(last);
+}
+
+const PREBUILD_CODE =
+  "from echo_eval.stimulus.tts_library import resolve_library_root, prebuild_from_excel\n" +
+  "from echo_eval.config import load_config\n" +
+  "import sys\n" +
+  "excel, lib_dir, backend, voice, force, wake = sys.argv[1:7]\n" +
+  "cfg = load_config()\n" +
+  "root = resolve_library_root(lib_dir)\n" +
+  "prebuild_from_excel(\n" +
+  "  excel, root,\n" +
+  "  backend=backend, voice=voice, rate=int(cfg.tts.rate),\n" +
+  "  ffmpeg_path=cfg.capture.ffmpeg_path,\n" +
+  "  fallback_sapi=bool(cfg.tts.fallback_sapi),\n" +
+  "  wake_text=wake, force=force=='1',\n" +
+  "  default_wait_sec=float(cfg.run.step_wait_sec),\n" +
+  "  progress=True,\n" +
+  ")\n";
+
+function streamPrebuild(args: string[]): Response {
+  const encoder = new TextEncoder();
+  const child = spawn(pythonBin(), ["-c", PREBUILD_CODE, ...args], {
+    cwd: repoRoot(),
+    env: pythonChildEnv(),
+    windowsHide: true,
+  });
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let buf = "";
+      const onData = (chunk: Buffer | string) => {
+        buf += typeof chunk === "string" ? chunk : chunk.toString("utf-8");
+        let idx: number;
+        while ((idx = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, idx).trim();
+          buf = buf.slice(idx + 1);
+          if (!line) continue;
+          // Forward only JSON progress lines; drop [echo-eval] warns
+          if (line.startsWith("{")) {
+            controller.enqueue(encoder.encode(line + "\n"));
+          }
+        }
+      };
+      child.stdout?.on("data", onData);
+      child.stderr?.on("data", (chunk: Buffer) => {
+        const text = chunk.toString("utf-8").trim();
+        if (!text) return;
+        controller.enqueue(
+          encoder.encode(
+            JSON.stringify({ type: "log", level: "stderr", text: text.slice(0, 500) }) + "\n"
+          )
+        );
+      });
+      child.on("error", (err) => {
+        controller.enqueue(
+          encoder.encode(JSON.stringify({ type: "error", error: String(err) }) + "\n")
+        );
+        controller.close();
+      });
+      child.on("close", (code) => {
+        if (buf.trim().startsWith("{")) {
+          controller.enqueue(encoder.encode(buf.trim() + "\n"));
+        }
+        if (code !== 0) {
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({ type: "error", error: `prebuild exit ${code}` }) + "\n"
+            )
+          );
+        }
+        controller.close();
+      });
+    },
+    cancel() {
+      try {
+        child.kill();
+      } catch {
+        /* ignore */
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
 function resolveExcelPath(datasetId: string): string {
@@ -155,26 +241,15 @@ export async function POST(req: Request) {
         body.wake_enabled === false
           ? ""
           : String(body.wake_text || "小翼管家").trim() || "小翼管家";
-      const data = runPythonJson(
-        "from echo_eval.stimulus.tts_library import resolve_library_root, prebuild_from_excel\n" +
-          "from echo_eval.config import load_config\n" +
-          "import json, sys\n" +
-          "excel, lib_dir, backend, voice, force, wake = sys.argv[1:7]\n" +
-          "cfg = load_config()\n" +
-          "root = resolve_library_root(lib_dir)\n" +
-          "r = prebuild_from_excel(\n" +
-          "  excel, root,\n" +
-          "  backend=backend, voice=voice, rate=int(cfg.tts.rate),\n" +
-          "  ffmpeg_path=cfg.capture.ffmpeg_path,\n" +
-          "  fallback_sapi=bool(cfg.tts.fallback_sapi),\n" +
-          "  wake_text=wake, force=force=='1',\n" +
-          "  default_wait_sec=float(cfg.run.step_wait_sec),\n" +
-          ")\n" +
-          "print(json.dumps(r, ensure_ascii=False))",
-        [excel, libraryDir, backend, voice, force ? "1" : "0", wakeText],
-        600_000
-      );
-      return NextResponse.json(data);
+      // Always stream NDJSON progress (created/exists/errors + percent)
+      return streamPrebuild([
+        excel,
+        libraryDir,
+        backend,
+        voice,
+        force ? "1" : "0",
+        wakeText,
+      ]);
     }
 
     if (action === "custom") {

@@ -125,7 +125,7 @@ Web 控制台「当前任务」用两条进度条区分：**设备** / **评判*
 |----|------|------|
 | `head_delay_sec` | 1 | 开录后、第一句前的静默 |
 | `tail_sec` | 5 | 最后一句后多录多久，便于界面出结果 |
-| `step_wait_sec` | 3 | 表无「等待时间」时的默认步间等待 |
+| `step_wait_sec` | 3 | 表无「等待时间」时的默认步间等待；多轮对话的轮间距也靠它（无单独 `round_gap_sec`） |
 | `return_home_after_case` | true | 每条结束后是否按系统 Home |
 | `return_home_wait_sec` | 2 | Home 后等多久再开下一条 |
 | `judge_async` | true | 抽帧+评判是否后台并行 |

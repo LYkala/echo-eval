@@ -11,6 +11,8 @@
 
 现场不再为时延做高频 screencap；时延从 `capture.mp4` 按 `play_end_offset_sec` 抽帧离线算。
 
+ASR 默认 `capture_mode: offline`：录屏结束后按同样时间轴从 `capture.mp4` 抽帧，适合字幕一闪而过；`live`/`hybrid` 仍保留现场截屏路径。
+
 ## P2 端到端时延（离线）
 
 **定义**：`play_end`（主机 TTS 播完）→ 画面**首变**（忽略底部识别条文字变化）。

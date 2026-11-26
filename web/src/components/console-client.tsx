@@ -159,8 +159,10 @@ type RunParams = {
   max_retries: number;
   step_settle_sec: number;
   asr_enabled: boolean;
+  asr_capture_mode: string;
   asr_window_sec: number;
   asr_interval_sec: number;
+  asr_early_stop: boolean;
   latency_enabled: boolean;
   latency_window_sec: number;
   mos_enabled: boolean;
@@ -211,8 +213,10 @@ const PARAM_FALLBACK: RunParams = {
   max_retries: 3,
   step_settle_sec: 1,
   asr_enabled: true,
-  asr_window_sec: 4,
-  asr_interval_sec: 0.5,
+  asr_capture_mode: "offline",
+  asr_window_sec: 8,
+  asr_interval_sec: 0.3,
+  asr_early_stop: false,
   latency_enabled: true,
   latency_window_sec: 8,
   mos_enabled: true,
@@ -362,6 +366,7 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
   function setParam<K extends keyof RunParams>(key: K, raw: string) {
     if (
       key === "mos_input_device" ||
+      key === "asr_capture_mode" ||
       key === "wake_text" ||
       key === "tts_backend" ||
       key === "tts_voice" ||
@@ -374,6 +379,7 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
       key === "asr_enabled" ||
       key === "latency_enabled" ||
       key === "mos_enabled" ||
+      key === "asr_early_stop" ||
       key === "wake_enabled" ||
       key === "tts_prefer_library"
     ) {
@@ -545,7 +551,11 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
 
   async function prebuildTtsLibrary(force = false) {
     setTtsLibraryBusy(true);
-    setTtsLibraryMsg("");
+    setTtsLibraryMsg(
+      force
+        ? "强制重合成中…"
+        : "补充合成中（跳过已有，重建缺失文件）…"
+    );
     try {
       const res = await fetch("/api/tts/library", {
         method: "POST",
@@ -561,20 +571,104 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
           force,
         }),
       });
-      const data = (await res.json()) as {
-        error?: string;
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText.slice(0, 300) || `prebuild HTTP ${res.status}`);
+      }
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("无进度流");
+      const dec = new TextDecoder();
+      let buf = "";
+      type PrebuildDone = {
         created?: number;
         exists?: number;
         total?: number;
         errors?: Array<{ case_id?: string; step?: string; error?: string }>;
         entry_count?: number;
+        wake_included?: boolean;
+        wake_text?: string;
+        error?: string;
       };
-      if (!res.ok) throw new Error(data.error || `prebuild HTTP ${res.status}`);
-      const errN = (data.errors || []).length;
+      let lastDone: PrebuildDone | null = null;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line.startsWith("{")) continue;
+          try {
+            const ev = JSON.parse(line) as {
+              type?: string;
+              percent?: number;
+              done?: number;
+              total?: number;
+              label?: string;
+              status?: string;
+              created?: number;
+              exists?: number;
+              errors?: number | Array<{ case_id?: string; step?: string; error?: string }>;
+              entry_count?: number;
+              wake_included?: boolean;
+              wake_text?: string;
+              error?: string;
+              text?: string;
+            };
+            if (ev.type === "start") {
+              setTtsLibraryMsg(
+                `开始预合成 0/${ev.total ?? "?"} · ${libBackend}/${libVoice}` +
+                  (ev.wake_included
+                    ? ` · 含唤醒「${ev.wake_text || params.wake_text}」(edge)`
+                    : " · 不含唤醒词")
+              );
+            } else if (ev.type === "progress") {
+              setTtsLibraryMsg(
+                `进度 ${ev.percent ?? 0}%（${ev.done}/${ev.total}）` +
+                  ` · ${ev.label || ""} · ${ev.status || ""}` +
+                  ` · 新建 ${ev.created ?? 0} / 已有 ${ev.exists ?? 0}` +
+                  (typeof ev.errors === "number" && ev.errors ? ` / 失败 ${ev.errors}` : "")
+              );
+            } else if (ev.type === "done") {
+              lastDone = {
+                created: ev.created,
+                exists: ev.exists,
+                total: ev.total,
+                errors: Array.isArray(ev.errors) ? ev.errors : [],
+                entry_count: ev.entry_count,
+                wake_included: ev.wake_included,
+                wake_text: ev.wake_text,
+                error: ev.error,
+              };
+            } else if (ev.type === "error") {
+              throw new Error(ev.error || ev.text || "预合成失败");
+            }
+          } catch (parseErr) {
+            if (parseErr instanceof SyntaxError) continue;
+            throw parseErr;
+          }
+        }
+      }
+      if (!lastDone) throw new Error("预合成未返回完成结果");
+      const errList = Array.isArray(lastDone.errors) ? lastDone.errors : [];
       setTtsLibraryMsg(
-        `预合成完成（${libBackend}/${libVoice}）：新建 ${data.created ?? 0} / 已有 ${data.exists ?? 0} / 合计 ${data.total ?? 0}` +
-          (errN ? `，失败 ${errN}` : "") +
-          `，库内 ${data.entry_count ?? "?"} 条`
+        `预合成完成（${libBackend}/${libVoice}）：新建 ${lastDone.created ?? 0} / 已有 ${lastDone.exists ?? 0} / 合计 ${lastDone.total ?? 0}` +
+          (errList.length ? `，失败 ${errList.length}` : "") +
+          `，库内 ${lastDone.entry_count ?? "?"} 条` +
+          (lastDone.wake_included
+            ? `\n已含唤醒词「${lastDone.wake_text || params.wake_text}」（${libBackend}）`
+            : "\n未包含唤醒词（开测页未启用唤醒）") +
+          (errList.length
+            ? `\n失败条目可再点「补充缺失」重试：\n` +
+              errList
+                .slice(0, 8)
+                .map(
+                  (e: { case_id?: string; step?: string; error?: string }) =>
+                    `- ${e.case_id}#${e.step}: ${e.error}`
+                )
+                .join("\n")
+            : "")
       );
       await refreshTtsLibrary();
     } catch (e) {
@@ -625,7 +719,13 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
   }
 
   function setBoolParam(
-    key: "asr_enabled" | "latency_enabled" | "mos_enabled" | "wake_enabled" | "tts_prefer_library",
+    key:
+      | "asr_enabled"
+      | "latency_enabled"
+      | "mos_enabled"
+      | "asr_early_stop"
+      | "wake_enabled"
+      | "tts_prefer_library",
     value: boolean
   ) {
     setParams((prev) => ({ ...prev, [key]: value }));
@@ -1462,6 +1562,13 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
                     库中尚无音色。选择上方后端/音色后点「预合成当前数据集」。
                   </p>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  预合成覆盖当前数据集全部步骤
+                  {params.wake_enabled
+                    ? `，并包含唤醒词「${params.wake_text || "小翼管家"}」（使用上方所选 ${libBackend === "edge" ? "edge-tts" : "SAPI"}）`
+                    : "；当前开测参数未启用唤醒，将不合成唤醒词"}
+                  。「补充缺失」跳过已有完整音频，重建失败/缺文件条目。
+                </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -1469,7 +1576,9 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
                     disabled={ttsLibraryBusy || !datasetId}
                     onClick={() => void prebuildTtsLibrary(false)}
                   >
-                    {ttsLibraryBusy ? "处理中…" : `预合成（${libBackend === "edge" ? libVoice : "SAPI"}）`}
+                    {ttsLibraryBusy
+                      ? "处理中…"
+                      : `补充缺失（${libBackend === "edge" ? libVoice : "SAPI"}）`}
                   </Button>
                   <Button
                     type="button"
@@ -1477,7 +1586,7 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
                     disabled={ttsLibraryBusy || !datasetId}
                     onClick={() => void prebuildTtsLibrary(true)}
                   >
-                    强制重合成
+                    强制全部重合成
                   </Button>
                   <Button
                     type="button"
@@ -1758,7 +1867,7 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="p-wait" className="text-xs text-muted-foreground">
-                    步间等待（秒）
+                    句间等待默认（秒）
                   </Label>
                   <Input
                     id="p-wait"
@@ -1768,6 +1877,9 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
                     value={params.step_wait_sec}
                     onChange={(e) => setParam("step_wait_sec", e.target.value)}
                   />
+                  <p className="text-[11px] text-muted-foreground">
+                    表「等待时间」优先；多轮对话的轮间距也是上一句的 wait（无单独 round_gap）。
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="p-head" className="text-xs text-muted-foreground">
@@ -1814,7 +1926,7 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
             <div className="space-y-3 rounded-lg border border-border/70 bg-secondary/30 px-3 py-3">
               <p className="text-sm font-medium">评判项（本次任务）</p>
               <p className="text-xs text-muted-foreground">
-                现场：唤醒 + 播报 + 短 ASR 采图 + MOS 麦。pull 后后台：GUI / ASR VL / 离线时延 / MOS 打分。唤醒词只播报不评判。
+                现场：唤醒 + 播报；ASR 默认从录屏离线抽帧（适合字幕闪现）；MOS 默认从 mp4 抽音。后台：GUI / ASR VL / 时延 / MOS。唤醒词只播报不评判。
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex items-center gap-2 text-sm">
@@ -1825,7 +1937,20 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
                   />
                   ASR 准确率
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:col-span-2 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">ASR 采图模式</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      disabled={!params.asr_enabled}
+                      value={params.asr_capture_mode}
+                      onChange={(e) => setParam("asr_capture_mode", e.target.value)}
+                    >
+                      <option value="offline">offline（录屏抽帧，推荐）</option>
+                      <option value="hybrid">hybrid（现场+视频补）</option>
+                      <option value="live">live（仅现场截屏）</option>
+                    </select>
+                  </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">ASR 窗口（秒）</Label>
                     <Input
@@ -1841,7 +1966,7 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
                     <Label className="text-xs text-muted-foreground">ASR 间隔（秒）</Label>
                     <Input
                       type="number"
-                      min={0.2}
+                      min={0.15}
                       step={0.1}
                       disabled={!params.asr_enabled}
                       value={params.asr_interval_sec}
@@ -1849,6 +1974,15 @@ export function ConsoleClient({ section }: { section: ConsoleSection }) {
                     />
                   </div>
                 </div>
+                <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={params.asr_early_stop}
+                    disabled={!params.asr_enabled}
+                    onChange={(e) => setBoolParam("asr_early_stop", e.target.checked)}
+                  />
+                  ASR 早停（live/hybrid 现场采图；字幕闪现时建议关闭）
+                </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"

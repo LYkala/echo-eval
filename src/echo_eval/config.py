@@ -240,12 +240,16 @@ class AsrConfig:
     """ASR 准确率：句后按间隔截屏，多帧 VL 对照播报文案（与 GUI 成功率互不影响）。"""
 
     enabled: bool = True
-    # 截屏间隔（秒）
-    interval_sec: float = 0.5
-    # 最长采图窗口（秒）；默认 4s → 最多约 8 张
-    window_sec: float = 4.0
+    # live=现场 adb 截屏；offline=pull/scrcpy 后从 capture.mp4 抽帧（适合字幕闪现）
+    # hybrid=现场采；帧过少时再用视频补
+    capture_mode: str = "offline"
+    # 截屏/抽帧间隔（秒）
+    interval_sec: float = 0.3
+    # 最长采图窗口（秒）；默认 8s（字幕常一闪而过）
+    window_sec: float = 8.0
     # 底部条相对首帧连续变化达到该帧数则提前停采（像素启发式，非 OCR）
-    early_stop: bool = True
+    # 默认关闭：避免字幕闪一下就停采
+    early_stop: bool = False
     early_stop_stable_frames: int = 2
     # 用于早停的底部区域高度占比；P2 时延「忽略底部文字」将复用该带
     bottom_band_ratio: float = 0.22
@@ -515,7 +519,10 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     if "early_stop" in asr_raw:
         asr_early = bool(asr_raw.get("early_stop"))
     else:
-        asr_early = True
+        asr_early = False
+    asr_mode = str(asr_raw.get("capture_mode") or "offline").strip().lower() or "offline"
+    if asr_mode not in ("live", "offline", "hybrid"):
+        asr_mode = "offline"
     ignore_raw = asr_raw.get("ignore_texts")
     if isinstance(ignore_raw, list):
         ignore_texts = [str(x).strip() for x in ignore_raw if str(x).strip()]
@@ -527,13 +534,14 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         ignore_texts = ["我还在听，说再见退出"]
     asr = AsrConfig(
         enabled=asr_enabled,
+        capture_mode=asr_mode,
         interval_sec=float(
             asr_raw.get("interval_sec")
             if asr_raw.get("interval_sec") is not None
-            else 0.5
+            else 0.3
         ),
         window_sec=float(
-            asr_raw.get("window_sec") if asr_raw.get("window_sec") is not None else 4.0
+            asr_raw.get("window_sec") if asr_raw.get("window_sec") is not None else 8.0
         ),
         early_stop=asr_early,
         early_stop_stable_frames=max(
@@ -659,8 +667,10 @@ def public_run_defaults(cfg: AppConfig | None = None) -> dict[str, Any]:
         "max_retries": int(c.precondition.max_retries),
         "step_settle_sec": float(c.precondition.step_settle_sec),
         "asr_enabled": bool(c.asr.enabled),
+        "asr_capture_mode": str(c.asr.capture_mode or "offline"),
         "asr_window_sec": float(c.asr.window_sec),
         "asr_interval_sec": float(c.asr.interval_sec),
+        "asr_early_stop": bool(c.asr.early_stop),
         "latency_enabled": bool(c.latency.enabled),
         "latency_window_sec": float(c.latency.window_sec),
         "mos_enabled": bool(c.mos.enabled),
@@ -697,7 +707,13 @@ def apply_runtime_overrides(cfg: AppConfig, overrides: dict[str, Any] | None) ->
     if overrides.get("asr_window_sec") is not None:
         cfg.asr.window_sec = max(0.5, float(overrides["asr_window_sec"]))
     if overrides.get("asr_interval_sec") is not None:
-        cfg.asr.interval_sec = max(0.2, float(overrides["asr_interval_sec"]))
+        cfg.asr.interval_sec = max(0.15, float(overrides["asr_interval_sec"]))
+    if overrides.get("asr_capture_mode") is not None:
+        mode = str(overrides["asr_capture_mode"] or "offline").strip().lower()
+        if mode in ("live", "offline", "hybrid"):
+            cfg.asr.capture_mode = mode
+    if overrides.get("asr_early_stop") is not None:
+        cfg.asr.early_stop = bool(overrides["asr_early_stop"])
     if overrides.get("latency_enabled") is not None:
         cfg.latency.enabled = bool(overrides["latency_enabled"])
     if overrides.get("latency_window_sec") is not None:
@@ -809,6 +825,7 @@ def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
         },
         "asr": {
             "enabled": cfg.asr.enabled,
+            "capture_mode": cfg.asr.capture_mode,
             "interval_sec": cfg.asr.interval_sec,
             "window_sec": cfg.asr.window_sec,
             "early_stop": cfg.asr.early_stop,

@@ -17,6 +17,37 @@ const MIME: Record<string, string> = {
   ".md": "text/markdown; charset=utf-8",
 };
 
+function parseRange(
+  header: string | null,
+  size: number
+): { start: number; end: number } | null {
+  if (!header || !header.startsWith("bytes=") || size <= 0) return null;
+  const spec = header.slice(6).trim();
+  // Only support a single range
+  const part = spec.split(",")[0]?.trim() || "";
+  const m = /^(\d*)-(\d*)$/.exec(part);
+  if (!m) return null;
+  let start: number;
+  let end: number;
+  if (m[1] === "" && m[2] === "") return null;
+  if (m[1] === "") {
+    // suffix: bytes=-N
+    const suffix = Number(m[2]);
+    if (!Number.isFinite(suffix) || suffix <= 0) return null;
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(m[1]);
+    end = m[2] === "" ? size - 1 : Number(m[2]);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= size) {
+    return null;
+  }
+  end = Math.min(end, size - 1);
+  if (end < start) return null;
+  return { start, end };
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const jobId = url.searchParams.get("job");
@@ -45,11 +76,53 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "file missing" }, { status: 404 });
   }
 
-  const buf = fs.readFileSync(abs);
+  const st = fs.statSync(abs);
+  const size = st.size;
   const ext = path.extname(abs).toLowerCase();
+  const contentType = MIME[ext] || "application/octet-stream";
+  const rangeHeader = req.headers.get("range") || req.headers.get("Range");
+  const range = parseRange(rangeHeader, size);
+
+  if (rangeHeader && !range) {
+    return new NextResponse(null, {
+      status: 416,
+      headers: {
+        "Content-Range": `bytes */${size}`,
+        "Accept-Ranges": "bytes",
+      },
+    });
+  }
+
+  if (range) {
+    const { start, end } = range;
+    const chunkSize = end - start + 1;
+    const fd = fs.openSync(abs, "r");
+    try {
+      const buf = Buffer.alloc(chunkSize);
+      fs.readSync(fd, buf, 0, chunkSize, start);
+      return new NextResponse(buf, {
+        status: 206,
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": String(chunkSize),
+          "Content-Range": `bytes ${start}-${end}/${size}`,
+          "Accept-Ranges": "bytes",
+          "Cache-Control": "private, max-age=60",
+        },
+      });
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  // Full body (still advertise Accept-Ranges so browsers enable seeking)
+  const buf = fs.readFileSync(abs);
   return new NextResponse(buf, {
+    status: 200,
     headers: {
-      "Content-Type": MIME[ext] || "application/octet-stream",
+      "Content-Type": contentType,
+      "Content-Length": String(size),
+      "Accept-Ranges": "bytes",
       "Cache-Control": "private, max-age=60",
     },
   });
