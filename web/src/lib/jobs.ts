@@ -701,6 +701,151 @@ export function createAndStartJob(opts: {
   return job;
 }
 
+/**
+ * Re-run selected cases inside an existing job and **overwrite** those rows
+ * in job.results (no child job).
+ */
+export function rerunJobOverwrite(
+  jobId: string,
+  opts: { mode: "case" | "failed"; caseId?: string }
+): JobMeta {
+  if (hasActiveRunJob()) {
+    throw new Error("已有测试任务在运行，请先停止");
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- break jobs↔calibrate-jobs cycle
+  const { hasActiveCalibrateJob } = require("./calibrate-jobs") as typeof import("./calibrate-jobs");
+  if (hasActiveCalibrateJob()) {
+    throw new Error("有预置校准任务正在运行，请先停止");
+  }
+
+  const job = readJob(jobId);
+  if (!job) throw new Error("任务不存在");
+  if (job.demo) throw new Error("演示任务不可重跑");
+  if (["queued", "running"].includes(job.status)) {
+    throw new Error("任务仍在运行");
+  }
+
+  const results = [...(job.results || [])];
+  let caseIds: string[] = [];
+  if (opts.mode === "case") {
+    const cid = (opts.caseId || "").trim();
+    if (!cid) throw new Error("缺少 caseId");
+    caseIds = [cid];
+  } else {
+    caseIds = results
+      .filter((r) => r.passed === false || (r.passed === null && Boolean(r.error)))
+      .map((r) => r.case_id)
+      .filter(Boolean);
+    if (!caseIds.length) throw new Error("没有失败/错误用例可重跑");
+  }
+
+  const ds = getDataset(job.datasetId);
+  if (!ds) throw new Error(`数据集不存在: ${job.datasetId}`);
+
+  const dir = jobDir(job.id);
+  ensureDir(dir);
+  const logPath = job.logPath || path.join(dir, "run.log");
+  const params = sanitizeOverrides(job.params);
+  const configPath = materializeJobConfig(path.join(dir, "device.override.json"), params);
+  const progressPath = path.join(dir, "progress.json");
+
+  job.status = "running";
+  job.startedAt = new Date().toISOString();
+  job.finishedAt = undefined;
+  job.error = undefined;
+  job.caseId = caseIds.length === 1 ? caseIds[0] : caseIds.join(",");
+  writeJob(job);
+
+  fs.appendFileSync(
+    logPath,
+    `\n[echo-eval] rerun overwrite mode=${opts.mode} cases=${caseIds.join(",")}\n`,
+    "utf-8"
+  );
+
+  const root = repoRoot();
+  const args = [
+    "-m",
+    "echo_eval",
+    "run",
+    "--config",
+    configPath,
+    "--excel",
+    ds.storedPath,
+    "--backend",
+    job.backend,
+    "--case-id",
+    caseIds.join(","),
+  ];
+
+  const logFd = fs.openSync(logPath, "a");
+  const child = spawn(pythonBin(), args, {
+    cwd: root,
+    env: {
+      ...process.env,
+      PYTHONPATH: path.join(root, "src"),
+      PYTHONUNBUFFERED: "1",
+      PYTHONIOENCODING: "utf-8",
+      PYTHONUTF8: "1",
+      ECHO_EVAL_PROGRESS_FILE: progressPath,
+    },
+    stdio: ["ignore", logFd, logFd],
+    windowsHide: true,
+  });
+  live.set(job.id, child);
+  job.pid = child.pid;
+  writeJob(job);
+
+  child.on("close", (code) => {
+    live.delete(job.id);
+    fs.closeSync(logFd);
+    const rawPath = path.join(jobDir(job.id), "job.json");
+    let latest: JobMeta = job;
+    try {
+      latest = JSON.parse(fs.readFileSync(rawPath, "utf-8")) as JobMeta;
+    } catch {
+      latest = { ...job };
+    }
+    latest.finishedAt = new Date().toISOString();
+    latest.progress = readProgress(job.id);
+
+    let newRows: JobCaseResult[] = [];
+    try {
+      const log = fs.readFileSync(logPath, "utf-8");
+      const matches = [...log.matchAll(/summary_path:\s*(.+)/g)];
+      const lastSummary = matches.length ? matches[matches.length - 1][1].trim() : "";
+      if (lastSummary && fs.existsSync(lastSummary)) {
+        latest.summaryPath = lastSummary;
+        const summary = JSON.parse(fs.readFileSync(lastSummary, "utf-8")) as {
+          results?: JobCaseResult[];
+        };
+        newRows = summary.results || [];
+      }
+    } catch (e) {
+      latest.error = String(e);
+    }
+
+    const byId = new Map((latest.results || results).map((r) => [r.case_id, r]));
+    for (const row of newRows) {
+      if (row?.case_id) byId.set(row.case_id, row);
+    }
+    const harvested = harvestJobResults({ ...latest, results: Array.from(byId.values()) });
+    for (const h of harvested) {
+      if (caseIds.includes(h.case_id)) byId.set(h.case_id, h);
+    }
+    recountJob(latest, Array.from(byId.values()));
+
+    if (code === 0) latest.status = "passed";
+    else if ((latest.failed || 0) > 0 && (latest.errors || 0) === 0) latest.status = "failed";
+    else if (code && code !== 0) {
+      latest.status = (latest.errors || 0) > 0 ? "error" : "failed";
+      if (!latest.error) latest.error = `重跑退出码 ${code}`;
+    } else latest.status = "failed";
+    writeJob(latest);
+  });
+
+  return job;
+}
+
 /** Subpaths under a case run_dir that dominate disk (safe to drop after judge). */
 const PURGE_MEDIA_FILES = ["capture.mp4"] as const;
 const PURGE_MEDIA_DIRS = [

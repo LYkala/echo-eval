@@ -52,6 +52,13 @@ mos:
   ignore_non_speech: true
 ```
 
+无声排查（ICPM 已放行后）：
+
+1. `ffprobe -select_streams a -show_entries stream=codec_name capture.mp4` 是否有音轨  
+2. `where ffprobe` / `capture.ffmpeg_path` 旁是否有 ffprobe（缺失会误判无音轨）  
+3. timeline `scrcpy_record.warn` / `capture_audio`；听 `mos_audio/step_XX.wav`  
+4. 确认 `capture_backend=scrcpy`（screenrecord 无声）
+
 Windows 主机麦（旧路径 / 降级）：
 
 ```yaml

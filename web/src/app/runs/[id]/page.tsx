@@ -4,6 +4,7 @@ import { readJob } from "@/lib/jobs";
 import { aggregateJobMetrics } from "@/lib/metrics-aggregate";
 import { Badge } from "@/components/ui/badge";
 import { MetricsChips } from "@/components/case-metrics";
+import { RunRerunControls } from "@/components/run-rerun-controls";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,10 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   const agg = aggregateJobMetrics(job.results || []);
   const progressCases = job.progress?.cases || [];
   const resultById = new Map((job.results || []).map((r) => [r.case_id, r]));
+  const running = ["queued", "running"].includes(job.status);
+  const failedCount = (job.results || []).filter(
+    (r) => r.passed === false || (r.passed === null && Boolean(r.error))
+  ).length;
 
   // Prefer progress order (includes in-flight / cancelled partial); fall back to results.
   const rows =
@@ -32,6 +37,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
               case_id: c.case_id,
               name: c.name,
               passed: r?.passed ?? null,
+              error: r?.error || "",
               run_dir: r?.run_dir || c.run_dir || "",
               metrics: r?.metrics,
               device_label: c.device_label || c.device_status || "",
@@ -44,6 +50,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           case_id: r.case_id,
           name: r.name,
           passed: r.passed,
+          error: r.error || "",
           run_dir: r.run_dir,
           metrics: r.metrics,
           device_label: "",
@@ -66,15 +73,24 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
             {job.status === "cancelled" ? " · 已取消（保留已完成用例）" : ""}
           </p>
         </div>
-        {job.status === "passed" ? (
-          <Badge variant="pass">PASS</Badge>
-        ) : job.status === "failed" ? (
-          <Badge variant="fail">FAIL</Badge>
-        ) : job.status === "cancelled" ? (
-          <Badge variant="secondary">已取消</Badge>
-        ) : (
-          <Badge variant="secondary">{job.status}</Badge>
-        )}
+        <div className="flex flex-col items-end gap-2">
+          {job.status === "passed" ? (
+            <Badge variant="pass">PASS</Badge>
+          ) : job.status === "failed" ? (
+            <Badge variant="fail">FAIL</Badge>
+          ) : job.status === "cancelled" ? (
+            <Badge variant="secondary">已取消</Badge>
+          ) : (
+            <Badge variant="secondary">{job.status}</Badge>
+          )}
+          {!job.demo ? (
+            <RunRerunControls
+              jobId={job.id}
+              disabled={running || failedCount === 0}
+              label="重跑全部失败"
+            />
+          ) : null}
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3 text-center">
@@ -153,20 +169,27 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
                 )}
               </>
             );
+            const canRerun =
+              !job.demo &&
+              !running &&
+              (r.passed === false || (r.passed === null && Boolean(r.error)));
             return (
-              <li key={r.case_id}>
-                {r.run_dir ? (
-                  <Link
-                    href={`/runs/${job.id}/cases/${encodeURIComponent(r.case_id)}`}
-                    className="flex items-center justify-between gap-3 rounded-lg border bg-card/80 px-4 py-3 text-sm hover:border-primary/40"
-                  >
-                    {body}
-                  </Link>
-                ) : (
-                  <div className="flex items-center justify-between gap-3 rounded-lg border bg-card/80 px-4 py-3 text-sm">
-                    {body}
-                  </div>
-                )}
+              <li key={r.case_id} className="rounded-lg border bg-card/80 px-4 py-3">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  {r.run_dir ? (
+                    <Link
+                      href={`/runs/${job.id}/cases/${encodeURIComponent(r.case_id)}`}
+                      className="flex min-w-0 flex-1 items-center justify-between gap-3 hover:opacity-90"
+                    >
+                      {body}
+                    </Link>
+                  ) : (
+                    <div className="flex min-w-0 flex-1 items-center justify-between gap-3">{body}</div>
+                  )}
+                  {canRerun ? (
+                    <RunRerunControls jobId={job.id} caseId={r.case_id} label="重跑本条" />
+                  ) : null}
+                </div>
               </li>
             );
           })}

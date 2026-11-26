@@ -173,6 +173,7 @@ def wait_scrcpy_record(
     meta: ScrcpyRecording,
     *,
     timeout_sec: float | None = None,
+    ffmpeg_path: str = "",
 ) -> dict[str, Any]:
     """Wait for scrcpy to finish; raise if recording file missing/empty."""
     limit = timeout_sec if timeout_sec is not None else float(meta.duration_sec) + 60.0
@@ -199,14 +200,21 @@ def wait_scrcpy_record(
     if not ok:
         err = (stderr or stdout or "").strip() or f"exit={proc.returncode}"
         raise ScrcpyError(f"scrcpy 未生成有效录屏: {err}")
+    has_a = probe_has_audio(out, ffmpeg_path=ffmpeg_path)
+    ffprobe_bin = _resolve_ffprobe(ffmpeg_path)
+    detail["ffprobe"] = ffprobe_bin or "(not found)"
     # Non-zero exit can still leave a usable file (e.g. Ctrl+C finalize); only
     # fail hard when require-audio made it abort with empty/corrupt output.
-    if proc.returncode not in (0, None) and not probe_has_audio(out):
+    if proc.returncode not in (0, None) and not has_a:
         # Video-only after audio failure — still usable for GUI, but caller may care.
         detail["audio"] = False
         detail["warn"] = f"scrcpy exit={proc.returncode} and no audio track"
+        if not ffprobe_bin:
+            detail["warn"] += "（且未找到 ffprobe，可能误判；请配置 capture.ffmpeg_path）"
     else:
-        detail["audio"] = probe_has_audio(out)
+        detail["audio"] = has_a
+        if not has_a and not ffprobe_bin:
+            detail["warn"] = "ffprobe 未找到，无法确认音轨；请配置 capture.ffmpeg_path 或 PATH"
     return detail
 
 

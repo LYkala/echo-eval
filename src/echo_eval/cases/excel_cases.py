@@ -441,8 +441,17 @@ def load_cases(
 ) -> list[EvalCase]:
     cases = parse_cases_file(path, default_wait_sec=default_wait_sec)
     if case_id:
-        wanted = case_id.strip()
-        cases = [c for c in cases if c.case_id == wanted]
+        # Single id or comma-separated list (order preserved by file order).
+        wanted = {x.strip() for x in str(case_id).split(",") if x.strip()}
+        if not wanted:
+            raise ValueError("case_id 为空")
+        cases = [c for c in cases if c.case_id in wanted]
         if not cases:
-            raise ValueError(f"未找到用例编号: {wanted}")
+            raise ValueError(f"未找到用例编号: {sorted(wanted)}")
+        missing = wanted - {c.case_id for c in cases}
+        if missing:
+            print(
+                f"[echo-eval][warn] 下列 case_id 未在表中找到: {sorted(missing)}",
+                flush=True,
+            )
     return cases

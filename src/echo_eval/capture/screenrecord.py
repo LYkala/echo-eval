@@ -134,7 +134,9 @@ def record_session(
     def _wait_recorder(proc: Any) -> None:
         if use_scrcpy:
             assert scrcpy_meta is not None
-            wait_scrcpy_record(proc, scrcpy_meta)
+            wait_scrcpy_record(
+                proc, scrcpy_meta, ffmpeg_path=cfg.capture.ffmpeg_path
+            )
         else:
             adb.screenrecord_wait(proc, duration_sec=cfg.capture.duration_sec)
 

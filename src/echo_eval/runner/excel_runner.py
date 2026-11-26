@@ -39,6 +39,7 @@ from echo_eval.device.adb import AdbClient, AdbError
 from echo_eval.judge.asr import judge_asr_utterance
 from echo_eval.judge.mos import judge_mos_utterance
 from echo_eval.judge.service import JudgeError, judge_images
+from echo_eval.judge.wake_check import evaluate_wake_images, evaluate_wake_images_mock
 from echo_eval.precondition import (
     PreconditionSkip,
     build_coverage_report,
@@ -57,6 +58,10 @@ from echo_eval.stimulus.audio import play_audio_file
 from echo_eval.stimulus.tts import synthesize_with_library, wav_duration_sec
 
 JudgeBackend = Literal["auto", "vl", "mock"]
+
+
+class WakeFailed(RuntimeError):
+    """Wake word not confirmed after retries; skip remaining utterances."""
 
 
 @dataclass
@@ -357,6 +362,7 @@ def capture_one_case(
     extract_frames_flag: bool = True,
     previous_package: str = "",
     precondition_cache: PreconditionCache | None = None,
+    judge_backend: JudgeBackend = "auto",
 ) -> _DeviceCapture:
     """Device path: precondition → TTS → record → pull → Home. No frames/judge."""
     _prog_device(
@@ -554,14 +560,8 @@ def capture_one_case(
 
     try:
         if wake_enabled:
-            _prog_device(
-                case,
-                index=case_index,
-                total=case_total,
-                device_status="running",
-                device_label=f"唤醒播报「{cfg.run.wake_text}」（{case_index}/{case_total}）",
-                status="running",
-            )
+            wake_dir = run_dir / "wake_check"
+            wake_dir.mkdir(parents=True, exist_ok=True)
             wake_wav = steps_dir / "wake.wav"
             wake_tts = synthesize_with_library(
                 str(cfg.run.wake_text),
@@ -576,24 +576,97 @@ def capture_one_case(
                 prefer_library=bool(cfg.tts.prefer_library),
                 library_dir=str(cfg.tts.library_dir or ""),
             )
-            wake_play_started = datetime.now(timezone.utc).isoformat()
-            wake_offset = round(time.time() - t0, 3)
-            play_audio_file(wake_tts.path, ffmpeg_path=cfg.capture.ffmpeg_path)
-            wake_play_ended = datetime.now(timezone.utc).isoformat()
-            if wake_wait > 0:
-                time.sleep(wake_wait)
-            timeline["wake"] = {
-                "text": str(cfg.run.wake_text),
-                "wait_sec": wake_wait,
-                "wav": wake_tts.path,
-                "backend": wake_tts.backend,
-                "duration_sec": wake_tts.duration_sec or wav_duration_sec(Path(wake_tts.path)),
-                "play_started_at": wake_play_started,
-                "play_ended_at": wake_play_ended,
-                "play_offset_sec": wake_offset,
-                "judged": False,
-                "note": "仅唤醒，不参与 ASR/GUI/时延/MOS 评判",
-            }
+            # At most 2 attempts: initial + one retry on model-declared failure.
+            max_wake_attempts = 2
+            wake_ok = False
+            wake_judge_backend = "mock" if judge_backend == "mock" else "vl"
+            for attempt in range(1, max_wake_attempts + 1):
+                _prog_device(
+                    case,
+                    index=case_index,
+                    total=case_total,
+                    device_status="running",
+                    device_label=(
+                        f"唤醒播报「{cfg.run.wake_text}」"
+                        f"（{attempt}/{max_wake_attempts}）（{case_index}/{case_total}）"
+                    ),
+                    status="running",
+                )
+                before = wake_dir / f"attempt{attempt}_before.png"
+                try:
+                    adb.screencap_png(before)
+                except AdbError as e:
+                    print(f"[echo-eval][warn] wake before screencap: {e}", flush=True)
+                wake_play_started = datetime.now(timezone.utc).isoformat()
+                wake_offset = round(time.time() - t0, 3)
+                play_audio_file(wake_tts.path, ffmpeg_path=cfg.capture.ffmpeg_path)
+                wake_play_ended = datetime.now(timezone.utc).isoformat()
+                observe = max(1.5, min(wake_wait, 4.0)) if wake_wait > 0 else 2.0
+                after_paths: list[str] = []
+                # 2 frames in observe window
+                for fi in range(2):
+                    if fi == 0:
+                        time.sleep(observe * 0.45)
+                    else:
+                        time.sleep(max(0.3, observe * 0.45))
+                    ap = wake_dir / f"attempt{attempt}_after_{fi}.png"
+                    try:
+                        adb.screencap_png(ap)
+                        after_paths.append(str(ap))
+                    except AdbError as e:
+                        print(f"[echo-eval][warn] wake after screencap: {e}", flush=True)
+                remain = max(0.0, wake_wait - observe)
+                if remain > 0:
+                    time.sleep(remain)
+                if wake_judge_backend == "mock":
+                    verdict = evaluate_wake_images_mock(
+                        before, after_paths, wake_text=str(cfg.run.wake_text)
+                    )
+                else:
+                    verdict = evaluate_wake_images(
+                        before, after_paths, wake_text=str(cfg.run.wake_text)
+                    )
+                # Overwrite previous wake record on retry.
+                timeline["wake"] = {
+                    "text": str(cfg.run.wake_text),
+                    "wait_sec": wake_wait,
+                    "wav": wake_tts.path,
+                    "backend": wake_tts.backend,
+                    "duration_sec": wake_tts.duration_sec
+                    or wav_duration_sec(Path(wake_tts.path)),
+                    "play_started_at": wake_play_started,
+                    "play_ended_at": wake_play_ended,
+                    "play_offset_sec": wake_offset,
+                    "judged": True,
+                    "attempt": attempt,
+                    "max_attempts": max_wake_attempts,
+                    "status": verdict.get("status") or ("ok" if verdict.get("ok") else "failed"),
+                    "ok": bool(verdict.get("ok")),
+                    "reason": verdict.get("reason") or "",
+                    "ui_changed": verdict.get("ui_changed"),
+                    "has_bubble": verdict.get("has_bubble"),
+                    "before": str(before),
+                    "after": after_paths,
+                    "note": "唤醒判定；失败可再试 1 次；最终失败跳过本条语料",
+                }
+                print(
+                    f"[echo-eval] wake attempt={attempt}/{max_wake_attempts} "
+                    f"ok={verdict.get('ok')} reason={verdict.get('reason') or ''}",
+                    flush=True,
+                )
+                if verdict.get("ok"):
+                    wake_ok = True
+                    break
+                if attempt >= max_wake_attempts:
+                    break
+                print(
+                    f"[echo-eval] wake failed, retry once case={case.case_id}",
+                    flush=True,
+                )
+            if not wake_ok:
+                raise WakeFailed(
+                    str((timeline.get("wake") or {}).get("reason") or "唤醒失败")
+                )
 
         for step_i, item in enumerate(tts_meta, 1):
             _prog_device(
@@ -736,7 +809,18 @@ def capture_one_case(
             time.sleep(max(0.0, min(tail, remain)))
         if use_scrcpy:
             assert scrcpy_proc is not None and scrcpy_meta is not None
-            wait_scrcpy_record(scrcpy_proc, scrcpy_meta)
+            scrcpy_done = wait_scrcpy_record(
+                scrcpy_proc,
+                scrcpy_meta,
+                ffmpeg_path=cfg.capture.ffmpeg_path,
+            )
+            timeline["scrcpy_record"] = {
+                "audio": scrcpy_done.get("audio"),
+                "returncode": scrcpy_done.get("returncode"),
+                "warn": scrcpy_done.get("warn") or "",
+                "ffprobe": scrcpy_done.get("ffprobe") or "",
+                "stderr_tail": (scrcpy_done.get("stderr") or "")[-800:],
+            }
         else:
             assert proc is not None
             adb.screenrecord_wait(proc, duration_sec=duration_sec)
@@ -765,6 +849,14 @@ def capture_one_case(
         timeline["capture_audio"] = probe_has_audio(
             local_video, ffmpeg_path=cfg.capture.ffmpeg_path
         )
+        if not timeline["capture_audio"]:
+            warn = (timeline.get("scrcpy_record") or {}).get("warn") or ""
+            print(
+                f"[echo-eval][warn] capture.mp4 无音轨 case={case.case_id} "
+                f"ffprobe={(timeline.get('scrcpy_record') or {}).get('ffprobe')} "
+                f"{warn}",
+                flush=True,
+            )
     else:
         _prog_device(
             case,
@@ -802,13 +894,20 @@ def capture_one_case(
                         }
                     )
                 else:
+                    sc = timeline.get("scrcpy_record") or {}
+                    hint = ""
+                    if not sc.get("ffprobe") or "not found" in str(sc.get("ffprobe") or ""):
+                        hint = "；请检查 PATH/ffmpeg_path 旁是否有 ffprobe"
+                    elif sc.get("warn"):
+                        hint = f"；{sc.get('warn')}"
                     rec.update(
                         {
                             "ok": False,
                             "deferred": False,
-                            "error": "capture.mp4 无音轨",
+                            "error": f"capture.mp4 无音轨（no_audio_track）{hint}",
                             "path": "",
                             "source": "video",
+                            "code": "no_audio_track",
                         }
                     )
                 step["mos_record"] = rec
@@ -1300,8 +1399,40 @@ def run_one_case(
         extract_frames_flag=extract_frames_flag,
         previous_package=previous_package,
         precondition_cache=precondition_cache,
+        judge_backend=judge_backend,
     )
     return judge_one_capture(cap, cfg, judge_backend=judge_backend)
+
+
+def _mark_wake_failed(
+    case: EvalCase,
+    *,
+    index: int,
+    total: int,
+    reason: str,
+) -> RunResult:
+    msg = f"唤醒失败: {reason}" if reason else "唤醒失败"
+    print(f"[echo-eval][wake_failed] {case.case_id}: {msg}", flush=True)
+    update_case(
+        index=index,
+        case_id=case.case_id,
+        name=case.name,
+        status="error",
+        device_status="error",
+        device_label=(msg[:100] if msg else "唤醒失败"),
+        judge_status="skipped",
+        judge_label="跳过（唤醒失败）",
+        phase="wake_failed",
+        phase_label=f"唤醒失败（{index}/{total}）",
+        touch_device_current=True,
+    )
+    return RunResult(
+        case_id=case.case_id,
+        name=case.name,
+        passed=None,
+        run_dir="",
+        error=msg,
+    )
 
 
 def _mark_case_skipped(
@@ -1434,21 +1565,34 @@ def run_excel(
                 result = _mark_case_skipped(
                     case, index=idx, total=total, reason=str(e)
                 )
+            except WakeFailed as e:
+                result = _mark_wake_failed(
+                    case, index=idx, total=total, reason=str(e)
+                )
+                _return_to_system_home(
+                    cfg, case_id=case.case_id, phase="after_wake_failed", wait=True
+                )
             except Exception as e:
+                err = str(e).strip() or type(e).__name__
+                print(
+                    f"[echo-eval] device error case={case.case_id} ({idx}/{total}): {err}",
+                    flush=True,
+                )
                 result = RunResult(
                     case_id=case.case_id,
                     name=case.name,
                     passed=None,
                     run_dir="",
-                    error=str(e),
+                    error=err,
                 )
+                short = err if len(err) <= 120 else err[:117] + "…"
                 update_case(
                     index=idx,
                     case_id=case.case_id,
                     name=case.name,
                     status="error",
                     device_status="error",
-                    device_label="设备执行失败",
+                    device_label=f"设备执行失败：{short}",
                     judge_status="skipped",
                     judge_label="跳过",
                     phase="error",
@@ -1485,6 +1629,7 @@ def run_excel(
                         extract_frames_flag=extract_frames_flag,
                         previous_package=previous_package,
                         precondition_cache=pre_cache,
+                        judge_backend=judge_backend,
                     )
                     previous_package = cap.opened_package or resolve_opened_package(
                         case, packages=packages, object_packages=object_packages
@@ -1504,6 +1649,13 @@ def run_excel(
                 except PreconditionSkip as e:
                     results_by_index[idx] = _mark_case_skipped(
                         case, index=idx, total=total, reason=str(e)
+                    )
+                except WakeFailed as e:
+                    results_by_index[idx] = _mark_wake_failed(
+                        case, index=idx, total=total, reason=str(e)
+                    )
+                    _return_to_system_home(
+                        cfg, case_id=case.case_id, phase="after_wake_failed", wait=True
                     )
                 except Exception as e:
                     result = RunResult(
