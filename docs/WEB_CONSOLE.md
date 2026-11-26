@@ -13,6 +13,8 @@
 
 ## 本机启动（Windows Git Bash）
 
+首次装机（Python / Node / ADB / FFmpeg / pip 包）见 [`SETUP_WINDOWS.md`](./SETUP_WINDOWS.md)。
+
 ```bash
 cd /d/code/voiceass/echo-eval
 git checkout main
