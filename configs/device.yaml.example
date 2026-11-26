@@ -20,6 +20,8 @@ capture:
   # 华为 Android 12 穿刺：必须 AAC（默认 opus 会失败）
   scrcpy_audio_codec: aac
   scrcpy_audio_encoder: OMX.google.aac.encoder
+  # 若 mp4 有画面但无声/静音轨：Android 13+ 可试 playback；留空=scrcpy 默认 output
+  # scrcpy_audio_source: playback
   scrcpy_max_size: 1280
   scrcpy_video_bit_rate: "8M"
   scrcpy_require_audio: true

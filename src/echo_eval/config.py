@@ -166,6 +166,8 @@ class CaptureConfig:
     # Huawei Android 12: default opus fails; AAC works in puncture
     scrcpy_audio_codec: str = "aac"
     scrcpy_audio_encoder: str = "OMX.google.aac.encoder"
+    # "" = scrcpy default (usually output). Try "playback" on Android 13+ if mp4 silent.
+    scrcpy_audio_source: str = ""
     scrcpy_max_size: int = 1280
     scrcpy_video_bit_rate: str = "8M"
     scrcpy_require_audio: bool = True
@@ -395,6 +397,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         scrcpy_audio_encoder=str(
             cap_raw.get("scrcpy_audio_encoder") or "OMX.google.aac.encoder"
         ).strip(),
+        scrcpy_audio_source=str(cap_raw.get("scrcpy_audio_source") or "").strip(),
         scrcpy_max_size=int(cap_raw.get("scrcpy_max_size") or 1280),
         scrcpy_video_bit_rate=str(cap_raw.get("scrcpy_video_bit_rate") or "8M").strip()
         or "8M",
@@ -780,6 +783,7 @@ def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
             "scrcpy_path": cfg.capture.scrcpy_path,
             "scrcpy_audio_codec": cfg.capture.scrcpy_audio_codec,
             "scrcpy_audio_encoder": cfg.capture.scrcpy_audio_encoder,
+            "scrcpy_audio_source": cfg.capture.scrcpy_audio_source,
             "scrcpy_max_size": cfg.capture.scrcpy_max_size,
             "scrcpy_video_bit_rate": cfg.capture.scrcpy_video_bit_rate,
             "scrcpy_require_audio": cfg.capture.scrcpy_require_audio,
