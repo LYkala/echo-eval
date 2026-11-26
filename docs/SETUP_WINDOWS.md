@@ -321,13 +321,13 @@ npm install          # 首次或 package.json 变更后
 npm run dev
 ```
 
-浏览器打开：**http://127.0.0.1:58261**  
-（不要用 Cursor 云端 Port 预览；局域网其它机器：`http://<PC1的IP>:58261`）
+浏览器打开：**http://127.0.0.1:59371**  
+（不要用 Cursor 云端 Port 预览；局域网其它机器：`http://<PC1的IP>:59371`）
 
 自检：
 
 ```bash
-curl -s http://127.0.0.1:58261/api/ping
+curl -s http://127.0.0.1:59371/api/ping
 # 期望 platform=win32，hostRole=local_pc，repoRoot 在本机盘符下
 ```
 
@@ -385,7 +385,7 @@ python -m echo_eval run --excel cases/examples/sample_weather.csv \
 | 读 xlsx 报缺 openpyxl | `python -m pip install openpyxl` |
 | 无线 `unauthorized` / `offline` | 手机点允许调试；`adb disconnect` 后再 `connect` |
 | `screenrecord` 路径异常 | 用 `echo-eval` 封装，或 `MSYS_NO_PATHCONV=1` |
-| 控制台环境检查无反应 | 确认地址是 `127.0.0.1:58261`；看 Git Bash 里 `[echo-eval]` 日志；`curl` 测 `/api/ping` |
+| 控制台环境检查无反应 | 确认地址是 `127.0.0.1:59371`；看 Git Bash 里 `[echo-eval]` 日志；`curl` 测 `/api/ping` |
 | ping 显示 `platform=linux` | 打到了云端预览，改回本机 URL |
 | MOS 拾音失败 | scrcpy+`mos.source=auto/video` 可不配麦；否则配 `mos.input_device` |
 | scrcpy opus 编码失败 | 设 `scrcpy_audio_codec: aac` + `OMX.google.aac.encoder` |
@@ -406,4 +406,4 @@ python -m echo_eval run --excel cases/examples/sample_weather.csv \
 - [ ] （可选）`model.yaml` 已填密钥  
 - [ ] （仅 host_mic）MOS `input_device` 已配  
 - [ ] `python -m echo_eval doctor` → OK  
-- [ ] `npm run dev` → `http://127.0.0.1:58261` 可开，`/api/ping` 为本机  
+- [ ] `npm run dev` → `http://127.0.0.1:59371` 可开，`/api/ping` 为本机  

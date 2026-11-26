@@ -124,7 +124,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="border-t border-border px-3 py-3 text-[11px] leading-relaxed text-muted-foreground">
-          本机控制台 · 端口 58261
+          本机控制台 · 端口 59371
           <br />
           <Link href="/check" className="underline-offset-2 hover:underline" onClick={() => setMobileOpen(false)}>
             无脚本检查

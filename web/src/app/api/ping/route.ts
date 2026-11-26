@@ -24,7 +24,7 @@ export async function GET() {
     hostname: os.hostname(),
     platform: process.platform,
     node: process.version,
-    portHint: Number(process.env.PORT || process.env.ECHO_EVAL_WEB_PORT || 58261),
+    portHint: Number(process.env.PORT || process.env.ECHO_EVAL_WEB_PORT || 59371),
     hostRole: cloudLike ? "cloud_agent" : "local_pc",
     hostLabel: cloudLike
       ? "云端 Agent（不是你的 Windows 本机）"
