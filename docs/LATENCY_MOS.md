@@ -32,8 +32,9 @@
 
 | 项 | 默认 |
 |----|------|
-| 音源 | `mos.source: auto`（scrcpy 有音轨 → video；否则 host_mic） |
+| 音源 | `mos.source: video`（只从 `capture.mp4` 抽；无音轨该句 N/A/error，不补录主机麦） |
 | 窗口 | 说完后 5s |
+| 非语音 | `ignore_non_speech: true` 时忽略疑似歌曲/视频床底，只评类语音段 |
 | 无有效语音 | **N/A**（不记失败） |
 | 评分 | 启发式流畅度 **1–5**（静音比、切分、削波等；非听感大模型） |
 
@@ -45,7 +46,8 @@ capture:
   scrcpy_audio_codec: aac
   scrcpy_audio_encoder: OMX.google.aac.encoder
 mos:
-  source: auto   # 或 video / host_mic
+  source: video
+  ignore_non_speech: true
 ```
 
 Windows 主机麦（旧路径 / 降级）：
@@ -60,3 +62,5 @@ mos:
 产物：`mos_audio/step_XX.wav`、`mos/step_XX.json`、`mos_summary.json`。
 
 录制/抽音失败时该句 MOS 记 N/A/error，不阻断整例 GUI 评判。
+
+内录可能混入 App 内歌曲/视频声：`ignore_non_speech: true`（默认）用能量调制 + 过零率启发式标记 `media` 帧并排除出流畅度计算；过滤后有效语音过短则 N/A。这不是语义 ASR，极端混叠仍可能误判。

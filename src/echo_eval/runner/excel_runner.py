@@ -1110,6 +1110,7 @@ def judge_one_capture(
                         wav_path=wav,
                         backend="mock" if judge_backend == "mock" else "heuristic",
                         min_speech_sec=float(cfg.mos.min_speech_sec),
+                        ignore_non_speech=bool(cfg.mos.ignore_non_speech),
                         write_path=mos_out / f"step_{int(step.get('index') or 0):02d}.json",
                     )
                 except Exception as e:

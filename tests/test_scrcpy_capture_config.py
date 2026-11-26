@@ -37,12 +37,14 @@ def test_device_example_defaults_scrcpy(tmp_path: Path):
     assert cfg.capture.backend == "scrcpy"
     assert cfg.capture.use_scrcpy
     assert cfg.capture.scrcpy_audio_codec == "aac"
-    assert cfg.mos.source == "auto"
+    assert cfg.mos.source == "video"
+    assert cfg.mos.ignore_non_speech is True
     assert _mos_use_video_deferred(cfg) is True
 
     cfg.capture.backend = "screenrecord"
-    assert _mos_use_video_deferred(cfg) is False
-    cfg.mos.source = "video"
+    # source=video still defers even without scrcpy
     assert _mos_use_video_deferred(cfg) is True
+    cfg.mos.source = "auto"
+    assert _mos_use_video_deferred(cfg) is False
     cfg.mos.source = "host_mic"
     assert _mos_use_video_deferred(cfg) is False

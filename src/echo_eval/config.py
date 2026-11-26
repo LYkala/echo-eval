@@ -280,12 +280,15 @@ class MosConfig:
     """
 
     enabled: bool = True
-    source: str = "auto"
+    # video | auto | host_mic — default video (scrcpy internal audio)
+    source: str = "video"
     # 说完后录音/抽音时长
     window_sec: float = 5.0
     sample_rate: int = 16000
     # 有效语音低于该秒数 → N/A
     min_speech_sec: float = 0.3
+    # 内录混入歌曲/视频床底时，打分只看类语音段
+    ignore_non_speech: bool = True
     # ffmpeg -f / -i；留空则按平台默认（Windows 常需填写 dshow 设备名）
     input_format: str = ""
     input_device: str = ""
@@ -585,9 +588,13 @@ def load_config(path: Path | str | None = None) -> AppConfig:
         mos_enabled = bool(mos_raw.get("enabled"))
     else:
         mos_enabled = True
-    mos_source = str(mos_raw.get("source") or "auto").strip().lower() or "auto"
+    mos_source = str(mos_raw.get("source") or "video").strip().lower() or "video"
     if mos_source not in ("auto", "video", "host_mic"):
-        mos_source = "auto"
+        mos_source = "video"
+    if "ignore_non_speech" in mos_raw:
+        ignore_non_speech = bool(mos_raw.get("ignore_non_speech"))
+    else:
+        ignore_non_speech = True
     mos = MosConfig(
         enabled=mos_enabled,
         source=mos_source,
@@ -607,6 +614,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             if mos_raw.get("min_speech_sec") is not None
             else 0.3
         ),
+        ignore_non_speech=ignore_non_speech,
         input_format=str(mos_raw.get("input_format") or "").strip(),
         input_device=str(mos_raw.get("input_device") or "").strip(),
     )
@@ -821,6 +829,7 @@ def export_config_dict(cfg: AppConfig) -> dict[str, Any]:
             "window_sec": cfg.mos.window_sec,
             "sample_rate": cfg.mos.sample_rate,
             "min_speech_sec": cfg.mos.min_speech_sec,
+            "ignore_non_speech": bool(cfg.mos.ignore_non_speech),
             "input_format": cfg.mos.input_format,
             "input_device": cfg.mos.input_device,
         },

@@ -78,14 +78,15 @@ latency:
   change_threshold: 6.0
 
 # TTS MOS（P3）
-# source: auto=scrcpy 有音轨则从 mp4 抽；否则主机麦
-#         video=只从 mp4 抽；host_mic=只主机麦
+# source: video=只从 mp4 抽（推荐，配合 scrcpy）；auto=可降级主机麦；host_mic=只主机麦
+# ignore_non_speech: 忽略内录里疑似歌曲/视频床底，只对类语音段打分
 # Windows 主机麦示例：
 #   input_format: dshow
 #   input_device: audio=Microphone (Realtek ...)
 mos:
   enabled: true
-  source: auto
+  source: video
+  ignore_non_speech: true
   window_sec: 5.0
   sample_rate: 16000
   min_speech_sec: 0.3

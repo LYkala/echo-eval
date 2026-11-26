@@ -279,7 +279,8 @@ capture:
   scrcpy_audio_codec: aac
   scrcpy_audio_encoder: OMX.google.aac.encoder
 mos:
-  source: auto      # 有音轨则从 mp4 抽，不再依赖主机麦
+  source: video               # 只从 mp4 抽音
+  ignore_non_speech: true     # 忽略歌曲/视频床底，只评语音
 ```
 
 指定 adb（与穿刺相同）：
