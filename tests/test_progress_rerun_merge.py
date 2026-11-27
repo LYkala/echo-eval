@@ -55,3 +55,23 @@ def test_init_progress_keeps_siblings_on_partial_rerun(tmp_path: Path, monkeypat
     assert by_id["case_b"]["device_status"] == "pending"
     assert "run_dir" not in by_id["case_b"]
     assert data["total"] == 3
+
+    # Runner passes batch-local index=1 for the only rerun case; must update B,
+    # not sibling A which still has progress index 1.
+    progress_mod.update_case(
+        index=1,
+        case_id="case_b",
+        name="B",
+        status="error",
+        device_status="error",
+        judge_status="skipped",
+        device_label="唤醒失败",
+    )
+    data2 = json.loads(path.read_text(encoding="utf-8"))
+    by_id2 = {c["case_id"]: c for c in data2["cases"]}
+    assert by_id2["case_a"]["status"] == "passed"
+    assert by_id2["case_a"]["device_status"] == "done"
+    assert by_id2["case_b"]["status"] == "error"
+    assert by_id2["case_b"]["device_status"] == "error"
+    assert by_id2["case_b"]["judge_status"] == "skipped"
+    assert by_id2["case_c"]["status"] == "passed"

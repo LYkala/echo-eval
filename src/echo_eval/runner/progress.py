@@ -191,10 +191,19 @@ def update_case(
         data = _read(path)
         cases = list(data.get("cases") or [])
         row: dict[str, Any] | None = None
-        for c in cases:
-            if int(c.get("index") or 0) == index or c.get("case_id") == case_id:
-                row = c
-                break
+        # Prefer case_id: partial rerun uses batch-local index (often 1) which
+        # must not overwrite an earlier sibling that still owns that index.
+        want_id = str(case_id or "").strip()
+        if want_id:
+            for c in cases:
+                if str(c.get("case_id") or "") == want_id:
+                    row = c
+                    break
+        if row is None:
+            for c in cases:
+                if int(c.get("index") or 0) == index:
+                    row = c
+                    break
         if row is None:
             row = {
                 "index": index,
