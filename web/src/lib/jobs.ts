@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "child_process";
+import { spawn, spawnSync, type ChildProcess } from "child_process";
 import fs from "fs";
 import path from "path";
 import { getDataset } from "./datasets";
@@ -104,6 +104,109 @@ const live = new Map<string, ChildProcess>();
 
 function pythonBin(): string {
   return process.env.ECHO_EVAL_PYTHON || (process.platform === "win32" ? "python" : "python3");
+}
+
+function isPidAlive(pid?: number | null): boolean {
+  if (!pid || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Kill the job process and its children (Windows needs taskkill /T). */
+function killJobProcess(child: ChildProcess | undefined, pid?: number | null): void {
+  const target = child?.pid || pid || 0;
+  if (!target) return;
+  if (process.platform === "win32") {
+    try {
+      spawnSync("taskkill", ["/pid", String(target), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    if (child && !child.killed) child.kill("SIGTERM");
+    else process.kill(target, "SIGTERM");
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (isPidAlive(target)) process.kill(target, "SIGKILL");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Mark in-flight progress rows so the UI does not stay on「running」after stop. */
+export function markProgressInterrupted(
+  progress: JobProgress | undefined,
+  label = "已停止"
+): JobProgress | undefined {
+  if (!progress?.cases?.length) return progress;
+  const cases = progress.cases.map((c) => {
+    const deviceBusy = ["pending", "running"].includes(c.device_status || "");
+    const judgeBusy = ["pending", "queued", "running", ""].includes(c.judge_status || "");
+    const statusBusy = ["pending", "running", "queued"].includes(c.status || "");
+    if (!deviceBusy && !judgeBusy && !statusBusy) return c;
+    return {
+      ...c,
+      status: statusBusy ? "cancelled" : c.status,
+      phase: "cancelled",
+      phase_label: label,
+      device_status: deviceBusy ? "error" : c.device_status,
+      device_label: deviceBusy ? label : c.device_label,
+      judge_status: judgeBusy ? "skipped" : c.judge_status,
+      judge_label: judgeBusy ? label : c.judge_label,
+    };
+  });
+  return { ...progress, cases, phase: "cancelled", phase_label: label };
+}
+
+/**
+ * If job.json says running/queued but the process is gone (server restart,
+ * failed kill, lost live handle), reclaim it so rerun is not blocked forever.
+ */
+export function reconcileStaleRunningJobs(): void {
+  const root = jobsRoot();
+  if (!fs.existsSync(root)) return;
+  for (const id of fs.readdirSync(root)) {
+    const p = path.join(jobDir(id), "job.json");
+    if (!fs.existsSync(p)) continue;
+    let job: JobMeta;
+    try {
+      job = JSON.parse(fs.readFileSync(p, "utf-8")) as JobMeta;
+    } catch {
+      continue;
+    }
+    if ((job as { kind?: string }).kind === "precondition_calibrate") continue;
+    if (job.status !== "running" && job.status !== "queued") continue;
+
+    const child = live.get(job.id);
+    const childAlive =
+      Boolean(child) && child!.exitCode === null && !child!.killed && isPidAlive(child!.pid);
+    if (childAlive) continue;
+    if (!child && isPidAlive(job.pid)) continue;
+
+    live.delete(job.id);
+    job.status = "cancelled";
+    job.finishedAt = job.finishedAt || new Date().toISOString();
+    job.error = job.error || "进程已退出，任务状态已自动回收（可重新重跑）";
+    job.progress = markProgressInterrupted(
+      readProgress(job.id) || job.progress,
+      "已停止（进程退出）"
+    );
+    if (job.progress) writeProgress(job.id, job.progress);
+    const harvested = harvestJobResults(job);
+    if (harvested.length) recountJob(job, harvested);
+    writeJob(job);
+  }
 }
 
 function jobDir(id: string): string {
@@ -441,6 +544,7 @@ function listMediaUrls(
 }
 
 export function readJob(id: string): JobMeta | null {
+  reconcileStaleRunningJobs();
   const p = path.join(jobDir(id), "job.json");
   if (!fs.existsSync(p)) return null;
   const raw = JSON.parse(fs.readFileSync(p, "utf-8")) as JobMeta & { kind?: string };
@@ -477,6 +581,7 @@ export function readJob(id: string): JobMeta | null {
 }
 
 export function listJobs(): JobMeta[] {
+  reconcileStaleRunningJobs();
   const root = jobsRoot();
   if (!fs.existsSync(root)) return [];
   const out: JobMeta[] = [];
@@ -781,6 +886,11 @@ export function createAndStartJob(opts: {
     }
 
     if (latest.status === "cancelled") {
+      latest.progress = markProgressInterrupted(
+        latest.progress || readProgress(id),
+        "已停止"
+      );
+      if (latest.progress) writeProgress(id, latest.progress);
       writeJob(latest);
       return;
     }
@@ -970,6 +1080,17 @@ export function rerunJobOverwrite(
     }
     recountJob(latest, ordered);
 
+    // Stop/cancel must win over exit-code status (same as createAndStartJob).
+    if (latest.status === "cancelled") {
+      latest.progress = markProgressInterrupted(
+        latest.progress || readProgress(job.id),
+        "已停止"
+      );
+      if (latest.progress) writeProgress(job.id, latest.progress);
+      writeJob(latest);
+      return;
+    }
+
     latest.status = statusFromResults(latest, code);
     if (code && code !== 0 && (latest.errors || 0) > 0 && !latest.error) {
       latest.error = `重跑退出码 ${code}`;
@@ -1146,18 +1267,15 @@ export function cancelJob(id: string): JobMeta | null {
   const job = readJob(id);
   if (!job) return null;
   const child = live.get(id);
-  if (child && !child.killed) {
-    child.kill("SIGTERM");
-  } else if (job.pid) {
-    try {
-      process.kill(job.pid);
-    } catch {
-      /* already dead */
-    }
-  }
+  killJobProcess(child, job.pid);
   job.status = "cancelled";
   job.finishedAt = new Date().toISOString();
-  job.progress = readProgress(id) || job.progress;
+  const progress = markProgressInterrupted(
+    readProgress(id) || job.progress,
+    "已停止"
+  );
+  job.progress = progress;
+  if (progress) writeProgress(id, progress);
   const harvested = harvestJobResults(job);
   if (harvested.length) recountJob(job, harvested);
   writeJob(job);

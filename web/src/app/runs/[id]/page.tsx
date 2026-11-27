@@ -18,8 +18,9 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   const resultById = new Map((job.results || []).map((r) => [r.case_id, r]));
   const progressById = new Map(progressCases.map((c) => [c.case_id, c]));
   const running = ["queued", "running"].includes(job.status);
+  const jobStopped = !running;
   // Finished or cancelled (not demo): allow per-case rerun regardless of pass/fail.
-  const canRerunJob = !job.demo && !running;
+  const canRerunJob = !job.demo && jobStopped;
   const failedCount = (job.results || []).filter(
     (r) => r.passed === false || (r.passed === null && Boolean(r.error))
   ).length;
@@ -60,6 +61,20 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
         typeof r?.passed === "boolean" ||
         Boolean(r?.error);
       if (!started && job.status === "cancelled") return null;
+      let status =
+        c?.status ||
+        (r?.passed === true ? "passed" : r?.passed === false ? "failed" : "pending");
+      // After stop/cancel, progress may still say running — don't show that.
+      if (
+        jobStopped &&
+        ["running", "queued", "pending"].includes(status) &&
+        (typeof r?.passed === "boolean" || Boolean(r?.error))
+      ) {
+        status =
+          r?.passed === true ? "passed" : r?.passed === false ? "failed" : "error";
+      } else if (jobStopped && ["running", "queued"].includes(status)) {
+        status = job.status === "cancelled" ? "cancelled" : status;
+      }
       return {
         case_id: caseId,
         name: c?.name || r?.name || caseId,
@@ -67,11 +82,17 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
         error: r?.error || "",
         run_dir: r?.run_dir || c?.run_dir || "",
         metrics: r?.metrics,
-        device_label: c?.device_label || c?.device_status || "",
-        judge_label: c?.judge_label || c?.judge_status || "",
-        status:
-          c?.status ||
-          (r?.passed === true ? "passed" : r?.passed === false ? "failed" : "pending"),
+        device_label:
+          jobStopped && c?.device_status === "running"
+            ? "已停止"
+            : c?.device_label || c?.device_status || "",
+        judge_label:
+          jobStopped && ["pending", "queued", "running", "等待"].includes(c?.judge_status || c?.judge_label || "")
+            ? job.status === "cancelled"
+              ? "已停止"
+              : c?.judge_label || c?.judge_status || ""
+            : c?.judge_label || c?.judge_status || "",
+        status,
       };
     })
     .filter((x): x is NonNullable<typeof x> => Boolean(x));
