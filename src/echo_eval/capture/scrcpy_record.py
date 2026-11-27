@@ -79,7 +79,6 @@ def build_scrcpy_cmd(
     duration_sec: int,
     audio_codec: str = "aac",
     audio_encoder: str = "OMX.google.aac.encoder",
-    audio_source: str = "",
     max_size: int = 1280,
     video_bit_rate: str = "8M",
     extra_args: list[str] | None = None,
@@ -106,10 +105,8 @@ def build_scrcpy_cmd(
     enc = (audio_encoder or "").strip()
     if enc:
         cmd.append(f"--audio-encoder={enc}")
-    # output=整机输出(默认,部分机型会录到静音轨); playback=播放抓取(Android 13+)
-    src = (audio_source or "").strip().lower()
-    if src in ("output", "playback", "mic", "mic-unprocessed", "mic-camcorder", "mic-voice-recognition", "mic-voice-communication", "voice-call", "voice-call-uplink", "voice-call-downlink", "voice-performance", "voice-raw"):
-        cmd.append(f"--audio-source={src}")
+    # Target devices are Android 12: do not pass --audio-source=playback
+    # (playback capture needs Android 13+). Leave scrcpy default (output).
     if require_audio:
         cmd.append("--require-audio")
     if extra_args:
@@ -126,7 +123,6 @@ def start_scrcpy_record(
     adb_path: str = "",
     audio_codec: str = "aac",
     audio_encoder: str = "OMX.google.aac.encoder",
-    audio_source: str = "",
     max_size: int = 1280,
     video_bit_rate: str = "8M",
     extra_args: list[str] | None = None,
@@ -146,7 +142,6 @@ def start_scrcpy_record(
         duration_sec=duration_sec,
         audio_codec=audio_codec,
         audio_encoder=audio_encoder,
-        audio_source=audio_source,
         max_size=max_size,
         video_bit_rate=video_bit_rate,
         extra_args=extra_args,

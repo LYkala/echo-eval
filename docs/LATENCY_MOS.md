@@ -54,21 +54,20 @@ mos:
 
 无声排查（ICPM 已放行后；**页面播歌 mp4 仍无声 = 内录未接到设备播放**）：
 
+目标机为 **Android 12**：scrcpy 默认 `output` 即可，**不要**配置 / 传 `--audio-source=playback`（该源需 Android 13+，本环境不支持）。
+
 1. `ffprobe -select_streams a -show_entries stream=codec_name -of csv=p=0 capture.mp4`  
-   - 无输出 → 无音轨；有 `aac` 但播放仍静 → **静音轨**（OEM 音频路由，常见）  
-2. 本机穿刺（设备上先播歌，再录 15s）：
+   - 无输出 → 无音轨；有 `aac` 但播放仍静 → **静音轨**（OEM 音频路由 / 设备音量或静音被改，常见）  
+2. 本机穿刺前先确认设备媒体音量非 0、未静音；设备上先播歌，再录 15s：
 
 ```bash
 scrcpy --serial 192.168.43.244:5555 --no-window --no-playback --time-limit=15 \
   --record=D:/tmp/song.mp4 --audio-codec=aac --audio-encoder=OMX.google.aac.encoder \
   --require-audio
-# 若仍静，Android 13+ 再试：
-#   ... --audio-source=playback
 ```
 
-3. `configs/device.yaml` 可设 `capture.scrcpy_audio_source: playback`（需 scrcpy 新版本 + 系统支持）  
-4. 临时 MOS：`mos.source: host_mic`（录主机麦听到的外放，不依赖内录）  
-5. `where ffprobe`；确认 timeline `capture_backend=scrcpy`
+3. 临时 MOS：`mos.source: host_mic`（录主机麦听到的外放，不依赖内录）  
+4. `where ffprobe`；确认 timeline `capture_backend=scrcpy`
 
 Windows 主机麦（旧路径 / 降级）：
 

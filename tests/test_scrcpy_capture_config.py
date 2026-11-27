@@ -26,14 +26,7 @@ def test_build_scrcpy_cmd_includes_aac_for_huawei():
     assert "--audio-encoder=OMX.google.aac.encoder" in cmd
     assert any(c.startswith("--record=") for c in cmd)
     assert "--time-limit=20" in cmd
-    cmd2 = build_scrcpy_cmd(
-        scrcpy_bin="scrcpy",
-        serial="x",
-        out_mp4=out,
-        duration_sec=5,
-        audio_source="playback",
-    )
-    assert "--audio-source=playback" in cmd2
+    assert not any(c.startswith("--audio-source=") for c in cmd)
 
 
 def test_device_example_defaults_scrcpy(tmp_path: Path):

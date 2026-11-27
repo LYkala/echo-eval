@@ -545,7 +545,6 @@ def capture_one_case(
                 adb_path=cfg.adb.adb_path,
                 audio_codec=cfg.capture.scrcpy_audio_codec,
                 audio_encoder=cfg.capture.scrcpy_audio_encoder,
-                audio_source=str(cfg.capture.scrcpy_audio_source or ""),
                 max_size=int(cfg.capture.scrcpy_max_size),
                 video_bit_rate=str(cfg.capture.scrcpy_video_bit_rate),
                 extra_args=list(cfg.capture.scrcpy_extra_args or []),

@@ -72,6 +72,8 @@
 | 5 | 仍走了 **screenrecord**（无声） | timeline `capture_backend` 是否为 `scrcpy` |
 | 6 | scrcpy stderr 有 audio encoder 警告但文件仍生成 | 看任务 `run.log` / scrcpy stderr 片段 |
 
+**不做**：配置 `scrcpy_audio_source: playback` / `--audio-source=playback`——目标机 **Android 12** 不支持该音频源（需 13+）。
+
 **方案**：修 ffprobe 路径传递；timeline 记录 `capture_audio` + scrcpy 诊断字段；MOS 错误文案区分 `no_audio_track` / `no_speech` / `extract_failed`；控制台提示自检命令。仍不自动降级 `host_mic`。
 
 ---
