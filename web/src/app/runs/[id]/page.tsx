@@ -18,6 +18,8 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   const resultById = new Map((job.results || []).map((r) => [r.case_id, r]));
   const progressById = new Map(progressCases.map((c) => [c.case_id, c]));
   const running = ["queued", "running"].includes(job.status);
+  // Finished or cancelled (not demo): allow per-case rerun regardless of pass/fail.
+  const canRerunJob = !job.demo && !running;
   const failedCount = (job.results || []).filter(
     (r) => r.passed === false || (r.passed === null && Boolean(r.error))
   ).length;
@@ -98,10 +100,10 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           ) : (
             <Badge variant="secondary">{job.status}</Badge>
           )}
-          {!job.demo ? (
+          {canRerunJob ? (
             <RunRerunControls
               jobId={job.id}
-              disabled={running || failedCount === 0}
+              disabled={failedCount === 0}
               label="重跑全部失败"
             />
           ) : null}
@@ -184,10 +186,6 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
                 )}
               </>
             );
-            const canRerun =
-              !job.demo &&
-              !running &&
-              (r.passed === false || (r.passed === null && Boolean(r.error)));
             return (
               <li key={r.case_id} className="rounded-lg border bg-card/80 px-4 py-3">
                 <div className="flex items-center justify-between gap-3 text-sm">
@@ -201,7 +199,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
                   ) : (
                     <div className="flex min-w-0 flex-1 items-center justify-between gap-3">{body}</div>
                   )}
-                  {canRerun ? (
+                  {canRerunJob ? (
                     <RunRerunControls jobId={job.id} caseId={r.case_id} label="重跑本条" />
                   ) : null}
                 </div>

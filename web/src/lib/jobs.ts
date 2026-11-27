@@ -816,6 +816,7 @@ export function rerunJobOverwrite(
   const job = readJob(jobId);
   if (!job) throw new Error("任务不存在");
   if (job.demo) throw new Error("演示任务不可重跑");
+  // Allow finished (passed/failed/error) and cancelled; block only in-flight.
   if (["queued", "running"].includes(job.status)) {
     throw new Error("任务仍在运行");
   }
@@ -827,6 +828,7 @@ export function rerunJobOverwrite(
   if (opts.mode === "case") {
     const cid = (opts.caseId || "").trim();
     if (!cid) throw new Error("缺少 caseId");
+    // Any case id is allowed (pass / fail / error / never finished).
     caseIds = [cid];
   } else {
     caseIds = results
