@@ -59,44 +59,111 @@ def _recompute(data: dict[str, Any]) -> None:
     )
 
 
+def _pending_case(index: int, case_id: str, name: str) -> dict[str, Any]:
+    return {
+        "index": index,
+        "case_id": case_id,
+        "name": name,
+        "status": "pending",
+        "phase": "pending",
+        "phase_label": "等待设备执行",
+        "device_status": "pending",
+        "device_label": "等待",
+        "judge_status": "pending",
+        "judge_label": "等待",
+    }
+
+
 def init_progress(cases: list[tuple[str, str]]) -> None:
-    """cases: list of (case_id, name)."""
+    """cases: list of (case_id, name).
+
+    If progress.json already lists sibling cases not in this batch (single-case /
+    failed-only rerun), reset only the batch rows and keep the rest so the Web
+    history is not wiped.
+    """
     path = _path()
     if not path:
         return
-    data = {
-        "total": len(cases),
-        "device_done": 0,
-        "judge_done": 0,
-        "done": 0,
-        "current_index": 0,
-        "current_case_id": "",
-        "current_name": "",
-        "phase": "queued",
-        "phase_label": "排队中",
-        "device_phase_label": "设备：等待开始",
-        "judge_phase_label": "评判：等待",
-        "updated_at": _now(),
-        "cases": [
-            {
-                "index": i + 1,
-                "case_id": cid,
-                "name": name,
-                "status": "pending",
-                "phase": "pending",
-                "phase_label": "等待设备执行",
-                "device_status": "pending",
-                "device_label": "等待",
-                "judge_status": "pending",
-                "judge_label": "等待",
-            }
-            for i, (cid, name) in enumerate(cases)
-        ],
-    }
+    batch = [(str(cid), str(name or cid)) for cid, name in cases]
+    batch_ids = {cid for cid, _ in batch}
+
     with _lock:
+        existing = _read(path)
+        existing_cases = list(existing.get("cases") or [])
+        has_siblings = any(
+            str(c.get("case_id") or "") not in batch_ids for c in existing_cases
+        )
+
+        if existing_cases and has_siblings:
+            by_id: dict[str, dict[str, Any]] = {
+                str(c.get("case_id")): dict(c) for c in existing_cases if c.get("case_id")
+            }
+            for cid, name in batch:
+                prev = by_id.get(cid) or {}
+                row = _pending_case(int(prev.get("index") or 0) or 0, cid, name)
+                # Drop stale run_dir so harvest picks the new capture after rerun.
+                by_id[cid] = row
+
+            ordered: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for c in existing_cases:
+                cid = str(c.get("case_id") or "")
+                if not cid or cid in seen:
+                    continue
+                ordered.append(by_id.get(cid) or dict(c))
+                seen.add(cid)
+            for cid, name in batch:
+                if cid in seen:
+                    continue
+                ordered.append(by_id[cid])
+                seen.add(cid)
+            for i, row in enumerate(ordered):
+                row["index"] = i + 1
+
+            data: dict[str, Any] = {
+                "total": len(ordered),
+                "device_done": 0,
+                "judge_done": 0,
+                "done": 0,
+                "current_index": 0,
+                "current_case_id": "",
+                "current_name": "",
+                "phase": "queued",
+                "phase_label": "排队中（覆盖重跑）",
+                "device_phase_label": "设备：等待开始",
+                "judge_phase_label": "评判：等待",
+                "updated_at": _now(),
+                "cases": ordered,
+            }
+            _recompute(data)
+            _write(path, data)
+            print(
+                f"[echo-eval] progress merge file={path} total={len(ordered)} "
+                f"rerun={len(batch)}",
+                flush=True,
+            )
+            return
+
+        data = {
+            "total": len(batch),
+            "device_done": 0,
+            "judge_done": 0,
+            "done": 0,
+            "current_index": 0,
+            "current_case_id": "",
+            "current_name": "",
+            "phase": "queued",
+            "phase_label": "排队中",
+            "device_phase_label": "设备：等待开始",
+            "judge_phase_label": "评判：等待",
+            "updated_at": _now(),
+            "cases": [
+                _pending_case(i + 1, cid, name) for i, (cid, name) in enumerate(batch)
+            ],
+        }
         _write(path, data)
     print(
-        f"[echo-eval] progress file={path} total={len(cases)}",
+        f"[echo-eval] progress file={path} total={len(batch)}",
         flush=True,
     )
 

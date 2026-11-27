@@ -16,48 +16,63 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   const agg = aggregateJobMetrics(job.results || []);
   const progressCases = job.progress?.cases || [];
   const resultById = new Map((job.results || []).map((r) => [r.case_id, r]));
+  const progressById = new Map(progressCases.map((c) => [c.case_id, c]));
   const running = ["queued", "running"].includes(job.status);
   const failedCount = (job.results || []).filter(
     (r) => r.passed === false || (r.passed === null && Boolean(r.error))
   ).length;
 
-  // Prefer progress order (includes in-flight / cancelled partial); fall back to results.
-  const rows =
-    progressCases.length > 0
-      ? progressCases
-          .map((c) => {
-            const r = resultById.get(c.case_id);
-            const started =
-              Boolean(r?.run_dir) ||
-              Boolean(c.run_dir) ||
-              (c.device_status && c.device_status !== "pending") ||
-              ["passed", "failed", "error", "skipped"].includes(c.judge_status || c.status);
-            if (!started && job.status === "cancelled") return null;
-            return {
-              case_id: c.case_id,
-              name: c.name,
-              passed: r?.passed ?? null,
-              error: r?.error || "",
-              run_dir: r?.run_dir || c.run_dir || "",
-              metrics: r?.metrics,
-              device_label: c.device_label || c.device_status || "",
-              judge_label: c.judge_label || c.judge_status || "",
-              status: c.status,
-            };
-          })
-          .filter((x): x is NonNullable<typeof x> => Boolean(x))
-      : (job.results || []).map((r) => ({
-          case_id: r.case_id,
-          name: r.name,
-          passed: r.passed,
-          error: r.error || "",
-          run_dir: r.run_dir,
-          metrics: r.metrics,
-          device_label: "",
-          judge_label: "",
-          status:
-            r.passed === true ? "passed" : r.passed === false ? "failed" : "pending",
-        }));
+  // Union progress + results so a single-case rerun (progress subset) does not
+  // hide sibling history. Prefer results order when it already has siblings.
+  const progressIdSet = new Set(progressCases.map((c) => c.case_id));
+  const resultIds = (job.results || []).map((r) => r.case_id);
+  const hasSiblingResults = resultIds.some((id) => !progressIdSet.has(id));
+  const orderedIds: string[] = [];
+  const seenIds = new Set<string>();
+  const pushId = (id: string) => {
+    if (!id || seenIds.has(id)) return;
+    orderedIds.push(id);
+    seenIds.add(id);
+  };
+  if (hasSiblingResults && resultIds.length) {
+    for (const id of resultIds) pushId(id);
+    for (const c of progressCases) pushId(c.case_id);
+  } else if (progressCases.length) {
+    for (const c of progressCases) pushId(c.case_id);
+    for (const id of resultIds) pushId(id);
+  } else {
+    for (const id of resultIds) pushId(id);
+  }
+
+  const rows = orderedIds
+    .map((caseId) => {
+      const r = resultById.get(caseId);
+      const c = progressById.get(caseId);
+      const started =
+        Boolean(r?.run_dir) ||
+        Boolean(c?.run_dir) ||
+        (c?.device_status && c.device_status !== "pending") ||
+        ["passed", "failed", "error", "skipped"].includes(
+          c?.judge_status || c?.status || ""
+        ) ||
+        typeof r?.passed === "boolean" ||
+        Boolean(r?.error);
+      if (!started && job.status === "cancelled") return null;
+      return {
+        case_id: caseId,
+        name: c?.name || r?.name || caseId,
+        passed: r?.passed ?? null,
+        error: r?.error || "",
+        run_dir: r?.run_dir || c?.run_dir || "",
+        metrics: r?.metrics,
+        device_label: c?.device_label || c?.device_status || "",
+        judge_label: c?.judge_label || c?.judge_status || "",
+        status:
+          c?.status ||
+          (r?.passed === true ? "passed" : r?.passed === false ? "failed" : "pending"),
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => Boolean(x));
 
   return (
     <div className="animate-rise space-y-6">

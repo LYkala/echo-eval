@@ -308,18 +308,113 @@ export function harvestJobResults(job: JobMeta): JobCaseResult[] {
     byId.set(c.case_id, row);
   }
 
-  // Keep summary-only results that progress may not list (shouldn't happen).
-  const out = Array.isArray(progress?.cases) && progress.cases.length
-    ? progress.cases
-        .map((c) => byId.get(c.case_id))
-        .filter((r): r is JobCaseResult => Boolean(r))
-    : Array.from(byId.values());
+  // Prefer progress order, but always keep sibling results that a partial
+  // rerun's progress.json no longer lists (single-case / failed-only overwrite).
+  const progressIds = (progress?.cases || []).map((c) => c.case_id).filter(Boolean);
+  const progressIdSet = new Set(progressIds);
+  const resultIds = Array.from(byId.keys());
+  const hasSiblingsOutsideProgress = resultIds.some((id) => !progressIdSet.has(id));
+
+  let orderedIds: string[];
+  if (hasSiblingsOutsideProgress && resultIds.length) {
+    orderedIds = [...resultIds];
+    for (const id of progressIds) {
+      if (!orderedIds.includes(id)) orderedIds.push(id);
+    }
+  } else if (progressIds.length) {
+    orderedIds = progressIds.filter((id) => byId.has(id));
+  } else {
+    orderedIds = resultIds;
+  }
+
+  const out = orderedIds
+    .map((id) => byId.get(id))
+    .filter((r): r is JobCaseResult => Boolean(r));
 
   return out.map((r) => {
     if (!r.run_dir) return r;
     const metrics = loadCaseMetricsBrief(r.run_dir);
     return metrics ? { ...r, metrics } : r;
   });
+}
+
+function writeProgress(id: string, progress: JobProgress): void {
+  const p = path.join(jobDir(id), "progress.json");
+  ensureDir(jobDir(id));
+  fs.writeFileSync(p, JSON.stringify(progress, null, 2));
+}
+
+/** Merge a partial-rerun progress snapshot back into the previous full list. */
+export function mergeProgressForRerun(
+  previous: JobProgress | undefined,
+  incoming: JobProgress | undefined,
+  updatedCaseIds: string[]
+): JobProgress | undefined {
+  if (!incoming) return previous;
+  if (!previous?.cases?.length) return incoming;
+  const updated = new Set(updatedCaseIds.filter(Boolean));
+  if (!updated.size) return incoming;
+
+  const byId = new Map(previous.cases.map((c) => [c.case_id, { ...c }]));
+  for (const c of incoming.cases || []) {
+    if (!c?.case_id || !updated.has(c.case_id)) continue;
+    const old = byId.get(c.case_id);
+    byId.set(c.case_id, old ? { ...old, ...c, index: old.index } : { ...c });
+  }
+
+  const cases: JobProgressCase[] = [];
+  const seen = new Set<string>();
+  for (const c of previous.cases) {
+    const row = byId.get(c.case_id);
+    if (!row || seen.has(c.case_id)) continue;
+    cases.push(row);
+    seen.add(c.case_id);
+  }
+  for (const c of incoming.cases || []) {
+    if (!c?.case_id || seen.has(c.case_id)) continue;
+    cases.push({ ...c, index: cases.length + 1 });
+    seen.add(c.case_id);
+  }
+  cases.forEach((c, i) => {
+    c.index = i + 1;
+  });
+
+  const deviceDone = cases.filter((c) =>
+    ["done", "error"].includes(c.device_status || "")
+  ).length;
+  const judgeDone = cases.filter((c) =>
+    ["passed", "failed", "error", "skipped"].includes(c.judge_status || "")
+  ).length;
+  const done = cases.filter(
+    (c) =>
+      ["passed", "failed", "error"].includes(c.status) &&
+      ["done", "error"].includes(c.device_status || "") &&
+      ["passed", "failed", "error", "skipped"].includes(c.judge_status || "")
+  ).length;
+
+  return {
+    ...previous,
+    ...incoming,
+    total: cases.length,
+    device_done: deviceDone,
+    judge_done: judgeDone,
+    done,
+    cases,
+  };
+}
+
+function statusFromResults(job: JobMeta, exitCode: number | null): JobStatus {
+  const results = job.results || [];
+  const failed = results.filter((r) => r.passed === false).length;
+  const errors = results.filter(
+    (r) => r.passed === null && (Boolean(r.error) || !r.run_dir)
+  ).length;
+  if (errors > 0) return "error";
+  if (failed > 0) return "failed";
+  if (results.length > 0 && results.every((r) => r.passed === true)) return "passed";
+  if (exitCode === 0) return "passed";
+  if (exitCode && exitCode !== 0) return "error";
+  return "failed";
 }
 
 function artifactUrl(jobId: string, caseId: string, file: string): string {
@@ -726,6 +821,8 @@ export function rerunJobOverwrite(
   }
 
   const results = [...(job.results || [])];
+  const previousProgress = readProgress(job.id) || job.progress;
+  const originalCaseId = job.caseId;
   let caseIds: string[] = [];
   if (opts.mode === "case") {
     const cid = (opts.caseId || "").trim();
@@ -749,11 +846,13 @@ export function rerunJobOverwrite(
   const configPath = materializeJobConfig(path.join(dir, "device.override.json"), params);
   const progressPath = path.join(dir, "progress.json");
 
+  // Keep full history on disk; do not narrow job.caseId to the rerun subset.
   job.status = "running";
   job.startedAt = new Date().toISOString();
   job.finishedAt = undefined;
   job.error = undefined;
-  job.caseId = caseIds.length === 1 ? caseIds[0] : caseIds.join(",");
+  job.results = results;
+  job.progress = previousProgress;
   writeJob(job);
 
   fs.appendFileSync(
@@ -806,7 +905,20 @@ export function rerunJobOverwrite(
       latest = { ...job };
     }
     latest.finishedAt = new Date().toISOString();
-    latest.progress = readProgress(job.id);
+    latest.caseId = originalCaseId;
+
+    const incomingProgress = readProgress(job.id);
+    const mergedProgress = mergeProgressForRerun(
+      previousProgress,
+      incomingProgress,
+      caseIds
+    );
+    if (mergedProgress) {
+      writeProgress(job.id, mergedProgress);
+      latest.progress = mergedProgress;
+    } else {
+      latest.progress = incomingProgress;
+    }
 
     let newRows: JobCaseResult[] = [];
     try {
@@ -824,22 +936,42 @@ export function rerunJobOverwrite(
       latest.error = String(e);
     }
 
-    const byId = new Map((latest.results || results).map((r) => [r.case_id, r]));
-    for (const row of newRows) {
-      if (row?.case_id) byId.set(row.case_id, row);
+    // Always start from the pre-rerun full result list, then overwrite only
+    // the rerun case ids (summary may contain only the subset).
+    const byId = new Map(results.map((r) => [r.case_id, r]));
+    for (const r of latest.results || []) {
+      if (r?.case_id && !byId.has(r.case_id)) byId.set(r.case_id, r);
     }
-    const harvested = harvestJobResults({ ...latest, results: Array.from(byId.values()) });
+    for (const row of newRows) {
+      if (row?.case_id && caseIds.includes(row.case_id)) byId.set(row.case_id, row);
+    }
+    const harvested = harvestJobResults({
+      ...latest,
+      results: Array.from(byId.values()),
+      progress: latest.progress,
+    });
     for (const h of harvested) {
       if (caseIds.includes(h.case_id)) byId.set(h.case_id, h);
     }
-    recountJob(latest, Array.from(byId.values()));
+    // Preserve original order when possible.
+    const ordered: JobCaseResult[] = [];
+    const seen = new Set<string>();
+    for (const r of results) {
+      const row = byId.get(r.case_id);
+      if (row) {
+        ordered.push(row);
+        seen.add(r.case_id);
+      }
+    }
+    for (const [id, row] of byId) {
+      if (!seen.has(id)) ordered.push(row);
+    }
+    recountJob(latest, ordered);
 
-    if (code === 0) latest.status = "passed";
-    else if ((latest.failed || 0) > 0 && (latest.errors || 0) === 0) latest.status = "failed";
-    else if (code && code !== 0) {
-      latest.status = (latest.errors || 0) > 0 ? "error" : "failed";
-      if (!latest.error) latest.error = `重跑退出码 ${code}`;
-    } else latest.status = "failed";
+    latest.status = statusFromResults(latest, code);
+    if (code && code !== 0 && (latest.errors || 0) > 0 && !latest.error) {
+      latest.error = `重跑退出码 ${code}`;
+    }
     writeJob(latest);
   });
 
